@@ -85,6 +85,12 @@ const organizationSchema = mongoose.Schema(
       enum: NATIVE_LANGUAGE_SETTINGS,
       default: 'auto',
     },
+    // Repair module: which product categories hold repair spare parts — the repair job's
+    // "Part from stock" picker lists only these (matched by category name, so it works in
+    // every branch). Empty = not set up yet.
+    repairSettings: {
+      partCategories: { type: [String], default: [] },
+    },
     // Localization / Currency / Tax settings — all optional/defaulted so existing
     // organizations keep working unchanged until they configure these explicitly (e.g. via
     // the new Business Profile / Localization settings pages).

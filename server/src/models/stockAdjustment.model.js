@@ -9,7 +9,10 @@ const { toJSON, paginate } = require('./plugins');
 // 'warranty_replacement' a unit from stock is handed to a customer as a replacement,
 // 'warranty_in' a repaired/replacement unit comes back into sellable stock.
 const WARRANTY_TYPES = ['warranty_out', 'warranty_replacement', 'warranty_in'];
-const DECREASE_ONLY_TYPES = ['damage', 'theft', 'expired', 'lost', 'warranty_out', 'warranty_replacement'];
+// 'repair_part' a part taken off the shelf and fitted in a customer's device by a repair
+// job (repairJob.service.js) — reversed by the job when the part line is removed.
+const REPAIR_TYPES = ['repair_part'];
+const DECREASE_ONLY_TYPES = ['damage', 'theft', 'expired', 'lost', 'warranty_out', 'warranty_replacement', 'repair_part'];
 const INCREASE_ONLY_TYPES = ['found', 'warranty_in'];
 // 'count': the variance a posted stock count found (stockCount.service.js#postCount).
 const FLEXIBLE_TYPES = ['correction', 'count', 'other'];
@@ -56,6 +59,8 @@ const StockAdjustmentSchema = new mongoose.Schema(
     stockCountId: { type: mongoose.Schema.Types.ObjectId, ref: 'StockCount', index: true },
     // Set on the warranty_* types — the claim that moved this stock.
     warrantyClaimId: { type: mongoose.Schema.Types.ObjectId, ref: 'WarrantyClaim', index: true },
+    // Set on 'repair_part' — the repair job the part went into.
+    repairJobId: { type: mongoose.Schema.Types.ObjectId, ref: 'RepairJob', index: true },
 
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
@@ -84,3 +89,4 @@ module.exports.DECREASE_ONLY_TYPES = DECREASE_ONLY_TYPES;
 module.exports.INCREASE_ONLY_TYPES = INCREASE_ONLY_TYPES;
 module.exports.FLEXIBLE_TYPES = FLEXIBLE_TYPES;
 module.exports.WARRANTY_TYPES = WARRANTY_TYPES;
+module.exports.REPAIR_TYPES = REPAIR_TYPES;

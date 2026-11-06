@@ -37,11 +37,12 @@ export const ADJUSTMENT_TYPE_ORDER: AdjustmentType[] = [
   'warranty_out',
   'warranty_replacement',
   'warranty_in',
+  'repair_part',
   'other',
 ]
 
-/** Posted by the system, never picked by hand — 'count' by a stock count, 'warranty_*' by a warranty claim. */
-const SYSTEM_ADJUSTMENT_TYPES: AdjustmentType[] = ['count', 'warranty_out', 'warranty_replacement', 'warranty_in']
+/** Posted by the system, never picked by hand — 'count' by a stock count, 'warranty_*' by a warranty claim, 'repair_part' by a repair job. */
+const SYSTEM_ADJUSTMENT_TYPES: AdjustmentType[] = ['count', 'warranty_out', 'warranty_replacement', 'warranty_in', 'repair_part']
 
 /** What a person can pick by hand. */
 export const MANUAL_ADJUSTMENT_TYPES: AdjustmentType[] = ADJUSTMENT_TYPE_ORDER.filter((type) => !SYSTEM_ADJUSTMENT_TYPES.includes(type))
@@ -133,6 +134,16 @@ export const ADJUSTMENT_TYPE_META: Record<AdjustmentType, AdjustmentTypeMeta> = 
     badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
     fixedDirection: 'decrease',
     description: 'Unit from stock handed to a customer as a warranty replacement',
+    reasonPlaceholder: '',
+  },
+  repair_part: {
+    value: 'repair_part',
+    label: 'Repair Part',
+    icon: Wrench,
+    tone: 'sky',
+    badgeClass: 'bg-sky-50 text-sky-700 border-sky-200',
+    fixedDirection: 'decrease',
+    description: 'Part fitted into a customer device by a repair job',
     reasonPlaceholder: '',
   },
   warranty_in: {

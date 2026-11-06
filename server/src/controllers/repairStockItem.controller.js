@@ -45,7 +45,7 @@ const getLedgerSummary = catchAsync(async (req, res) => {
 
 // DELETE /repair-stock/:itemId
 const deleteEntry = catchAsync(async (req, res) => {
-  await repairStockItemService.deleteEntry(req.params.itemId);
+  await repairStockItemService.deleteEntry(req.params.itemId, applyBranchFilter({}, req));
   res.status(httpStatus.NO_CONTENT).send();
 });
 

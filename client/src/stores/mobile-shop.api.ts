@@ -208,6 +208,8 @@ export interface RepairStockEntry {
   description: string
   amount: number
   repairJobRef?: string
+  /** Set when the entry is a repair job's direct repair cost. */
+  repairJobId?: string | null
   paymentMethod?: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
   walletType?: string
   notes?: string
@@ -238,27 +240,205 @@ export interface RepairStockSummary {
   balance: number
 }
 
+export type RepairStatus =
+  | 'pending'
+  | 'diagnosing'
+  | 'waiting_approval'
+  | 'waiting_parts'
+  | 'in_progress'
+  | 'completed'
+  | 'delivered'
+  | 'cancelled'
+export type RepairDeviceType =
+  | 'mobile'
+  | 'tablet'
+  | 'laptop'
+  | 'desktop'
+  | 'printer'
+  | 'tv'
+  | 'console'
+  | 'smartwatch'
+  | 'camera'
+  | 'appliance'
+  | 'other'
+export type RepairPriority = 'low' | 'normal' | 'high' | 'urgent'
+export type RepairPaymentMethod = 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
+
+export interface RepairItem {
+  id: string
+  kind: 'part' | 'service'
+  productId?: string | null
+  variantId?: string | null
+  adjustmentId?: string | null
+  name: string
+  quantity: number
+  unitPrice: number
+  unitCost: number
+  paidOutMethod?: RepairPaymentMethod | null
+  paidOutWallet?: string
+  addedAt?: string
+}
+
+export interface RepairPayment {
+  id: string
+  amount: number
+  paymentMethod: RepairPaymentMethod
+  walletType?: string
+  date: string
+  kind: 'advance' | 'payment' | 'refund'
+  note?: string
+  legacy?: boolean
+}
+
+export interface RepairTimelineEntry {
+  action?: string
+  status?: string
+  note?: string
+  at: string
+  byUserName?: string
+}
+
 export interface RepairJobRecord {
   id: string
+  jobNumber?: string
   customerName: string
   phone?: string
+  customerId?: string | null
+  deviceType?: RepairDeviceType
+  brand?: string
   deviceModel: string
   serialNumber?: string
   color?: string
   accessories?: string
+  lockType?: 'none' | 'pin' | 'password' | 'pattern'
+  lockCode?: string
+  conditionChecks?: string[]
+  conditionNotes?: string
+  problems?: string[]
   issue: string
-  status: 'pending' | 'in_progress' | 'completed' | 'delivered'
-  charges: number
-  advanceAmount: number
-  cost?: number
-  paymentMethod: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
-  walletType?: string
+  diagnosis?: string
+  internalNotes?: string
+  status: RepairStatus
+  outcome?: 'repaired' | 'not_repairable' | null
+  priority?: RepairPriority
+  dueDate?: string | null
   technician?: string
+  technicianId?: string | null
+  cancelReason?: string
+  estimatedCharges?: number
+  items?: RepairItem[]
+  discount?: number
+  /** Lump repair cost taken from the repair stock balance (not itemised). */
+  directCost?: number
+  charges: number
+  cost?: number
+  payments?: RepairPayment[]
+  advanceAmount: number
+  paymentMethod: RepairPaymentMethod
+  walletType?: string
+  warrantyDays?: number
+  warrantyUntil?: string | null
+  timeline?: RepairTimelineEntry[]
   date: string
   completedAt?: string
   deliveredAt?: string
-  /** Salesman credited with this sale for commission purposes — a User id. */
+  cancelledAt?: string
+  /** Salesman credited with this sale for commission purposes. */
+  salesmanId?: string | { id?: string; name?: string } | null
+}
+
+export interface RepairBillLineInput {
+  kind: 'part' | 'service'
+  productId?: string
+  variantId?: string
+  batchId?: string
+  name?: string
+  quantity: number
+  unitPrice?: number
+  unitCost?: number
+  paidOutMethod?: string
+  paidOutWallet?: string
+}
+
+export interface RepairBillSave {
+  add?: RepairBillLineInput[]
+  update?: { itemId: string; name?: string; quantity?: number; unitPrice?: number; unitCost?: number }[]
+  remove?: string[]
+  discount?: number
+  directCost?: number
+}
+
+export interface RepairTechnician {
+  /** Staff user id — null for a name typed on earlier jobs. */
+  id: string | null
+  name: string
+  source?: 'staff' | 'typed'
+  jobs?: number
+}
+
+export interface RepairStats {
+  total: number
+  counts: Partial<Record<RepairStatus, number>>
+  open: number
+  overdue: number
+  receivedToday: number
+  readyForPickup: number
+  outstanding: number
+  deliveredThisMonth: number
+  revenueThisMonth: number
+  profitThisMonth: number
+  avgTurnaroundHours: number | null
+}
+
+export interface RepairHistoryRow {
+  id: string
+  jobNumber: string | null
+  customerName: string
+  phone?: string
+  deviceType: RepairDeviceType
+  brand?: string
+  deviceModel: string
+  serialNumber?: string
+  issue: string
+  status: RepairStatus
+  date: string
+  deliveredAt?: string
+  warrantyUntil?: string | null
+  inWarranty: boolean
+  sameDevice: boolean
+}
+
+export interface RepairPartUsageRow {
+  jobId: string
+  jobNumber?: string
+  customerName: string
+  deviceModel: string
+  status: RepairStatus
+  name: string
+  quantity: number
+  unitCost: number
+  unitPrice: number
+  fromStock: boolean
+  addedAt: string
+}
+
+export interface RepairJobsQuery {
+  page?: number
+  limit?: number
+  status?: string
+  view?: 'open' | 'overdue' | 'unpaid'
+  deviceType?: string
+  priority?: string
+  technicianId?: string
+  q?: string
+}
+
+export interface CreateRepairJobInput extends Partial<Omit<RepairJobRecord, 'id' | 'items' | 'payments' | 'timeline' | 'salesmanId'>> {
+  customerName: string
+  deviceModel: string
+  issue: string
   salesmanId?: string
+  advance?: { amount: number; paymentMethod: string; walletType?: string }
 }
 
 export interface ServiceCatalogRecord {
@@ -704,7 +884,7 @@ export interface CreateAgentBillsBatchInput {
 export const mobileShopApi = createApi({
   reducerPath: 'mobileShopApi',
   baseQuery,
-  tagTypes: ['MobileDashboard', 'Wallets', 'WalletTransfers', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'Services', 'ServiceInvoices', 'RepairStock', 'CashBook', 'UtilityCompanies', 'BillPayments', 'Installments', 'SimSales', 'Customer', 'AgentBills'],
+  tagTypes: ['MobileDashboard', 'Wallets', 'WalletTransfers', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'Services', 'ServiceInvoices', 'RepairStock', 'RepairSettings', 'CashBook', 'UtilityCompanies', 'BillPayments', 'Installments', 'SimSales', 'Customer', 'AgentBills'],
   endpoints: (builder) => ({
     getMobileDashboardSummary: builder.query<MobileDashboardSummary, void>({
       query: () => '/mobile-dashboard/summary',
@@ -898,16 +1078,55 @@ export const mobileShopApi = createApi({
       invalidatesTags: ['WalletTransfers', 'Wallets', 'CashBook', 'MobileDashboard'],
       onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
-    getRepairJobs: builder.query<PaginatedResult<RepairJobRecord>, { page?: number; limit?: number; status?: string } | void>({
+    getRepairJobs: builder.query<PaginatedResult<RepairJobRecord>, RepairJobsQuery | void>({
       query: (params) => {
-        const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 10) })
-        if ((params as any)?.page) p.set('page', String((params as any).page))
-        if ((params as any)?.status) p.set('status', (params as any).status)
+        const args = (params || {}) as RepairJobsQuery
+        const p = new URLSearchParams({ limit: String(args.limit ?? 10) })
+        if (args.page) p.set('page', String(args.page))
+        if (args.status) p.set('status', args.status)
+        if (args.view) p.set('view', args.view)
+        if (args.deviceType) p.set('deviceType', args.deviceType)
+        if (args.priority) p.set('priority', args.priority)
+        if (args.technicianId) p.set('technicianId', args.technicianId)
+        if (args.q?.trim()) p.set('q', args.q.trim())
         return `/repairs?${p.toString()}`
       },
       providesTags: ['Repairs'],
     }),
-    createRepairJob: builder.mutation<RepairJobRecord, Omit<RepairJobRecord, 'id'>>({
+    getRepairJob: builder.query<RepairJobRecord, string>({
+      query: (id) => `/repairs/${id}`,
+      providesTags: ['Repairs'],
+    }),
+    getRepairStats: builder.query<RepairStats, void>({
+      query: () => '/repairs/stats',
+      providesTags: ['Repairs'],
+    }),
+    getRepairTechnicians: builder.query<RepairTechnician[], void>({
+      query: () => '/repairs/technicians',
+    }),
+    getRepairHistory: builder.query<RepairHistoryRow[], { serial?: string; phone?: string; excludeId?: string }>({
+      query: ({ serial, phone, excludeId }) => {
+        const p = new URLSearchParams()
+        if (serial) p.set('serial', serial)
+        if (phone) p.set('phone', phone)
+        if (excludeId) p.set('excludeId', excludeId)
+        return `/repairs/lookup?${p.toString()}`
+      },
+      providesTags: ['Repairs'],
+    }),
+    getRepairSettings: builder.query<{ partCategories: string[] }, void>({
+      query: () => '/repairs/settings',
+      providesTags: ['RepairSettings'],
+    }),
+    updateRepairSettings: builder.mutation<{ partCategories: string[] }, { partCategories: string[] }>({
+      query: (body) => ({ url: '/repairs/settings', method: 'PUT', body }),
+      invalidatesTags: ['RepairSettings'],
+    }),
+    getRepairPartsUsage: builder.query<RepairPartUsageRow[], { limit?: number } | void>({
+      query: (params) => `/repairs/parts-usage?limit=${(params as { limit?: number } | undefined)?.limit ?? 25}`,
+      providesTags: ['Repairs'],
+    }),
+    createRepairJob: builder.mutation<RepairJobRecord, CreateRepairJobInput>({
       query: (body) => ({
         url: '/repairs',
         method: 'POST',
@@ -916,21 +1135,85 @@ export const mobileShopApi = createApi({
       invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
       onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
-    updateRepairJob: builder.mutation<RepairJobRecord, { id: string; body: Partial<RepairJobRecord> }>({
+    updateRepairJob: builder.mutation<RepairJobRecord, { id: string; body: Partial<CreateRepairJobInput> }>({
       query: ({ id, body }) => ({
         url: `/repairs/${id}`,
         method: 'PATCH',
         body,
       }),
+      invalidatesTags: ['Repairs', 'RepairStock', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateCrossSliceWalletCaches,
+    }),
+    changeRepairStatus: builder.mutation<
+      RepairJobRecord,
+      { id: string; status: RepairStatus; note?: string; outcome?: 'repaired' | 'not_repairable'; cancelReason?: string; fee?: number; allowCredit?: boolean }
+    >({
+      query: ({ id, ...body }) => ({ url: `/repairs/${id}/status`, method: 'POST', body }),
+      invalidatesTags: ['Repairs', 'RepairStock', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateCrossSliceWalletCaches,
+    }),
+    addRepairItem: builder.mutation<
+      RepairJobRecord,
+      {
+        id: string
+        kind: 'part' | 'service'
+        productId?: string
+        variantId?: string
+        batchId?: string
+        name?: string
+        quantity: number
+        unitPrice?: number
+        unitCost?: number
+        paidOutMethod?: string
+        paidOutWallet?: string
+      }
+    >({
+      query: ({ id, ...body }) => ({ url: `/repairs/${id}/items`, method: 'POST', body }),
       invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
       onQueryStarted: invalidateCrossSliceWalletCaches,
+    }),
+    /** One request for the whole bill — stock moves only here (invoice-style save). */
+    saveRepairBill: builder.mutation<RepairJobRecord, { id: string } & RepairBillSave>({
+      query: ({ id, ...body }) => ({ url: `/repairs/${id}/bill`, method: 'POST', body }),
+      invalidatesTags: ['Repairs', 'RepairStock', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateCrossSliceWalletCaches,
+    }),
+    updateRepairItem: builder.mutation<
+      RepairJobRecord,
+      { id: string; itemId: string; name?: string; quantity?: number; unitPrice?: number; unitCost?: number }
+    >({
+      query: ({ id, itemId, ...body }) => ({ url: `/repairs/${id}/items/${itemId}`, method: 'PATCH', body }),
+      invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateCrossSliceWalletCaches,
+    }),
+    removeRepairItem: builder.mutation<RepairJobRecord, { id: string; itemId: string }>({
+      query: ({ id, itemId }) => ({ url: `/repairs/${id}/items/${itemId}`, method: 'DELETE' }),
+      invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateCrossSliceWalletCaches,
+    }),
+    addRepairPayment: builder.mutation<
+      RepairJobRecord,
+      { id: string; amount: number; paymentMethod: string; walletType?: string; kind?: 'payment' | 'refund'; note?: string; deliver?: boolean; allowCredit?: boolean }
+    >({
+      query: ({ id, ...body }) => ({ url: `/repairs/${id}/payments`, method: 'POST', body }),
+      invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateCrossSliceWalletCaches,
+    }),
+    removeRepairPayment: builder.mutation<RepairJobRecord, { id: string; paymentId: string }>({
+      query: ({ id, paymentId }) => ({ url: `/repairs/${id}/payments/${paymentId}`, method: 'DELETE' }),
+      invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateCrossSliceWalletCaches,
+    }),
+    addRepairNote: builder.mutation<RepairJobRecord, { id: string; note: string }>({
+      query: ({ id, note }) => ({ url: `/repairs/${id}/notes`, method: 'POST', body: { note } }),
+      invalidatesTags: ['Repairs'],
     }),
     deleteRepairJob: builder.mutation<void, string>({
       query: (id) => ({
         url: `/repairs/${id}`,
         method: 'DELETE',
       }),
-      invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
+      invalidatesTags: ['Repairs', 'RepairStock', 'CashBook', 'MobileDashboard'],
       onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
 
@@ -1368,8 +1651,23 @@ export const {
   useCreateWalletTransferMutation,
   useDeleteWalletTransferMutation,
   useGetRepairJobsQuery,
+  useGetRepairJobQuery,
+  useGetRepairStatsQuery,
+  useGetRepairTechniciansQuery,
+  useGetRepairHistoryQuery,
+  useGetRepairPartsUsageQuery,
+  useGetRepairSettingsQuery,
+  useUpdateRepairSettingsMutation,
   useCreateRepairJobMutation,
   useUpdateRepairJobMutation,
+  useChangeRepairStatusMutation,
+  useAddRepairItemMutation,
+  useUpdateRepairItemMutation,
+  useSaveRepairBillMutation,
+  useRemoveRepairItemMutation,
+  useAddRepairPaymentMutation,
+  useRemoveRepairPaymentMutation,
+  useAddRepairNoteMutation,
   useGetServicesQuery,
   useCreateServiceMutation,
   useUpdateServiceMutation,

@@ -126,8 +126,16 @@ const getEntryById = async (id) => {
 /**
  * Delete an entry. Reverses cashbook expense for purchase entries.
  */
-const deleteEntry = async (id) => {
-  const entry = await getEntryById(id);
+const deleteEntry = async (id, scope = {}) => {
+  const entry = await RepairStockItem.findOne({
+    _id: id,
+    ...(scope.organizationId ? { organizationId: scope.organizationId } : {}),
+    ...(scope.branchId ? { branchId: scope.branchId } : {}),
+  });
+  if (!entry) throw new ApiError(httpStatus.NOT_FOUND, 'Stock entry not found');
+  if (entry.repairJobId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'This cost belongs to a repair job — change it on the job instead');
+  }
   if (entry.type === 'purchase') {
     await cashBookService.deleteEntriesByReference(entry._id, 'RepairStockItem');
     await walletEntryService.reverseWalletPayment({

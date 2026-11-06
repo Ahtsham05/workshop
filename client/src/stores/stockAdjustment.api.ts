@@ -31,6 +31,7 @@ export type AdjustmentType =
   | 'warranty_out'
   | 'warranty_replacement'
   | 'warranty_in'
+  | 'repair_part'
   | 'other'
 export type AdjustmentDirection = 'increase' | 'decrease'
 export type AdjustmentStatus = 'completed' | 'reversed'

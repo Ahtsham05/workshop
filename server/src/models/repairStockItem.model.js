@@ -32,6 +32,9 @@ const repairStockItemSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    // repair_usage written by a repair job's "Repair cost" (repairJob.service.js) — one
+    // entry per job, kept in step with the job's directCost.
+    repairJobId: { type: mongoose.Schema.Types.ObjectId, ref: 'RepairJob', default: null, index: true },
     // Only populated for repair_usage entries
     repairJobRef: {
       type: String,

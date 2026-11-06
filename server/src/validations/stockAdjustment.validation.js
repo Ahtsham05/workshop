@@ -13,9 +13,10 @@ const createAdjustment = {
     variantId: Joi.string().custom(objectId),
     batchId: Joi.string().custom(objectId),
     // 'count' adjustments are only ever posted by a stock count (stockCount.service.js),
-    // the warranty_* ones only by a warranty claim (warrantyClaim.service.js).
+    // the warranty_* ones only by a warranty claim (warrantyClaim.service.js), repair_* only
+    // by a repair job (repairJob.service.js).
     type: Joi.string()
-      .valid(...StockAdjustment.TYPES.filter((type) => type !== 'count' && !type.startsWith('warranty_')))
+      .valid(...StockAdjustment.TYPES.filter((type) => type !== 'count' && !type.startsWith('warranty_') && !type.startsWith('repair_')))
       .required(),
     direction: Joi.string().valid(...StockAdjustment.DIRECTIONS),
     quantity: Joi.number().integer().min(1),

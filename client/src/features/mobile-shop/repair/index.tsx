@@ -1,1354 +1,331 @@
-import { useState, useMemo, useEffect } from 'react'
-import { resolveBranchCompanyName } from '@/utils/branch-company-name'
-import { useSelector } from 'react-redux'
-import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { SalesmanField } from '@/components/salesman-field'
+import { useEffect, useRef, useState } from 'react'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
+  AlertTriangle,
+  CircleCheckBig,
+  ClipboardList,
+  ShoppingCart,
+  Timer,
+  Wallet,
+  Wrench,
+} from 'lucide-react'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Textarea } from '@/components/ui/textarea'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Printer, Trash2, CheckCircle, PackageCheck, Plus, Search, ShoppingCart, Package } from 'lucide-react'
-import { usePermissions } from '@/context/permission-context'
-import { SimplePagination } from '@/components/ui/simple-pagination'
-import { MobilePageShell } from '../components/mobile-page-shell'
-import {
-  makeEnterChain,
-  MOBILE_FORM_KEYBOARD_HINT,
-  useCtrlEnterSubmit,
-} from '@/lib/mobile-form-keyboard'
-import {
-  useCreateRepairJobMutation,
-  useDeleteRepairJobMutation,
-  useGetRepairJobsQuery,
-  useUpdateRepairJobMutation,
-  useGetRepairStockLedgerQuery,
-  useCreateRepairStockPurchaseMutation,
-  useCreateRepairStockUsageMutation,
-  useDeleteRepairStockEntryMutation,
+  useGetRepairStatsQuery,
   useGetRepairStockSummaryQuery,
-  useGetWalletsQuery,
   type RepairJobRecord,
-  type RepairStockEntry,
 } from '@/stores/mobile-shop.api'
-import {
-  buildMergedPaymentOptions,
-  getWalletTypeFromOptionValue,
-  isWalletOptionValue,
-  toWalletOptionValue,
-} from '@/lib/wallet-payment-options'
-import { useGetBranchQuery } from '@/stores/branch.api'
-import { useGetMyOrganizationQuery } from '@/stores/organization.api'
-import { type RootState } from '@/stores/store'
-import {
-  formatBusinessDate,
-  parseBusinessDateTimeLocal,
-  toBusinessDateTimeLocal,
-} from '@/lib/business-timezone'
-import { generateRepairReceiptHTML, openRepairPrintWindow } from './repair-print-utils'
-import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
-import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
-import { SmsSendButton } from '@/components/sms/sms-send-button'
-import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
-import { useBranchName } from '@/hooks/use-branch-name'
 import { formatMoneyWithMeta, useCurrencyMeta } from '@/lib/format-money'
-import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
-import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { MOBILE_FORM_KEYBOARD_HINT } from '@/lib/mobile-form-keyboard'
+import { cn } from '@/lib/utils'
+import { usePermissions } from '@/context/permission-context'
+import { StatCard } from '@/features/dashboard/components/stat-card'
+import { MobilePageShell } from '../components/mobile-page-shell'
+import { IntakeForm } from './components/intake-form'
+import { JobSheet } from './components/job-sheet'
+import { PartsUsageCard } from './components/parts-usage-card'
+import { RepairQueue, type QueueTab } from './components/repair-queue'
+import {
+  PurchaseRepairPartsCard,
+  RepairStockLedgerCard,
+} from './components/repair-stock-cards'
+import { useRepairPrint } from './lib/use-repair-print'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type RepairFormState = {
-  customerName: string
-  phone: string
-  deviceModel: string
-  serialNumber: string
-  color: string
-  accessories: string
-  issue: string
-  technician: string
-  charges: string
-  advanceAmount: string
-  paymentMethod: string
-  walletType: string
-  date: string
-  salesmanId: string
-}
-
-type CompleteDialogState = {
-  open: boolean
-  repair: RepairJobRecord | null
-  charges: string
-  advanceAmount: string
-  cost: string
-  paymentMethod: string
-  walletType: string
-}
-
-type DeliverDialogState = {
-  open: boolean
-  repair: RepairJobRecord | null
-  receivedNow: string
-  paymentMethod: string
-  walletType: string
-}
-
-type StockFormState = {
-  description: string
-  amount: string
-  paymentMethod: string
-  walletType: string
-  notes: string
-  date: string
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function salesmanName(ref: { name?: string; email?: string } | string | null | undefined): string {
-  if (!ref) return '—'
-  return typeof ref === 'string' ? ref : ref.name || ref.email || '—'
-}
-
-const makeInitialForm = (): RepairFormState => ({
-  customerName: '',
-  phone: '',
-  deviceModel: '',
-  serialNumber: '',
-  color: '',
-  accessories: '',
-  issue: '',
-  technician: '',
-  charges: '0',
-  advanceAmount: '0',
-  paymentMethod: 'cash',
-  walletType: '',
-  date: toBusinessDateTimeLocal(),
-  salesmanId: '',
-})
-
-const statusConfig: Record<string, { label: string; color: string }> = {
-  in_progress: { label: 'In Progress', color: 'bg-blue-100 text-blue-800' },
-  completed: { label: 'Completed', color: 'bg-green-100 text-green-800' },
-  delivered: { label: 'Delivered', color: 'bg-purple-100 text-purple-800' },
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
+/**
+ * Repair center: phones, tablets, laptops, PCs, printers, TVs, consoles… Intake on the
+ * left, the live queue (list or board) on the right, every job opens in a side sheet.
+ */
+const SECTION_KEY = 'repair-page-section'
 
 export default function RepairPage() {
   const currencyMeta = useCurrencyMeta()
-  const fmtAmt = (n?: number) => formatMoneyWithMeta(n ?? 0, currencyMeta)
+  const fmt = (n?: number) => formatMoneyWithMeta(n ?? 0, currencyMeta)
   const { hasExplicitPermission } = usePermissions()
   const canManage = hasExplicitPermission('manageRepairs')
-  const [form, setForm] = useState<RepairFormState>(makeInitialForm)
-  const [activeTab, setActiveTab] = useState('all')
-  const [repairSearch, setRepairSearch] = useState('')
-  const [repairPage, setRepairPage] = useState(1)
-  const [repairLimit, setRepairLimit] = usePersistedPageSize('ms-repair-repairLimit', 10)
-  const [printRepair, setPrintRepair] = useState<RepairJobRecord | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState<RepairJobRecord | null>(null)
-  const [completeDialog, setCompleteDialog] = useState<CompleteDialogState>({
-    open: false,
-    repair: null,
-    charges: '0',
-    advanceAmount: '0',
-    cost: '0',
-    paymentMethod: 'cash',
-    walletType: '',
+  const { data: stats, isLoading: statsLoading } = useGetRepairStatsQuery()
+  const { printReceipt, printTag } = useRepairPrint()
+  const [openJobId, setOpenJobIdState] = useState<string | null>(null)
+  const [autoComplete, setAutoComplete] = useState(false)
+  const setOpenJobId = (id: string | null, action?: 'complete') => {
+    setAutoComplete(action === 'complete')
+    setOpenJobIdState(id)
+  }
+  const intakeRef = useRef<HTMLDivElement>(null)
+  const queueRef = useRef<HTMLDivElement>(null)
+  const [queueTab, setQueueTab] = useState<QueueTab>('open')
+  const [section, setSectionState] = useState<'jobs' | 'stock'>(() => {
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get('section')
+      if (fromUrl === 'stock' || fromUrl === 'jobs') return fromUrl
+      return localStorage.getItem(SECTION_KEY) === 'stock' ? 'stock' : 'jobs'
+    } catch {
+      return 'jobs'
+    }
   })
-  const [deliverDialog, setDeliverDialog] = useState<DeliverDialogState>({
-    open: false,
-    repair: null,
-    receivedNow: '0',
-    paymentMethod: 'cash',
-    walletType: '',
-  })
-
-  // ── Stock state ──
-  const [stockForm, setStockForm] = useState<StockFormState>({
-    description: '',
-    amount: '0',
-    paymentMethod: 'cash',
-    walletType: '',
-    notes: '',
-    date: toBusinessDateTimeLocal(),
-  })
-  const [deleteStockConfirm, setDeleteStockConfirm] = useState<RepairStockEntry | null>(null)
-
-  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
-  const branchName = useBranchName()
-  const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
-  const user = useSelector((state: RootState) => state.auth.data?.user)
-  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
-  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
-  const { data: walletsData } = useGetWalletsQuery()
-  const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
-  // No generic 'Bank Transfer' placeholder — every real account (Cash in Hand or a named
-  // Bank Account/mobile wallet) is selectable by its own name.
-  const baseRepairPaymentMethods = [{ value: 'cash', label: 'Cash' }]
-  // Collecting from the customer is money-in — hide wallet balances.
-  const repairPaymentMethodOptions = buildMergedPaymentOptions(baseRepairPaymentMethods, wallets, false, currencyMeta)
-  // Buying repair parts/stock is money-out — show wallet balances.
-  const stockPaymentMethodOptions = buildMergedPaymentOptions(baseRepairPaymentMethods, wallets, true, currencyMeta)
-
-  const { data } = useGetRepairJobsQuery({
-    page: repairPage,
-    limit: repairLimit,
-    ...(activeTab !== 'all' ? { status: activeTab } : {}),
-  })
-  const [createRepairJob, { isLoading: isSaving }] = useCreateRepairJobMutation()
-  const [updateRepairJob, { isLoading: isUpdating }] = useUpdateRepairJobMutation()
-  const [deleteRepairJob] = useDeleteRepairJobMutation()
-
-  // ── Stock queries/mutations ──
-  const { data: stockLedger } = useGetRepairStockLedgerQuery()
+  const setSection = (next: 'jobs' | 'stock') => {
+    setSectionState(next)
+    try {
+      localStorage.setItem(SECTION_KEY, next)
+    } catch {
+      /* not remembered */
+    }
+  }
   const { data: stockSummary } = useGetRepairStockSummaryQuery()
-  const [createRepairStockPurchase, { isLoading: isSavingStock }] = useCreateRepairStockPurchaseMutation()
-  const [createRepairStockUsage] = useCreateRepairStockUsageMutation()
-  const [deleteRepairStockEntry] = useDeleteRepairStockEntryMutation()
-
-  // All entries sorted asc (from API), with running balance computed per row
-  const ledgerRows = (() => {
-    const entries = stockLedger?.results ?? []
-    let running = 0
-    return entries.map((e) => {
-      const amt = isNaN(Number(e.amount)) ? 0 : Number(e.amount)
-      if (e.type === 'purchase') running += amt
-      else running -= amt
-      return { ...e, amount: amt, runningBalance: running }
-    })
-  })()
-
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab)
-    setRepairPage(1)
+  /** A summary card filters the queue below (on the jobs tab) and brings it into view. */
+  const filterQueue = (tab: QueueTab) => {
+    setSection('jobs')
+    setQueueTab(tab)
+    window.setTimeout(
+      () =>
+        queueRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        }),
+      50
+    )
   }
 
-  const setField = <K extends keyof RepairFormState>(key: K, value: RepairFormState[K]) =>
-    setForm((prev) => ({ ...prev, [key]: value }))
-
-  // ── Submit create ──
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    if (!form.customerName.trim() || !form.deviceModel.trim() || !form.issue.trim()) {
-      toast.error('Customer name, device model and issue are required')
-      return
-    }
-    try {
-      const created = await createRepairJob({
-        ...form,
-        status: 'in_progress',
-        charges: Number(form.charges),
-        advanceAmount: Number(form.advanceAmount),
-        date: form.date ? parseBusinessDateTimeLocal(form.date) : parseBusinessDateTimeLocal(toBusinessDateTimeLocal()),
-      } as any).unwrap()
-      toast.success('Repair job created')
-      setForm(makeInitialForm())
-      // Auto-open print dialog
-      setPrintRepair(created as unknown as RepairJobRecord)
-    } catch (error: any) {
-      toast.error(error?.data?.message || 'Failed to create repair job')
-    }
-  }
-
-  const repairEnter = useMemo(
-    () =>
-      makeEnterChain(
-        [
-          'repair-customer',
-          'repair-phone',
-          'repair-device',
-          'repair-color',
-          'repair-serial',
-          'repair-accessories',
-          'repair-issue',
-          'repair-technician',
-          'repair-charges',
-          'repair-advance',
-          'repair-payment-method',
-          'repair-date',
-        ],
-        { onSubmit: () => document.querySelector<HTMLFormElement>('[data-mobile-form="repair"]')?.requestSubmit() },
-      ),
-    [],
-  )
-
-  useCtrlEnterSubmit(
-    () => document.querySelector<HTMLFormElement>('[data-mobile-form="repair"]')?.requestSubmit(),
-    isSaving,
-  )
-
+  // ?job=<id> deep link (e.g. from a report) opens that job.
   useEffect(() => {
-    window.setTimeout(() => repairEnter.focusFirst(), 80)
-  }, [repairEnter])
-
-
-  // ── Open complete dialog ──
-  const openCompleteDialog = (repair: RepairJobRecord) => {
-    setCompleteDialog({
-      open: true,
-      repair,
-      charges: String(repair.charges ?? 0),
-      advanceAmount: String(repair.advanceAmount ?? 0),
-      cost: String(repair.cost ?? 0),
-      paymentMethod: repair.paymentMethod ?? 'cash',
-      walletType: repair.walletType ?? '',
-    })
-  }
-
-  // ── Save complete ──
-  const handleCompleteSubmit = async () => {
-    if (!completeDialog.repair) return
-    const charges = Number(completeDialog.charges)
-    const advanceAmount = Number(completeDialog.advanceAmount)
-    const cost = Number(completeDialog.cost)
-
-    if (charges < 0 || advanceAmount < 0 || cost < 0) {
-      toast.error('Amounts cannot be negative')
-      return
-    }
-
     try {
-      const updated = await updateRepairJob({
-        id: completeDialog.repair.id,
-        body: {
-          charges,
-          advanceAmount,
-          cost,
-          paymentMethod: completeDialog.paymentMethod as RepairJobRecord['paymentMethod'],
-          walletType: completeDialog.paymentMethod === 'wallet' ? completeDialog.walletType : undefined,
-          status: 'completed',
-        },
-      }).unwrap()
-
-      // Auto-create a stock credit entry for the repair cost
-      if (cost > 0) {
-        await createRepairStockUsage({
-          description: `Repair: ${completeDialog.repair.deviceModel} — ${completeDialog.repair.customerName}`,
-          amount: cost,
-          repairJobRef: `${completeDialog.repair.deviceModel} (${completeDialog.repair.customerName})`,
-          date: new Date().toISOString(),
-        }).unwrap()
-      }
-
-      toast.success('Job marked as completed')
-      setCompleteDialog({ open: false, repair: null, charges: '0', advanceAmount: '0', cost: '0', paymentMethod: 'cash', walletType: '' })
-      setPrintRepair(updated as unknown as RepairJobRecord)
-    } catch (error: any) {
-      toast.error(error?.data?.message || 'Failed to update charges')
+      const id = new URLSearchParams(window.location.search).get('job')
+      if (id) setOpenJobId(id)
+    } catch {
+      /* ignore */
     }
+  }, [])
+
+  const onCreated = (
+    job: RepairJobRecord,
+    print: { card: boolean; tag: boolean }
+  ) => {
+    if (print.card) printReceipt(job, 'job_card')
+    if (print.tag) window.setTimeout(() => printTag(job), print.card ? 600 : 0)
   }
 
-  // ── Open deliver dialog ──
-  const openDeliverDialog = (repair: RepairJobRecord) => {
-    const remaining = (repair.charges ?? 0) - (repair.advanceAmount ?? 0)
-    setDeliverDialog({
-      open: true,
-      repair,
-      receivedNow: String(Math.max(0, remaining)),
-      paymentMethod: repair.paymentMethod ?? 'cash',
-      walletType: repair.walletType ?? '',
-    })
-  }
-
-  // ── Save deliver ──
-  const handleDeliverSubmit = async () => {
-    if (!deliverDialog.repair) return
-    const received = Number(deliverDialog.receivedNow)
-    if (received < 0) {
-      toast.error('Amount cannot be negative')
-      return
-    }
-    try {
-      const newAdvance = (deliverDialog.repair.advanceAmount ?? 0) + received
-      const updated = await updateRepairJob({
-        id: deliverDialog.repair.id,
-        body: {
-          advanceAmount: newAdvance,
-          paymentMethod: deliverDialog.paymentMethod as RepairJobRecord['paymentMethod'],
-          walletType: deliverDialog.paymentMethod === 'wallet' ? deliverDialog.walletType : undefined,
-          status: 'delivered',
-        },
-      }).unwrap()
-      toast.success('Device delivered & payment recorded')
-      setDeliverDialog({ open: false, repair: null, receivedNow: '0', paymentMethod: 'cash', walletType: '' })
-      setPrintRepair(updated as unknown as RepairJobRecord)
-    } catch (error: any) {
-      toast.error(error?.data?.message || 'Failed to update delivery')
-    }
-  }
-
-  // ── Delete ──
-  const handleDelete = async () => {
-    if (!deleteConfirm) return
-    try {
-      await deleteRepairJob(deleteConfirm.id).unwrap()
-      toast.success('Repair job deleted')
-      setDeleteConfirm(null)
-    } catch (error: any) {
-      toast.error(error?.data?.message || 'Failed to delete')
-    }
-  }
-
-  // ── Stock: Purchase ──
-  const handleStockSubmit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    if (!stockForm.description.trim()) {
-      toast.error('Description is required')
-      return
-    }
-    const amt = Number(stockForm.amount)
-    if (amt <= 0) { toast.error('Amount must be greater than 0'); return }
-    try {
-      await createRepairStockPurchase({
-        description: stockForm.description.trim(),
-        amount: amt,
-        paymentMethod: stockForm.paymentMethod as RepairStockEntry['paymentMethod'],
-        walletType: stockForm.paymentMethod === 'wallet' ? stockForm.walletType : undefined,
-        notes: stockForm.notes.trim() || undefined,
-        date: stockForm.date ? parseBusinessDateTimeLocal(stockForm.date) : parseBusinessDateTimeLocal(toBusinessDateTimeLocal()),
-      }).unwrap()
-      toast.success('Stock purchased & cashbook updated')
-      setStockForm({ description: '', amount: '0', paymentMethod: 'cash', walletType: '', notes: '', date: toBusinessDateTimeLocal() })
-    } catch (error: any) {
-      toast.error(error?.data?.message || 'Failed to save stock')
-    }
-  }
-
-  // ── Stock: Delete ──
-  const handleDeleteStock = async () => {
-    if (!deleteStockConfirm) return
-    try {
-      await deleteRepairStockEntry(deleteStockConfirm.id).unwrap()
-      toast.success('Entry deleted')
-      setDeleteStockConfirm(null)
-    } catch (error: any) {
-      toast.error(error?.data?.message || 'Failed to delete')
-    }
-  }
-
-  // ── Print ──
-  const handlePrint = () => {
-    if (!printRepair) return
-    const html = generateRepairReceiptHTML({
-      customerName: printRepair.customerName,
-      phone: printRepair.phone,
-      deviceModel: printRepair.deviceModel,
-      serialNumber: printRepair.serialNumber,
-      color: printRepair.color,
-      accessories: printRepair.accessories,
-      issue: printRepair.issue,
-      technician: printRepair.technician,
-      status: printRepair.status,
-      charges: printRepair.charges ?? 0,
-      advanceAmount: printRepair.advanceAmount ?? 0,
-      paymentMethod: printRepair.paymentMethod ?? 'cash',
-      date: printRepair.date,
-      companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
-      companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
-        .filter(Boolean)
-        .join(', ') || undefined,
-      companyPhone: branchData?.phone,
-      companyEmail: branchData?.email,
-      companyLogo: orgData?.logo?.url,
-      isTrial: orgData?.subscription?.isTrial,
-      invoiceNote: branchData?.invoiceNote,
-      userPreferredLanguage: preferredLanguage as 'en' | 'ur',
-      currencyMeta,
-    })
-    openRepairPrintWindow(html)
-  }
-
-  // ── Filter: server-side by status, client-side text search ──
-  const allRepairs = data?.results ?? []
-  const filtered = useMemo(() => {
-    if (!repairSearch.trim()) return allRepairs
-    const digits = repairSearch.replace(/\D/g, '')
-    return allRepairs.filter(r => {
-      if (matchesBilingualSearch(repairSearch, r.customerName, r.deviceModel)) return true
-      if (digits && r.phone?.replace(/\D/g, '').includes(digits)) return true
-      return false
-    })
-  }, [allRepairs, repairSearch])
-
-  const tabCounts = {
-    all: activeTab === 'all' ? (data?.totalResults ?? 0) : '…',
-    in_progress: activeTab === 'in_progress' ? (data?.totalResults ?? 0) : '…',
-    completed: activeTab === 'completed' ? (data?.totalResults ?? 0) : '…',
-    delivered: activeTab === 'delivered' ? (data?.totalResults ?? 0) : '…',
+  const focusIntake = () => {
+    setSection('jobs')
+    intakeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    window.setTimeout(
+      () => document.getElementById('ri-customer')?.focus(),
+      300
+    )
   }
 
   return (
     <MobilePageShell
       title='Repair Management'
-      description={`Track repair jobs, technicians, advances, and delivery status. · ${MOBILE_FORM_KEYBOARD_HINT}`}
+      description={`Phones, tablets, laptops, PCs, printers, TVs and more — intake, parts, payments and delivery. · ${MOBILE_FORM_KEYBOARD_HINT}`}
     >
-      <div className='grid gap-6 xl:grid-cols-[440px_1fr]'>
-        {/* ── Create Form ── */}
-        {canManage ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>New Repair Job</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form data-mobile-form='repair' className='grid gap-3' onSubmit={handleSubmit}>
-              <div className='grid gap-3 sm:grid-cols-2'>
-                <div className='space-y-1'>
-                  <Label>Customer Name *</Label>
-                  <Input
-                    placeholder='e.g. Ahmad Khan'
-                    value={form.customerName}
-                    onChange={(e) => setField('customerName', e.target.value)}
-                    {...repairEnter.enterProps('repair-customer')}
-                  />
-                </div>
-                <div className='space-y-1'>
-                  <Label>Phone Number</Label>
-                  <CustomerPhoneAutocomplete
-                    placeholder='03xxxxxxxxx'
-                    value={form.phone}
-                    onChange={(e) => setField('phone', e.target.value)}
-                    onCustomerSelect={(c) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        phone: c.phone || prev.phone,
-                        customerName: c.name || prev.customerName,
-                      }))
-                    }
-                    searchRepairRecords
-                    searchSimSaleRecords
-                    searchInstallmentRecords
-                    searchServiceRecords
-                    searchLoadSaleRecords
-                    {...repairEnter.enterProps('repair-phone')}
-                  />
-                </div>
-              </div>
-
-              <div className='grid gap-3 md:grid-cols-2'>
-                <div className='space-y-1'>
-                  <Label>Device Model *</Label>
-                  <Input
-                    placeholder='e.g. Samsung A54'
-                    value={form.deviceModel}
-                    onChange={(e) => setField('deviceModel', e.target.value)}
-                    {...repairEnter.enterProps('repair-device')}
-                  />
-                </div>
-                <div className='space-y-1'>
-                  <Label>Color</Label>
-                  <Input
-                    placeholder='e.g. Black'
-                    value={form.color}
-                    onChange={(e) => setField('color', e.target.value)}
-                    {...repairEnter.enterProps('repair-color')}
-                  />
-                </div>
-              </div>
-
-              <div className='space-y-1'>
-                <Label>Serial / IMEI</Label>
-                <Input
-                  placeholder='IMEI or serial'
-                  value={form.serialNumber}
-                  onChange={(e) => setField('serialNumber', e.target.value)}
-                  {...repairEnter.enterProps('repair-serial')}
-                />
-              </div>
-
-              <div className='space-y-1'>
-                <Label>Accessories Received</Label>
-                <Input
-                  placeholder='e.g. Charger, Back cover, SIM tray'
-                  value={form.accessories}
-                  onChange={(e) => setField('accessories', e.target.value)}
-                  {...repairEnter.enterProps('repair-accessories')}
-                />
-              </div>
-
-              <div className='space-y-1'>
-                <Label>Issue / Fault Details *</Label>
-                <Textarea
-                  placeholder='Describe the problem...'
-                  rows={3}
-                  value={form.issue}
-                  onChange={(e) => setField('issue', e.target.value)}
-                  {...repairEnter.enterProps('repair-issue')}
-                />
-              </div>
-
-              <div className='space-y-1'>
-                <Label>Technician</Label>
-                <Input
-                  placeholder='Assigned technician'
-                  value={form.technician}
-                  onChange={(e) => setField('technician', e.target.value)}
-                  {...repairEnter.enterProps('repair-technician')}
-                />
-              </div>
-
-              <div className='grid gap-3 sm:grid-cols-2'>
-                <div className='space-y-1'>
-                  <Label>Estimated Charges (Rs)</Label>
-                  <Input
-                    type='number'
-                    min='0'
-                    step='1'
-                    value={form.charges}
-                    onChange={(e) => setField('charges', e.target.value)}
-                    {...repairEnter.enterProps('repair-charges')}
-                  />
-                </div>
-                <div className='space-y-1'>
-                  <Label>Advance Received (Rs)</Label>
-                  <Input
-                    type='number'
-                    min='0'
-                    step='1'
-                    value={form.advanceAmount}
-                    onChange={(e) => setField('advanceAmount', e.target.value)}
-                    {...repairEnter.enterProps('repair-advance')}
-                  />
-                </div>
-              </div>
-
-              <div className='grid gap-3 sm:grid-cols-2'>
-                <div className='space-y-1'>
-                  <Label>Payment Method</Label>
-                  <Select
-                    value={form.paymentMethod === 'wallet' && form.walletType ? toWalletOptionValue(form.walletType) : form.paymentMethod}
-                    onValueChange={(v) => {
-                      if (isWalletOptionValue(v)) {
-                        setForm((prev) => ({ ...prev, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(v) }))
-                      } else {
-                        setForm((prev) => ({ ...prev, paymentMethod: v, walletType: '' }))
-                      }
-                    }}
-                  >
-                    <SelectTrigger {...repairEnter.enterProps('repair-payment-method')}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {repairPaymentMethodOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className='space-y-1'>
-                  <Label>Date / Time</Label>
-                  <Input
-                    type='datetime-local'
-                    value={form.date}
-                    onChange={(e) => setField('date', e.target.value)}
-                    {...repairEnter.enterProps('repair-date')}
-                  />
-                </div>
-              </div>
-
-              <SalesmanField
-                value={form.salesmanId}
-                onValueChange={(v) => setField('salesmanId', v)}
-                id='repair-salesman'
-              />
-
-              {/* Balance preview */}
-              {(Number(form.charges) > 0 || Number(form.advanceAmount) > 0) && (
-                <div className='rounded-md bg-muted p-3 text-sm flex justify-between'>
-                  <span>Balance due after advance:</span>
-                  <strong className={Number(form.charges) - Number(form.advanceAmount) > 0 ? 'text-destructive' : 'text-green-600'}>
-                    {fmtAmt(Number(form.charges) - Number(form.advanceAmount))}
-                  </strong>
-                </div>
-              )}
-
-              <Button disabled={isSaving} type='submit' className='w-full'>
-                {isSaving ? 'Saving...' : 'Create Repair Job & Print'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-        ) : null}
-
-        {/* ── Repair Queue ── */}
-        <Card className='flex flex-col'>
-          <CardHeader className='flex flex-row items-center justify-between gap-4 flex-wrap'>
-            <CardTitle>Repair Queue</CardTitle>
-            <div className='relative w-full sm:w-64'>
-              <Search className='absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none' />
-              <Input
-                placeholder='Search name, phone, device…'
-                value={repairSearch}
-                onChange={e => { setRepairSearch(e.target.value); setRepairPage(1) }}
-                className='pl-8 h-9'
-                showVoiceInput={false}
-              />
-            </div>
-          </CardHeader>
-          <CardContent className='flex-1 overflow-auto'>
-            <Tabs value={activeTab} onValueChange={handleTabChange} className='mb-4'>
-              <TabsList className='flex-wrap h-auto gap-1'>
-                <TabsTrigger value='all'>All ({tabCounts.all})</TabsTrigger>
-                <TabsTrigger value='in_progress'>In Progress ({tabCounts.in_progress})</TabsTrigger>
-                <TabsTrigger value='completed'>Completed ({tabCounts.completed})</TabsTrigger>
-                <TabsTrigger value='delivered'>Delivered ({tabCounts.delivered})</TabsTrigger>
-              </TabsList>
-            </Tabs>
-
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Device</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Charges</TableHead>
-                  <TableHead>Advance</TableHead>
-                  <TableHead className='text-destructive'>Balance</TableHead>
-                  <TableHead className='text-green-600'>Profit</TableHead>
-                  <TableHead>Salesman</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={9} className='text-center text-muted-foreground py-8'>
-                      No repair jobs found
-                    </TableCell>
-                  </TableRow>
-                )}
-                {filtered.map((repair) => {
-                  const balance = (repair.charges ?? 0) - (repair.advanceAmount ?? 0)
-                  const cfg = statusConfig[repair.status]
-                  return (
-                    <TableRow key={repair.id}>
-                      <TableCell>
-                        <div className='font-medium whitespace-nowrap'>{repair.customerName}</div>
-                        <div className='text-xs text-muted-foreground'>{repair.phone || '-'}</div>
-                        <div className='text-xs text-muted-foreground'>{formatBusinessDate(repair.date)}</div>
-                      </TableCell>
-                      <TableCell>
-                        <div className='whitespace-nowrap'>{repair.deviceModel}</div>
-                        {repair.color && <div className='text-xs text-muted-foreground'>{repair.color}</div>}
-                      </TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${cfg?.color}`}>
-                          {cfg?.label}
-                        </span>
-                      </TableCell>
-                      <TableCell className='whitespace-nowrap'>{fmtAmt(repair.charges)}</TableCell>
-                      <TableCell className='text-green-600 whitespace-nowrap'>{fmtAmt(repair.advanceAmount)}</TableCell>
-                      <TableCell className={`whitespace-nowrap font-medium ${balance > 0 ? 'text-destructive' : 'text-green-600'}`}>
-                        {balance > 0 ? fmtAmt(balance) : 'Paid ✓'}
-                      </TableCell>
-                      <TableCell className='whitespace-nowrap'>
-                        {repair.cost != null ? (
-                          <span className={(repair.charges ?? 0) - (repair.cost ?? 0) >= 0 ? 'text-green-600 font-medium' : 'text-destructive font-medium'}>
-                            {(repair.charges ?? 0) - (repair.cost ?? 0) >= 0 ? '+' : ''}{fmtAmt((repair.charges ?? 0) - (repair.cost ?? 0))}
-                          </span>
-                        ) : (
-                          <span className='text-muted-foreground text-xs'>—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className='text-sm text-muted-foreground'>{salesmanName((repair as any).salesmanId)}</TableCell>
-                      <TableCell>
-                        <div className='flex flex-wrap items-center gap-1'>
-                          {repair.status === 'in_progress' && (
-                            <Button
-                              size='icon'
-                              variant='outline'
-                              title='Complete & set final charges'
-                              onClick={() => openCompleteDialog(repair)}
-                            >
-                              <CheckCircle className='h-4 w-4 text-green-600' />
-                            </Button>
-                          )}
-                          {repair.status === 'completed' && (
-                            <Button
-                              size='icon'
-                              variant='outline'
-                              title='Deliver & collect payment'
-                              onClick={() => openDeliverDialog(repair)}
-                            >
-                              <PackageCheck className='h-4 w-4 text-purple-600' />
-                            </Button>
-                          )}
-                          <Button
-                            size='icon'
-                            variant='outline'
-                            title='View & print job card'
-                            onClick={() => setPrintRepair(repair)}
-                          >
-                            <Printer className='h-4 w-4' />
-                          </Button>
-                          <WhatsAppSendButton
-                            phone={repair.phone}
-                            name={repair.customerName}
-                            message={buildMobileShopReceiptMessage({
-                              branchName,
-                              name: repair.customerName,
-                              title: `${repair.deviceModel} Repair Job`,
-                              lines: [
-                                { label: 'Issue', value: repair.issue },
-                                { label: 'Status', value: cfg?.label || repair.status },
-                                { label: 'Charges', value: fmtAmt(repair.charges) },
-                                { label: 'Balance', value: balance > 0 ? fmtAmt(balance) : 'Paid' },
-                              ],
-                            })}
-                            templateCategory='repair_receipt'
-                            templateParams={[
-                              repair.customerName,
-                              repair.deviceModel,
-                              cfg?.label || repair.status,
-                              balance > 0 ? balance.toLocaleString() : '0',
-                            ]}
-                          />
-                          <SmsSendButton
-                            phone={repair.phone}
-                            name={repair.customerName}
-                            defaultMessage={buildMobileShopReceiptMessage({
-                              branchName,
-                              name: repair.customerName,
-                              title: `${repair.deviceModel} Repair Job`,
-                              lines: [
-                                { label: 'Issue', value: repair.issue },
-                                { label: 'Status', value: cfg?.label || repair.status },
-                                { label: 'Charges', value: fmtAmt(repair.charges) },
-                                { label: 'Balance', value: balance > 0 ? fmtAmt(balance) : 'Paid' },
-                              ],
-                            })}
-                          />
-                          {canManage ? (
-                            <Button
-                              size='icon'
-                              variant='ghost'
-                              title='Delete'
-                              onClick={() => setDeleteConfirm(repair)}
-                            >
-                              <Trash2 className='h-4 w-4 text-destructive' />
-                            </Button>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-            {!repairSearch.trim() && (
-              <SimplePagination
-                currentPage={repairPage}
-                totalPages={data?.totalPages ?? 1}
-                totalResults={data?.totalResults}
-                limit={repairLimit}
-                onPageChange={setRepairPage}
-                onLimitChange={(l) => { setRepairLimit(l); setRepairPage(1) }}
-                className='mt-3'
-              />
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── Repair Stock Section ── */}
-      <div className='mt-6 grid gap-6 xl:grid-cols-[400px_1fr]'>
-        {/* ── Purchase Stock Form ── */}
-        {canManage ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className='flex items-center gap-2'>
-              <ShoppingCart className='h-5 w-5 text-primary' />
-              Purchase Repair Parts
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form className='grid gap-3' onSubmit={handleStockSubmit}>
-              <div className='space-y-1'>
-                <Label>Part / Item Description *</Label>
-                <Input
-                  placeholder='e.g. Samsung A54 Display, Battery iPhone 11'
-                  value={stockForm.description}
-                  onChange={(e) => setStockForm((p) => ({ ...p, description: e.target.value }))}
-                />
-              </div>
-
-              <div className='space-y-1'>
-                <Label>Total Amount (Rs) *</Label>
-                <Input
-                  type='number'
-                  min='1'
-                  step='1'
-                  placeholder='0'
-                  value={stockForm.amount}
-                  onChange={(e) => setStockForm((p) => ({ ...p, amount: e.target.value }))}
-                />
-              </div>
-
-              <div className='grid gap-3 sm:grid-cols-2'>
-                <div className='space-y-1'>
-                  <Label>Payment Method</Label>
-                  <Select
-                    value={stockForm.paymentMethod === 'wallet' && stockForm.walletType ? toWalletOptionValue(stockForm.walletType) : stockForm.paymentMethod}
-                    onValueChange={(v) => {
-                      if (isWalletOptionValue(v)) {
-                        setStockForm((p) => ({ ...p, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(v) }))
-                      } else {
-                        setStockForm((p) => ({ ...p, paymentMethod: v, walletType: '' }))
-                      }
-                    }}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {stockPaymentMethodOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className='space-y-1'>
-                  <Label>Date / Time</Label>
-                  <Input
-                    type='datetime-local'
-                    value={stockForm.date}
-                    onChange={(e) => setStockForm((p) => ({ ...p, date: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              <div className='space-y-1'>
-                <Label>Notes</Label>
-                <Input
-                  placeholder='Optional notes'
-                  value={stockForm.notes}
-                  onChange={(e) => setStockForm((p) => ({ ...p, notes: e.target.value }))}
-                />
-              </div>
-
-              <Button disabled={isSavingStock} type='submit' className='w-full'>
-                <Plus className='mr-2 h-4 w-4' />
-                {isSavingStock ? 'Saving...' : 'Purchase & Record in Cashbook'}
-              </Button>
-            </form>
-
-            {/* ── Stock Balance Summary ── */}
-            {stockSummary && (
-              <div className='mt-4 rounded-lg border overflow-hidden text-sm'>
-                <div className='bg-muted px-3 py-2 font-semibold text-xs uppercase tracking-wide text-muted-foreground'>
-                  Stock Balance
-                </div>
-                <div className='divide-y'>
-                  <div className='flex justify-between px-3 py-2 bg-blue-50'>
-                    <span className='text-blue-700'>Total Purchased (Dr)</span>
-                    <span className='font-semibold text-blue-700'>{fmtAmt(stockSummary.totalPurchased)}</span>
-                  </div>
-                  <div className='flex justify-between px-3 py-2 bg-red-50'>
-                    <span className='text-destructive'>Used in Repairs (Cr)</span>
-                    <span className='font-semibold text-destructive'>- {fmtAmt(stockSummary.totalUsed)}</span>
-                  </div>
-                  <div className='flex justify-between px-3 py-2 bg-green-50 font-bold'>
-                    <span className={stockSummary.balance >= 0 ? 'text-green-700' : 'text-destructive'}>
-                      Remaining Balance
-                    </span>
-                    <span className={stockSummary.balance >= 0 ? 'text-green-700 text-base' : 'text-destructive text-base'}>
-                      {fmtAmt(stockSummary.balance)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        ) : null}
-
-        {/* ── Stock Ledger Table ── */}
-        <Card className='flex flex-col'>
-          <CardHeader>
-            <CardTitle className='flex items-center gap-2'>
-              <Package className='h-5 w-5 text-primary' />
-              Stock Ledger
-            </CardTitle>
-          </CardHeader>
-          <CardContent className='flex-1 overflow-auto'>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className='text-right text-blue-700'>Debit (In)</TableHead>
-                  <TableHead className='text-right text-destructive'>Credit (Out)</TableHead>
-                  <TableHead className='text-right text-green-700'>Balance</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ledgerRows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className='text-center text-muted-foreground py-8'>
-                      No entries yet
-                    </TableCell>
-                  </TableRow>
-                )}
-                {/* Show newest first — reverse the balance-computed rows */}
-                {[...ledgerRows].reverse().map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className='text-xs text-muted-foreground whitespace-nowrap'>{formatBusinessDate(row.date)}</TableCell>
-                    <TableCell>
-                      <div className='flex items-center gap-1.5'>
-                        <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${row.type === 'purchase' ? 'bg-blue-500' : 'bg-red-500'}`} />
-                        <span className='font-medium text-sm'>{row.description}</span>
-                      </div>
-                      {row.repairJobRef && (
-                        <div className='text-xs text-muted-foreground ml-3'>{row.repairJobRef}</div>
-                      )}
-                    </TableCell>
-                    <TableCell className='text-right'>
-                      {row.type === 'purchase' ? (
-                        <span className='font-medium text-blue-700'>{fmtAmt(row.amount)}</span>
-                      ) : (
-                        <span className='text-muted-foreground'>—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className='text-right'>
-                      {row.type === 'repair_usage' ? (
-                        <span className='font-medium text-destructive'>{fmtAmt(row.amount)}</span>
-                      ) : (
-                        <span className='text-muted-foreground'>—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className='text-right'>
-                      <span className={`font-semibold ${row.runningBalance >= 0 ? 'text-green-700' : 'text-destructive'}`}>
-                        {fmtAmt(row.runningBalance)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {row.type === 'purchase' && canManage && (
-                        <Button size='icon' variant='ghost' title='Delete' onClick={() => setDeleteStockConfirm(row)}>
-                          <Trash2 className='h-4 w-4 text-destructive' />
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── Delete Stock Confirm Dialog ── */}
-      <Dialog open={!!deleteStockConfirm} onOpenChange={(open) => !open && setDeleteStockConfirm(null)}>
-        <DialogContent className='max-w-sm'>
-          <DialogHeader>
-            <DialogTitle>Delete Entry?</DialogTitle>
-          </DialogHeader>
-          <p className='text-sm text-muted-foreground'>
-            Delete <strong>{deleteStockConfirm?.description}</strong>?{' '}
-            {deleteStockConfirm?.type === 'purchase' && 'This will also reverse the cashbook expense entry.'}
-          </p>
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setDeleteStockConfirm(null)}>Cancel</Button>
-            <Button variant='destructive' onClick={handleDeleteStock}>Delete</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Print / View Dialog ── */}
-      <Dialog open={!!printRepair} onOpenChange={(open) => !open && setPrintRepair(null)}>
-        <DialogContent className='max-w-xl'>
-          <DialogHeader>
-            <DialogTitle>Repair Job Card</DialogTitle>
-          </DialogHeader>
-          {printRepair && (
-            <div className='space-y-2 rounded-md border p-4 text-sm'>
-              <div className='flex justify-between'><span className='font-semibold'>Customer</span><span>{printRepair.customerName}</span></div>
-              <div className='flex justify-between'><span className='font-semibold'>Phone</span><span>{printRepair.phone || '-'}</span></div>
-              <div className='flex justify-between'><span className='font-semibold'>Device</span><span>{printRepair.deviceModel}</span></div>
-              {printRepair.color && <div className='flex justify-between'><span className='font-semibold'>Color</span><span>{printRepair.color}</span></div>}
-              {printRepair.serialNumber && <div className='flex justify-between'><span className='font-semibold'>IMEI / Serial</span><span>{printRepair.serialNumber}</span></div>}
-              {printRepair.technician && <div className='flex justify-between'><span className='font-semibold'>Technician</span><span>{printRepair.technician}</span></div>}
-              <div className='flex justify-between'><span className='font-semibold'>Issue</span><span className='max-w-[60%] text-right'>{printRepair.issue}</span></div>
-              <hr />
-              <div className='flex justify-between'><span className='font-semibold'>Total Charges</span><span>{fmtAmt(printRepair.charges)}</span></div>
-              <div className='flex justify-between'><span className='font-semibold'>Advance Paid</span><span className='text-green-600'>{fmtAmt(printRepair.advanceAmount)}</span></div>
-              <div className='flex justify-between font-bold'><span>Balance Due</span><span className={(printRepair.charges ?? 0) - (printRepair.advanceAmount ?? 0) > 0 ? 'text-red-600' : 'text-green-600'}>{(printRepair.charges ?? 0) - (printRepair.advanceAmount ?? 0) > 0 ? fmtAmt((printRepair.charges ?? 0) - (printRepair.advanceAmount ?? 0)) : 'Paid ✓'}</span></div>
-            </div>
+      <div className='mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6'>
+        <div
+          className={cn(
+            'h-full rounded-xl transition-shadow',
+            section === 'jobs' && queueTab === 'open' && 'ring-primary ring-2'
           )}
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setPrintRepair(null)}>Close</Button>
-            <Button onClick={handlePrint}>
-              <Printer className='mr-2 h-4 w-4' /> Print
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        >
+          <StatCard
+            inlineHeaderOnMobile
+            onClick={() => filterQueue('open')}
+            title='Open jobs'
+            value={stats?.open ?? 0}
+            icon={<Wrench className='h-5 w-5' />}
+            tone='sky'
+            isLoading={statsLoading}
+            description={`${stats?.receivedToday ?? 0} received today`}
+          />
+        </div>
+        <div
+          className={cn(
+            'h-full rounded-xl transition-shadow',
+            section === 'jobs' &&
+              queueTab === 'completed' &&
+              'ring-primary ring-2'
+          )}
+        >
+          <StatCard
+            inlineHeaderOnMobile
+            onClick={() => filterQueue('completed')}
+            title='Ready for pickup'
+            value={stats?.readyForPickup ?? 0}
+            icon={<CircleCheckBig className='h-5 w-5' />}
+            tone='emerald'
+            isLoading={statsLoading}
+            description='Waiting for the customer'
+          />
+        </div>
+        <div
+          className={cn(
+            'h-full rounded-xl transition-shadow',
+            section === 'jobs' &&
+              queueTab === 'overdue' &&
+              'ring-primary ring-2'
+          )}
+        >
+          <StatCard
+            inlineHeaderOnMobile
+            onClick={() => filterQueue('overdue')}
+            title='Overdue'
+            value={stats?.overdue ?? 0}
+            icon={<AlertTriangle className='h-5 w-5' />}
+            tone='rose'
+            isLoading={statsLoading}
+            description='Past the promised date'
+          />
+        </div>
+        <div
+          className={cn(
+            'h-full rounded-xl transition-shadow',
+            section === 'jobs' &&
+              queueTab === 'waiting' &&
+              'ring-primary ring-2'
+          )}
+        >
+          <StatCard
+            inlineHeaderOnMobile
+            onClick={() => filterQueue('waiting')}
+            title='Waiting'
+            value={
+              (stats?.counts?.waiting_approval ?? 0) +
+              (stats?.counts?.waiting_parts ?? 0)
+            }
+            icon={<Timer className='h-5 w-5' />}
+            tone='amber'
+            isLoading={statsLoading}
+            description={`${stats?.counts?.waiting_approval ?? 0} approval · ${stats?.counts?.waiting_parts ?? 0} parts`}
+          />
+        </div>
+        <div
+          className={cn(
+            'h-full rounded-xl transition-shadow',
+            section === 'jobs' && queueTab === 'unpaid' && 'ring-primary ring-2'
+          )}
+        >
+          <StatCard
+            inlineHeaderOnMobile
+            onClick={() => filterQueue('unpaid')}
+            title='Outstanding'
+            value={fmt(stats?.outstanding)}
+            icon={<Wallet className='h-5 w-5' />}
+            tone='orange'
+            isLoading={statsLoading}
+            description='Unpaid on finished jobs'
+          />
+        </div>
+        <div
+          className={cn(
+            'h-full rounded-xl transition-shadow',
+            section === 'jobs' &&
+              queueTab === 'delivered' &&
+              'ring-primary ring-2'
+          )}
+        >
+          <StatCard
+            inlineHeaderOnMobile
+            onClick={() => filterQueue('delivered')}
+            title='Delivered this month'
+            value={stats?.deliveredThisMonth ?? 0}
+            icon={<ClipboardList className='h-5 w-5' />}
+            tone='violet'
+            isLoading={statsLoading}
+            description={
+              stats
+                ? `${fmt(stats.revenueThisMonth)} billed${stats.avgTurnaroundHours != null ? ` · ~${stats.avgTurnaroundHours < 48 ? `${stats.avgTurnaroundHours}h` : `${Math.round(stats.avgTurnaroundHours / 24)}d`} turnaround` : ''}`
+                : undefined
+            }
+          />
+        </div>
+      </div>
 
-      {/* ── Deliver & Collect Payment Dialog ── */}
-      <Dialog
-        open={deliverDialog.open}
-        onOpenChange={(open) =>
-          !open && setDeliverDialog({ open: false, repair: null, receivedNow: '0', paymentMethod: 'cash', walletType: '' })
-        }
+      {/* Jobs and the repair stock (purchases + ledger) live on separate tabs. */}
+      <div
+        role='tablist'
+        aria-label='Repair sections'
+        className='bg-muted mb-4 inline-flex rounded-lg p-1'
       >
-        <DialogContent className='max-w-md'>
-          <DialogHeader>
-            <DialogTitle>Deliver Device — Collect Remaining Payment</DialogTitle>
-          </DialogHeader>
-          {deliverDialog.repair && (() => {
-            const balance = (deliverDialog.repair.charges ?? 0) - (deliverDialog.repair.advanceAmount ?? 0)
-            const stillOwed = balance - Number(deliverDialog.receivedNow)
-            return (
-              <div className='space-y-4'>
-                <div className='rounded-md bg-muted p-3 text-sm'>
-                  <div className='font-medium'>{deliverDialog.repair.deviceModel}</div>
-                  <div className='text-muted-foreground'>{deliverDialog.repair.customerName}</div>
-                </div>
-
-                <div className='rounded-md border p-3 text-sm space-y-1'>
-                  <div className='flex justify-between'>
-                    <span>Total Charges</span>
-                    <span>{fmtAmt(deliverDialog.repair.charges)}</span>
-                  </div>
-                  <div className='flex justify-between text-green-600'>
-                    <span>Advance Already Paid</span>
-                    <span>- {fmtAmt(deliverDialog.repair.advanceAmount)}</span>
-                  </div>
-                  <div className='flex justify-between font-bold border-t pt-1'>
-                    <span>Remaining Balance</span>
-                    <span className={balance > 0 ? 'text-destructive' : 'text-green-600'}>
-                      {balance > 0 ? fmtAmt(balance) : 'Fully Paid ✓'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className='grid gap-4 sm:grid-cols-2'>
-                  <div className='space-y-1'>
-                    <Label>Amount Received Now (Rs)</Label>
-                    <Input
-                      type='number'
-                      min='0'
-                      step='1'
-                      value={deliverDialog.receivedNow}
-                      onChange={(e) => setDeliverDialog((prev) => ({ ...prev, receivedNow: e.target.value }))}
-                    />
-                  </div>
-                  <div className='space-y-1'>
-                    <Label>Payment Method</Label>
-                    <Select
-                      value={deliverDialog.paymentMethod === 'wallet' && deliverDialog.walletType ? toWalletOptionValue(deliverDialog.walletType) : deliverDialog.paymentMethod}
-                      onValueChange={(v) => {
-                        if (isWalletOptionValue(v)) {
-                          setDeliverDialog((prev) => ({ ...prev, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(v) }))
-                        } else {
-                          setDeliverDialog((prev) => ({ ...prev, paymentMethod: v, walletType: '' }))
-                        }
-                      }}
-                    >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {repairPaymentMethodOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {stillOwed > 0 && (
-                  <div className='rounded-md bg-yellow-50 border border-yellow-200 p-3 text-sm flex justify-between'>
-                    <span className='text-yellow-800'>Still outstanding after delivery:</span>
-                    <strong className='text-destructive'>{fmtAmt(stillOwed)}</strong>
-                  </div>
+        {(
+          [
+            [
+              'jobs',
+              'Repair jobs',
+              Wrench,
+              stats ? `${stats.open} open` : null,
+            ],
+            [
+              'stock',
+              'Repair stock & purchases',
+              ShoppingCart,
+              stockSummary ? `${fmt(stockSummary.balance)} left` : null,
+            ],
+          ] as const
+        ).map(([value, label, Icon, badge]) => (
+          <button
+            key={value}
+            type='button'
+            role='tab'
+            aria-selected={section === value}
+            onClick={() => setSection(value)}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors sm:px-4',
+              section === value
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Icon className='h-4 w-4' aria-hidden />
+            <span>{label}</span>
+            {badge && (
+              <span
+                className={cn(
+                  'hidden rounded-full px-2 py-0.5 text-xs sm:inline',
+                  section === value
+                    ? 'bg-primary/10 text-primary'
+                    : 'bg-background/60'
                 )}
-                {stillOwed <= 0 && Number(deliverDialog.receivedNow) > 0 && (
-                  <div className='rounded-md bg-green-50 border border-green-200 p-3 text-sm text-center text-green-700 font-medium'>
-                    ✓ Fully settled
-                  </div>
-                )}
-              </div>
-            )
-          })()}
-          <DialogFooter>
-            <Button
-              variant='outline'
-              onClick={() => setDeliverDialog({ open: false, repair: null, receivedNow: '0', paymentMethod: 'cash', walletType: '' })}
-            >
-              Cancel
-            </Button>
-            <Button disabled={isUpdating} onClick={handleDeliverSubmit}>
-              {isUpdating ? 'Saving...' : 'Mark Delivered & Print'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              >
+                {badge}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
-      {/* ── Complete / Update Charges Dialog ── */}
-      <Dialog
-        open={completeDialog.open}
-        onOpenChange={(open) =>
-          !open && setCompleteDialog({ open: false, repair: null, charges: '0', advanceAmount: '0', cost: '0', paymentMethod: 'cash', walletType: '' })
-        }
-      >
-        <DialogContent className='max-w-md'>
-          <DialogHeader>
-            <DialogTitle>Complete Repair — Set Final Charges</DialogTitle>
-          </DialogHeader>
-          {completeDialog.repair && (() => {
-            const charges = Number(completeDialog.charges)
-            const advance = Number(completeDialog.advanceAmount)
-            const cost = Number(completeDialog.cost)
-            const balance = charges - advance
-            const profit = charges - cost
-            return (
-              <div className='space-y-4'>
-                <div className='rounded-md bg-muted p-3 text-sm'>
-                  <div className='font-medium'>{completeDialog.repair.deviceModel}</div>
-                  <div className='text-muted-foreground'>{completeDialog.repair.customerName}</div>
-                </div>
+      {section === 'jobs' ? (
+        <div className='grid grid-cols-1 gap-6 xl:grid-cols-[440px_minmax(0,1fr)]'>
+          {canManage ? (
+            <div ref={intakeRef} className='scroll-mt-4'>
+              <IntakeForm onCreated={(job, print) => onCreated(job, print)} />
+            </div>
+          ) : null}
+          <div ref={queueRef} className='min-w-0 scroll-mt-4'>
+            <RepairQueue
+              tab={queueTab}
+              onTabChange={setQueueTab}
+              stats={stats}
+              canManage={canManage}
+              onOpenJob={(id, action) => setOpenJobId(id, action)}
+              onNewJob={canManage ? focusIntake : undefined}
+            />
+          </div>
+        </div>
+      ) : (
+        // Repair stock bought as a lump — jobs draw from it with their Repair cost.
+        <div className='grid grid-cols-1 gap-6 xl:grid-cols-[440px_minmax(0,1fr)]'>
+          {canManage ? <PurchaseRepairPartsCard /> : null}
+          <div className='min-w-0 space-y-6'>
+            <RepairStockLedgerCard
+              canManage={canManage}
+              onOpenJob={(id) => setOpenJobId(id)}
+            />
+            <PartsUsageCard onOpenJob={(id) => setOpenJobId(id)} />
+          </div>
+        </div>
+      )}
 
-                <div className='grid gap-4 sm:grid-cols-2'>
-                  <div className='space-y-1'>
-                    <Label>Total Charges (Rs)</Label>
-                    <Input
-                      type='number'
-                      min='0'
-                      step='1'
-                      value={completeDialog.charges}
-                      onChange={(e) => setCompleteDialog((prev) => ({ ...prev, charges: e.target.value }))}
-                    />
-                  </div>
-                  <div className='space-y-1'>
-                    <Label>Advance Received (Rs)</Label>
-                    <Input
-                      type='number'
-                      min='0'
-                      step='1'
-                      value={completeDialog.advanceAmount}
-                      onChange={(e) => setCompleteDialog((prev) => ({ ...prev, advanceAmount: e.target.value }))}
-                    />
-                  </div>
-                </div>
-
-                <div className='space-y-1'>
-                  <Label>Parts / Repair Cost (Rs) <span className='text-muted-foreground font-normal'>— deducted from stock balance</span></Label>
-                  <Input
-                    type='number'
-                    min='0'
-                    step='1'
-                    value={completeDialog.cost}
-                    onChange={(e) => setCompleteDialog((prev) => ({ ...prev, cost: e.target.value }))}
-                  />
-                  {Number(completeDialog.cost) > 0 && stockSummary && (
-                    <p className='text-xs text-muted-foreground'>
-                      Stock balance after: <strong className={(stockSummary.balance - Number(completeDialog.cost)) >= 0 ? 'text-green-700' : 'text-destructive'}>
-                        {fmtAmt(stockSummary.balance - Number(completeDialog.cost))}
-                      </strong>
-                    </p>
-                  )}
-                </div>
-
-                <div className='space-y-1'>
-                  <Label>Payment Method</Label>
-                  <Select
-                    value={completeDialog.paymentMethod === 'wallet' && completeDialog.walletType ? toWalletOptionValue(completeDialog.walletType) : completeDialog.paymentMethod}
-                    onValueChange={(v) => {
-                      if (isWalletOptionValue(v)) {
-                        setCompleteDialog((prev) => ({ ...prev, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(v) }))
-                      } else {
-                        setCompleteDialog((prev) => ({ ...prev, paymentMethod: v, walletType: '' }))
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {repairPaymentMethodOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className='rounded-md border p-3 text-sm space-y-1'>
-                  <div className='flex justify-between'>
-                    <span>Total Charges</span>
-                    <span>{fmtAmt(charges)}</span>
-                  </div>
-                  <div className='flex justify-between text-green-600'>
-                    <span>Advance Received</span>
-                    <span>- {fmtAmt(advance)}</span>
-                  </div>
-                  <div className='flex justify-between font-bold border-t pt-1'>
-                    <span>Balance Due</span>
-                    <span className={balance > 0 ? 'text-destructive' : 'text-green-600'}>
-                      {fmtAmt(balance)}
-                    </span>
-                  </div>
-                  <div className='flex justify-between border-t pt-1'>
-                    <span>Parts / Cost</span>
-                    <span className='text-muted-foreground'>- {fmtAmt(cost)}</span>
-                  </div>
-                  <div className={`flex justify-between font-bold text-base pt-1 border-t ${profit >= 0 ? 'text-green-600' : 'text-destructive'}`}>
-                    <span>Net Profit</span>
-                    <span>{profit >= 0 ? '+' : ''}{fmtAmt(profit)}</span>
-                  </div>
-                </div>
-              </div>
-            )
-          })()}
-          <DialogFooter>
-            <Button
-              variant='outline'
-              onClick={() =>
-                setCompleteDialog({ open: false, repair: null, charges: '0', advanceAmount: '0', cost: '0', paymentMethod: 'cash', walletType: '' })
-              }
-            >
-              Cancel
-            </Button>
-            <Button disabled={isUpdating} onClick={handleCompleteSubmit}>
-              {isUpdating ? 'Saving...' : 'Mark Completed'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Delete Confirm Dialog ── */}
-      <Dialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
-        <DialogContent className='max-w-sm'>
-          <DialogHeader>
-            <DialogTitle>Delete Repair Job?</DialogTitle>
-          </DialogHeader>
-          <p className='text-sm text-muted-foreground'>
-            This will permanently delete the job for{' '}
-            <strong>{deleteConfirm?.customerName}</strong> — {deleteConfirm?.deviceModel}. This action cannot be undone.
-          </p>
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-            <Button variant='destructive' onClick={handleDelete}>Delete</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <JobSheet
+        jobId={openJobId}
+        canManage={canManage}
+        autoComplete={autoComplete}
+        onOpenChange={(o) => !o && setOpenJobId(null)}
+      />
     </MobilePageShell>
   )
 }

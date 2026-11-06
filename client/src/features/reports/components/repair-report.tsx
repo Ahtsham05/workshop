@@ -20,16 +20,24 @@ interface RepairReportProps {
 
 const STATUS_COLORS: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   pending: 'secondary',
+  diagnosing: 'outline',
+  waiting_approval: 'outline',
+  waiting_parts: 'outline',
   in_progress: 'outline',
   completed: 'default',
   delivered: 'default',
+  cancelled: 'destructive',
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  pending: 'Pending',
-  in_progress: 'In Progress',
-  completed: 'Completed',
+  pending: 'Received',
+  diagnosing: 'Diagnosing',
+  waiting_approval: 'Waiting for approval',
+  waiting_parts: 'Waiting for parts',
+  in_progress: 'In repair',
+  completed: 'Ready for pickup',
   delivered: 'Delivered',
+  cancelled: 'Cancelled',
 }
 
 export const RepairReport = forwardRef<{ exportToExcel: () => void }, RepairReportProps>(

@@ -7,7 +7,7 @@ const { matchesEitherImei, collectImeiNumbers } = require('./imei.service');
 const { tokenSearchClauses, addTokenSearch } = require('../utils/searchQuery');
 
 const { DECREASE_ONLY_TYPES, INCREASE_ONLY_TYPES, TYPES } = StockAdjustment;
-const { WARRANTY_TYPES } = require('../models/stockAdjustment.model');
+const { WARRANTY_TYPES, REPAIR_TYPES } = require('../models/stockAdjustment.model');
 
 // Only damage/theft get their own ledger type (they're the two reasons worth reporting
 // on separately); every other reason rolls up under the existing generic 'adjustment' type.
@@ -32,6 +32,8 @@ const IMEI_STATUS_BY_ADJUSTMENT_TYPE = {
   warranty_out: 'in_warranty',
   // Handed to a customer as a warranty replacement (the claim sets the customer on it).
   warranty_replacement: 'sold',
+  // Fitted into a customer's device by a repair job.
+  repair_part: 'sold',
 };
 
 // The status a unit must be in to be adjusted, by type — only 'warranty_in' takes units
@@ -234,10 +236,14 @@ const createAdjustment = async ({
   notes,
   stockCountId,
   warrantyClaimId,
+  repairJobId,
   createdBy,
 }) => {
   if (WARRANTY_TYPES.includes(type) && !warrantyClaimId) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Warranty stock moves are made from a warranty claim');
+  }
+  if (REPAIR_TYPES.includes(type) && !repairJobId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Repair part moves are made from a repair job');
   }
   if (type === 'other' && !reason?.trim()) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'A reason is required for "Other" adjustments');
@@ -296,6 +302,7 @@ const createAdjustment = async ({
     notes: notes?.trim() || undefined,
     stockCountId,
     warrantyClaimId,
+    repairJobId,
     createdBy,
   });
 
@@ -333,12 +340,15 @@ const resolveSerializedReversalTarget = async ({ organizationId, productId, vari
 };
 
 /** Reverses a completed adjustment by creating an opposite-direction entry and applying it — the original is marked 'reversed' but never mutated or deleted. */
-const reverseAdjustment = async ({ adjustmentId, organizationId, reversedBy, fromWarrantyClaim = false }) => {
+const reverseAdjustment = async ({ adjustmentId, organizationId, reversedBy, fromWarrantyClaim = false, fromRepairJob = false }) => {
   const original = await StockAdjustment.findOne({ _id: adjustmentId, organizationId });
   if (!original) throw new ApiError(httpStatus.NOT_FOUND, 'Adjustment not found');
   // The claim owns these — undoing one here would leave the claim saying otherwise.
   if (WARRANTY_TYPES.includes(original.type) && !fromWarrantyClaim) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'This stock move belongs to a warranty claim — cancel it from the claim instead');
+  }
+  if (REPAIR_TYPES.includes(original.type) && !fromRepairJob) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'This part was used in a repair job — remove it from the job instead');
   }
   if (original.direction === 'increase' && original.imeis && original.imeis.length > 0) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'A serialized unit brought back into stock cannot be reversed here');
@@ -402,6 +412,7 @@ const reverseAdjustment = async ({ adjustmentId, organizationId, reversedBy, fro
     notes: original.reason ? `Original reason: ${original.reason}` : undefined,
     reversalOf: original._id,
     warrantyClaimId: original.warrantyClaimId,
+    repairJobId: original.repairJobId,
     createdBy: reversedBy,
   });
 
