@@ -197,14 +197,14 @@ export default function ManufacturingDashboard() {
   return (
     <div className='space-y-6'>
       {/* The plant's everyday shortcuts — each user picks and orders their own. */}
-      {/* Products behind their production target — nothing shows while all are on track. */}
-      <TargetAlertsPanel limit={3} />
-
       <QuickLinksPanel
         board='manufacturing'
         title='Quick links'
         description='One tap to the manufacturing work you do most'
       />
+
+      {/* Products behind their production target — nothing shows while all are on track. */}
+      <TargetAlertsPanel limit={3} />
 
       {SHOW_ANALYTICS && (
         <>
