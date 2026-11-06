@@ -47,6 +47,8 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
       floorIssue: { type: String, trim: true, default: 'PSI' },
       floorReturn: { type: String, trim: true, default: 'PSR' },
       floorCount: { type: String, trim: true, default: 'PSC' },
+      // Production targets.
+      target: { type: String, trim: true, default: 'TGT' },
     },
     numberPadding: { type: Number, min: 3, max: 10, default: 5 },
     // How a new production order's finished-goods batch number is made: its own dated
@@ -95,6 +97,7 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
           floorIssue: { type: Number, default: 0 },
           floorReturn: { type: Number, default: 0 },
           floorCount: { type: Number, default: 0 },
+          target: { type: Number, default: 0 },
         },
         { _id: false }
       ),

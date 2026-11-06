@@ -393,6 +393,8 @@ const PERMISSION_GROUPS = [
       'viewManufacturing',
       'manageBoms',
       'manageProductionOrders',
+      // Production targets: set, edit and delete (viewing needs only viewManufacturing).
+      'manageProductionTargets',
       // One key per shop-floor task — split out of executeProduction (backfilled from it).
       'issueMaterials',
       'editMaterialIssues',

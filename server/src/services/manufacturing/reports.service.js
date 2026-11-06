@@ -1723,6 +1723,9 @@ const REPORTS = {
   'stock-sheet': (ctx, q) =>
     stockSheetReport(ctx, q, { resolveRange, MOVEMENT_SOURCES, transferLegs, currentStock, stockUnitCosts }),
   // The same register without the material-by-material columns (total issue only).
+  // Required lazily: targets.service reads currentStock / resolveRange from this file.
+  // eslint-disable-next-line global-require
+  targets: (ctx, q) => require('./targets.service').targetReport(ctx, q),
   'product-summary': async (ctx, q) => ({
     ...(await productProductionReport(ctx, q, { resolveRange })),
     report: 'product-summary',
@@ -1737,4 +1740,4 @@ const getReport = (ctx, report, query = {}) => {
   return fn(ctx, query);
 };
 
-module.exports = { getReport, REPORT_KEYS, MOVEMENT_KEYS, resolveRange };
+module.exports = { getReport, REPORT_KEYS, MOVEMENT_KEYS, resolveRange, currentStock };

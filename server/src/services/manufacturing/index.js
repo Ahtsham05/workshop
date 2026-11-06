@@ -23,6 +23,7 @@ const productionOrderBatch = require('./productionOrderBatch.service');
 const reports = require('./reports.service');
 const packing = require('./packing.service');
 const floorStock = require('./floorStock.service');
+const targets = require('./targets.service');
 
 module.exports = {
   settings,
@@ -46,4 +47,5 @@ module.exports = {
   reports,
   packing,
   floorStock,
+  targets,
 };

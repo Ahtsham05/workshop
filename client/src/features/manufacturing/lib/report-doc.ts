@@ -3,6 +3,10 @@ import {
   PRODUCT_TYPE_META,
   SCRAP_REASON_LABELS,
   SCRAP_STAGE_LABELS,
+  TARGET_MEASURE_LABELS,
+  TARGET_PERIOD_LABELS,
+  TARGET_STATUS_META,
+  fmtDay,
   fmtQty,
   statusLabel,
 } from './constants'
@@ -28,6 +32,7 @@ import type {
   ScrapReport,
   StockRegisterReport,
   StockStatementReport,
+  TargetReport,
 } from './report-types'
 import { stockSheetDoc } from './stock-sheet-doc'
 
@@ -2138,6 +2143,150 @@ function registerSections(
   ]
 }
 
+/* ── Target vs actual ────────────────────────────────────────────────────────── */
+
+function targetsDoc(data: TargetReport, ctx: DocContext): ReportDoc {
+  const { t } = ctx
+  const statusCell = (status: keyof typeof TARGET_STATUS_META, sub?: string): DocCell => ({
+    text: t(TARGET_STATUS_META[status].label),
+    tone: TARGET_STATUS_META[status].tone,
+    strong: status === 'missed' || status === 'at_risk',
+    sub,
+  })
+  const cols: DocColumn[] = [
+    { key: 'product', label: t('Product'), width: '20%' },
+    { key: 'unit', label: t('Unit'), width: '5%' },
+    { key: 'target', label: t('Target'), align: 'right' },
+    { key: 'made', label: t('Made in period'), align: 'right' },
+    { key: 'pct', label: t('Done'), align: 'right', width: '6%' },
+    { key: 'remaining', label: t('Remaining'), align: 'right' },
+    { key: 'stock', label: t('In stock'), align: 'right' },
+    { key: 'inOrders', label: t('In orders'), align: 'right' },
+    { key: 'toPlan', label: t('To plan'), align: 'right' },
+    { key: 'perDay', label: t('Need / day'), align: 'right' },
+    { key: 'status', label: t('Status'), width: '9%' },
+  ]
+  const rows: DocRow[] = data.targets.flatMap((target) => {
+    const timing =
+      target.phase === 'upcoming'
+        ? t('not started')
+        : target.phase === 'running'
+          ? `${target.daysLeft} ${t(target.daysLeft === 1 ? 'day left' : 'days left')}`
+          : t('ended')
+    const head: DocRow = {
+      kind: 'group',
+      label: `${target.targetNumber} — ${target.title}`,
+      labelSub: [
+        `${fmtDay(target.startDay)} – ${fmtDay(target.endDay)}`,
+        t(TARGET_PERIOD_LABELS[target.periodType]),
+        t(TARGET_MEASURE_LABELS[target.measure].label),
+        timing,
+        `${t(TARGET_STATUS_META[target.status].label)} · ${target.progress}%`,
+      ].join(' · '),
+      labelSpan: cols.length,
+      cells: {},
+    }
+    const lines: DocRow[] = target.lines.map((l, i) => ({
+      groupStart: i === 0,
+      cells: {
+        product: { text: l.productName, sub: [l.sku, l.notes].filter(Boolean).join(' · ') || undefined },
+        unit: l.unit,
+        target: qty(l.target, { blank: false, strong: true }),
+        made: qty(l.made, { blank: false }),
+        pct: { ...pct(l.percent), tone: TARGET_STATUS_META[l.status].tone === 'danger' ? 'danger' : undefined },
+        remaining: { ...qty(l.remaining, { blank: false, strong: true }), tone: l.status === 'missed' ? 'danger' : undefined },
+        stock: qty(l.stock, { blank: false }),
+        inOrders: { ...qty(l.inOrders), sub: l.openOrders ? `${l.openOrders} ${t(l.openOrders === 1 ? 'order' : 'orders')}` : undefined },
+        toPlan: { ...qty(l.toPlan), tone: l.toPlan > 0 && l.status !== 'achieved' ? 'danger' : undefined },
+        perDay: l.requiredPerDay === null ? '' : qty(l.requiredPerDay),
+        status: statusCell(
+          l.status,
+          l.status === 'at_risk' && l.paceGap !== null
+            ? `${fmtQty(Math.abs(l.paceGap))} ${t('behind pace')}`
+            : l.status === 'missed'
+              ? `${t('short')} ${fmtQty(l.shortfall)}`
+              : undefined
+        ),
+      },
+    }))
+    return [head, ...lines]
+  })
+
+  const productCols: DocColumn[] = [
+    { key: 'product', label: t('Finished good'), width: '24%' },
+    { key: 'unit', label: t('Unit'), width: '5%' },
+    { key: 'targets', label: t('Targets'), align: 'right', width: '6%' },
+    { key: 'target', label: t('Target'), align: 'right' },
+    { key: 'made', label: t('Made'), align: 'right' },
+    { key: 'pct', label: t('Done'), align: 'right', width: '6%' },
+    { key: 'remaining', label: t('Remaining target'), align: 'right' },
+    { key: 'stock', label: t('In stock now'), align: 'right' },
+    { key: 'inOrders', label: t('In orders'), align: 'right' },
+    { key: 'toPlan', label: t('To plan'), align: 'right' },
+  ]
+  const productRows: DocRow[] = data.byProduct.map((p) => ({
+    cells: {
+      product: { text: p.productName, sub: p.sku || undefined, strong: true },
+      unit: p.unit,
+      targets: { text: String(p.targets), value: p.targets },
+      target: qty(p.target, { blank: false }),
+      made: qty(p.made, { blank: false, strong: true }),
+      pct: pct(p.percent),
+      remaining: qty(p.remaining, { blank: false, strong: true }),
+      stock: qty(p.stock, { blank: false }),
+      inOrders: qty(p.inOrders),
+      toPlan: { ...qty(p.toPlan), tone: p.toPlan > 0 ? 'danger' : undefined },
+    },
+  }))
+
+  const totals = data.totals
+  return {
+    key: 'targets',
+    title: t('Production Target vs Actual'),
+    periodStart: data.period.startDate,
+    periodEnd: data.period.endDate,
+    orientation: 'landscape',
+    summary: [
+      {
+        label: t('Targets'),
+        value: String(totals.targets),
+        hint: `${totals.lines} ${t('product lines')}`,
+      },
+      {
+        label: t('Products achieved'),
+        value: String(totals.linesAchieved),
+        hint: `${t('of')} ${totals.lines} ${t('product lines')}`,
+      },
+      {
+        label: t('Behind target'),
+        value: String(totals.linesAtRisk + totals.linesMissed),
+        hint: `${totals.linesAtRisk} ${t('at risk')} · ${totals.linesMissed} ${t('missed')}`,
+      },
+      { label: t('Average progress'), value: `${totals.progress}%`, emphasis: true },
+    ],
+    sections: [
+      {
+        id: 'targets',
+        title: t('Target-wise progress'),
+        note: t(
+          'Each target is measured over its own whole period. Made = finished goods received + packs packed. Remaining − in orders = to plan (needs new production orders). Stock targets count stock on hand.'
+        ),
+        columns: cols,
+        rows,
+        empty: t('No production target falls in this period.'),
+      },
+      {
+        id: 'products',
+        title: t('Finished goods position'),
+        note: t('Target, made and remaining add up every target of the product above; stock and open orders are counted once.'),
+        columns: productCols,
+        rows: productRows,
+        empty: t('No products.'),
+      },
+    ],
+  }
+}
+
 export function buildReportDoc(data: ManufacturingReport, ctx: DocContext): ReportDoc {
   const doc = buildFullDoc(data, ctx)
   return ctx.hideMoney ? withoutMoney(doc, ctx) : doc
@@ -2202,6 +2351,8 @@ function buildFullDoc(data: ManufacturingReport, ctx: DocContext): ReportDoc {
     case 'product-production':
     case 'product-summary':
       return productRegisterDoc(data, ctx)
+    case 'targets':
+      return targetsDoc(data, ctx)
   }
 }
 

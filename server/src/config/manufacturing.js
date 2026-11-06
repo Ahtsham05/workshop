@@ -153,7 +153,14 @@ const COUNTER_KEYS = [
   'floorIssue',
   'floorReturn',
   'floorCount',
+  'target',
 ];
+
+/** Production targets (models/productionTarget.model.js): the period a target covers. */
+const TARGET_PERIOD_TYPES = ['day', 'week', 'month', 'quarter', 'year', 'custom'];
+
+/** What a target counts: goods made in the period, or stock on hand reached by its end. */
+const TARGET_MEASURES = ['production', 'stock'];
 
 /** Max depth when exploding a multi-level BOM — guards against pathological trees. */
 const MAX_BOM_DEPTH = 10;
@@ -177,6 +184,8 @@ module.exports = {
   OUTPUT_STATUSES,
   OUTPUT_REVERSAL_REASONS,
   COUNTER_KEYS,
+  TARGET_PERIOD_TYPES,
+  TARGET_MEASURES,
   MAX_BOM_DEPTH,
   OPERATION_STATUSES,
   ORDER_DOCUMENT_CATEGORIES,

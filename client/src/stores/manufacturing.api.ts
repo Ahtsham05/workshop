@@ -827,6 +827,16 @@ export interface MaterialIssue {
   isOverIssue?: boolean
   productionOrderId: string
   orderNumber: string
+  /** The finished good the order makes — what this material was issued for. */
+  finishedGood?: {
+    productId: string
+    productName: string
+    sku?: string
+    unit?: string
+    plannedQuantity?: number
+    batchNumber?: string
+    orderType?: 'production' | 'assembly' | string
+  } | null
   issueDate: string
   lines: {
     materialLineId: string
@@ -1747,6 +1757,7 @@ export interface ManufacturingSettings {
     floorIssue?: string
     floorReturn?: string
     floorCount?: string
+    target?: string
   }
   /** Production stock short at a receipt / packing: issue the rest from the store, or refuse. */
   floorShortfall?: 'auto_issue' | 'block'
@@ -1793,6 +1804,7 @@ const TAGS = [
   'MfgAccess',
   'MfgPacking',
   'MfgFloor',
+  'MfgTarget',
 ] as const
 
 /** Everything a stock movement can change. */
@@ -1810,6 +1822,94 @@ const EXECUTION_TAGS = [
   'MfgPacking',
   'MfgFloor',
 ] as const
+
+/* ── Production targets (server targets.service.js) ── */
+
+export type TargetPeriodType = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'custom'
+/** 'production' counts what was made in the period; 'stock' the stock on hand reached by its end. */
+export type TargetMeasure = 'production' | 'stock'
+export type TargetPhase = 'upcoming' | 'running' | 'ended'
+export type TargetStatus = 'upcoming' | 'achieved' | 'on_track' | 'at_risk' | 'missed'
+
+export interface TargetLine {
+  id: string
+  productId: string
+  productName: string
+  sku: string
+  unit: string
+  notes: string
+  target: number
+  /** Finished goods received + packs packed inside the period. */
+  made: number
+  /** Stock on hand now. */
+  stock: number
+  /** made (production measure) or stock (stock measure). */
+  achieved: number
+  remaining: number
+  percent: number
+  /** What should have been made by the end of yesterday (production measure only). */
+  expected: number | null
+  paceGap: number | null
+  avgPerDay: number | null
+  requiredPerDay: number | null
+  projected: number | null
+  openOrders: number
+  /** Still to come off open production orders. */
+  inOrders: number
+  /** Remaining after open orders — still needs production orders. */
+  toPlan: number
+  shortfall: number
+  status: TargetStatus
+  daily?: { day: string; made: number; cumulative: number; plan: number }[]
+}
+
+export interface ProductionTarget {
+  id: string
+  targetNumber: string
+  title: string
+  periodType: TargetPeriodType
+  startDay: string
+  endDay: string
+  measure: TargetMeasure
+  alertAtPercent: number
+  notes: string
+  branchId: string
+  createdByName: string
+  createdAt: string
+  updatedAt: string
+  phase: TargetPhase
+  totalDays: number
+  daysGone: number
+  daysSoFar: number
+  daysLeft: number
+  status: TargetStatus
+  progress: number
+  counts: { lines: number; achieved: number; onTrack: number; atRisk: number; missed: number }
+  lines: TargetLine[]
+}
+
+export type TargetStats = { total: number } & Record<TargetStatus, number>
+
+export interface TargetAlert extends TargetLine {
+  targetId: string
+  targetNumber: string
+  title: string
+  startDay: string
+  endDay: string
+  measure: TargetMeasure
+  daysLeft: number
+}
+
+export interface TargetInput {
+  title?: string
+  periodType: TargetPeriodType
+  startDay: string
+  endDay: string
+  measure: TargetMeasure
+  alertAtPercent?: number
+  notes?: string
+  lines: { id?: string; productId: string; targetQuantity: number; notes?: string }[]
+}
 
 /* ── Packing: bulk finished goods into pack sizes (server packing.service.js) ── */
 
@@ -3070,6 +3170,35 @@ export const manufacturingApi = createApi({
       invalidatesTags: [...EXECUTION_TAGS],
       onQueryStarted: invalidateStockCaches,
     }),
+    // Targets are measured from receipts, packing, stock and orders: any stock movement
+    // can change their progress, so they refresh with every execution tag.
+    getProductionTargets: builder.query<
+      Paginated<ProductionTarget> & { stats: TargetStats },
+      { phase?: 'all' | TargetPhase; status?: 'all' | TargetStatus; search?: string; page?: number; limit?: number }
+    >({
+      query: (params) => ({ url: '/manufacturing/targets', params }),
+      providesTags: ['MfgTarget', ...EXECUTION_TAGS],
+    }),
+    getProductionTarget: builder.query<ProductionTarget, string>({
+      query: (id) => `/manufacturing/targets/${id}`,
+      providesTags: ['MfgTarget', ...EXECUTION_TAGS],
+    }),
+    getTargetAlerts: builder.query<{ count: number; atRisk: number; missed: number; items: TargetAlert[] }, void>({
+      query: () => '/manufacturing/targets/alerts',
+      providesTags: ['MfgTarget', ...EXECUTION_TAGS],
+    }),
+    createProductionTarget: builder.mutation<ProductionTarget, TargetInput>({
+      query: (body) => ({ url: '/manufacturing/targets', method: 'POST', body }),
+      invalidatesTags: ['MfgTarget'],
+    }),
+    updateProductionTarget: builder.mutation<ProductionTarget, TargetInput & { id: string }>({
+      query: ({ id, ...body }) => ({ url: `/manufacturing/targets/${id}`, method: 'PATCH', body }),
+      invalidatesTags: ['MfgTarget'],
+    }),
+    deleteProductionTarget: builder.mutation<void, string>({
+      query: (id) => ({ url: `/manufacturing/targets/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['MfgTarget'],
+    }),
     getFloorOverview: builder.query<FloorOverview, FloorPeriod>({
       query: (params) => ({ url: '/manufacturing/floor-stock', params }),
       providesTags: ['MfgFloor'],
@@ -3321,7 +3450,7 @@ export const manufacturingApi = createApi({
           Object.entries(params).filter(([, v]) => v !== undefined && v !== '')
         ),
       }),
-      providesTags: [...EXECUTION_TAGS],
+      providesTags: [...EXECUTION_TAGS, 'MfgTarget'],
     }),
   }),
 })
@@ -3337,6 +3466,12 @@ export const refreshAfterDemoData =
   }
 
 export const {
+  useGetProductionTargetsQuery,
+  useGetProductionTargetQuery,
+  useGetTargetAlertsQuery,
+  useCreateProductionTargetMutation,
+  useUpdateProductionTargetMutation,
+  useDeleteProductionTargetMutation,
   useGetFloorOverviewQuery,
   useGetFloorMaterialQuery,
   useGetFloorPickListQuery,

@@ -5,6 +5,7 @@ const ApiError = require('../../utils/ApiError');
 const purchaseService = require('../purchase.service');
 const settingsService = require('./settings.service');
 const { roundQty, roundMoney, requireBranch, scopeFilter, escapeRegex, parseDateRange, RowErrors } = require('./common');
+const { unitFor } = require('../productUnitSync.service');
 
 /**
  * RMV — Raw Material Receipt Voucher (see models/rawMaterialReceipt.model.js).
@@ -163,7 +164,7 @@ const normalizeLines = async (ctx, rawLines, { strict }) => {
           : product.name,
       sku: (variant && !variant.isDefault && variant.sku) || product.sku || '',
       productType: product.productType || null,
-      unit: (variant && variant.unit) || product.unit,
+      unit: unitFor(product, variant),
       quantity: money.quantity,
       rate: money.rate,
       discountPercent: money.discountPercent,

@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { Product, ProductVariant, Bom, ProductionOrder, MaterialIssue, PackSize } = require('../../src/models');
 const productService = require('../../src/services/product.service');
 const { syncProductUnit } = require('../../src/services/productUnitSync.service');
+const stockService = require('../../src/services/manufacturing/stock.service');
 
 /**
  * Changing a product's unit relabels the copies of it on manufacturing records — a BOM line
@@ -163,5 +164,52 @@ describeTx('Changing a product’s unit', () => {
     });
     await productService.updateProductById(shirt._id, { unit: 'dozen' });
     expect((await Bom.findById(bom._id).lean()).components.map((c) => c.unit)).toEqual(['dozen', 'pcs']);
+  });
+
+  test('the stock ledger, sales and purchases follow — lines sold/bought in another unit do not', async () => {
+    const f = await fixture();
+    const { db } = mongoose.connection;
+    const scope = { organizationId: ORG, branchId: BRANCH };
+    // Raw inserts: only the unit copies matter here, not every required invoice field.
+    const tx = await db.collection('inventorytransactions').insertOne({ ...scope, productId: f.calcium._id, unit: 'pcs' });
+    const inv = await db.collection('invoices').insertOne({
+      ...scope,
+      items: [
+        { productId: f.calcium._id, quantity: 2, unit: 'pcs', conversionFactor: 1 },
+        { productId: f.calcium._id, quantity: 1, unit: 'box', conversionFactor: 12 },
+        { productId: f.cobalt._id, quantity: 1, unit: 'kg' },
+      ],
+    });
+    const pur = await db.collection('purchases').insertOne({
+      ...scope,
+      items: [{ product: f.calcium._id, quantity: 3, unit: 'pcs' }],
+    });
+    const po = await db.collection('purchaseorders').insertOne({
+      ...scope,
+      items: [{ product: f.calcium._id, quantity: 3, unit: 'pcs', conversionFactor: 1 }],
+      receipts: [{ items: [{ product: f.calcium._id, receivedQuantity: 3, unit: 'pcs', conversionFactor: 1 }] }, { items: [] }],
+    });
+
+    await productService.updateProductById(f.calcium._id, { unit: 'kg' });
+
+    const get = (name, _id) => db.collection(name).findOne({ _id });
+    expect((await get('inventorytransactions', tx.insertedId)).unit).toBe('kg');
+    expect((await get('invoices', inv.insertedId)).items.map((i) => [i.quantity, i.unit])).toEqual([
+      [2, 'kg'],
+      [1, 'box'],
+      [1, 'kg'],
+    ]);
+    expect((await get('purchases', pur.insertedId)).items[0].unit).toBe('kg');
+    const order = await get('purchaseorders', po.insertedId);
+    expect([order.items[0].unit, order.receipts[0].items[0].unit]).toEqual(['kg', 'kg']);
+  });
+
+  test('a voucher posted while the hidden default variant is stale still takes the product unit', async () => {
+    const f = await fixture();
+    // Data from before the sync existed: product is kg, its default variant still pcs.
+    await Product.updateOne({ _id: f.calcium._id }, { unit: 'kg' });
+    const item = await stockService.resolveItem({ organizationId: ORG, branchId: BRANCH, productId: f.calcium._id });
+    expect(item.variant.unit).toBe('pcs');
+    expect(item.unit).toBe('kg');
   });
 });

@@ -2142,6 +2142,39 @@ const buildListQuery = (ctx, filter, dateField) => {
 
 const withCreator = { populate: [{ path: 'createdBy', select: 'name email' }] };
 
+/**
+ * The finished good each voucher's material went into, read live from its production
+ * order (vouchers only store the order number) — so older vouchers show it too.
+ */
+const FINISHED_GOOD_FIELDS = 'productId productName sku unit plannedQuantity batchNumber orderType';
+
+const toFinishedGood = (order) =>
+  order
+    ? {
+        productId: order.productId,
+        productName: order.productName || '',
+        sku: order.sku || '',
+        unit: order.unit,
+        plannedQuantity: order.plannedQuantity,
+        batchNumber: order.batchNumber || '',
+        orderType: order.orderType || 'production',
+      }
+    : null;
+
+const withFinishedGoods = async (ctx, issues) => {
+  const orderIds = [...new Set(issues.map((i) => String(i.productionOrderId)).filter(Boolean))];
+  const orders = orderIds.length
+    ? await ProductionOrder.find({ _id: { $in: orderIds }, organizationId: ctx.organizationId })
+        .select(FINISHED_GOOD_FIELDS)
+        .lean()
+    : [];
+  const byId = new Map(orders.map((o) => [String(o._id), o]));
+  return issues.map((issue) => ({
+    ...(typeof issue.toJSON === 'function' ? issue.toJSON() : issue),
+    finishedGood: toFinishedGood(byId.get(String(issue.productionOrderId))),
+  }));
+};
+
 const queryIssues = async (ctx, filter, options) => {
   const query = buildListQuery(ctx, filter, 'issueDate');
   if (filter.kind) query.kind = filter.kind;
@@ -2150,9 +2183,20 @@ const queryIssues = async (ctx, filter, options) => {
   else if (filter.status === 'posted') query.status = { $ne: 'cancelled' };
   if (filter.search) {
     const re = new RegExp(escapeRegex(filter.search), 'i');
-    query.$or = [{ issueNumber: re }, { orderNumber: re }, { 'lines.productName': re }];
+    // Searching a finished good finds every voucher issued for its orders.
+    const fgOrderIds = await ProductionOrder.find({
+      ...scopeFilter(ctx),
+      $or: [{ productName: re }, { sku: re }],
+    }).distinct('_id');
+    query.$or = [
+      { issueNumber: re },
+      { orderNumber: re },
+      { 'lines.productName': re },
+      ...(fgOrderIds.length ? [{ productionOrderId: { $in: fgOrderIds } }] : []),
+    ];
   }
-  return MaterialIssue.paginate(query, { sortBy: 'createdAt:desc', ...options, ...withCreator });
+  const page = await MaterialIssue.paginate(query, { sortBy: 'createdAt:desc', ...options, ...withCreator });
+  return { ...page, results: await withFinishedGoods(ctx, page.results) };
 };
 
 const queryReceipts = async (ctx, filter, options) => {
@@ -2234,7 +2278,8 @@ const queryMovements = async (ctx, filter, options) => {
 const getIssue = async (ctx, issueId) => {
   const issue = await MaterialIssue.findOne({ _id: issueId, ...scopeFilter(ctx) });
   if (!issue) throw new ApiError(httpStatus.NOT_FOUND, 'Material issue not found');
-  return issue;
+  const [withFg] = await withFinishedGoods(ctx, [issue]);
+  return withFg;
 };
 
 /**

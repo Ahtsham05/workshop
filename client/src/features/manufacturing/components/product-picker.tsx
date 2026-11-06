@@ -255,6 +255,8 @@ export function ProductPicker({
     // Enter is handled here, not by cmdk, so it always does the one right thing.
     e.preventDefault()
     e.stopPropagation()
+    // A held key is one press: it must not pick, then run on into whatever comes next.
+    if (e.repeat) return
     if (!search.trim()) {
       const chosen = navigated.current
         ? options.find((p) => p.id === active)

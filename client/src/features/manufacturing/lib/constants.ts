@@ -8,6 +8,9 @@ import type {
   ScrapStage,
   StockBucket,
   OrderType,
+  TargetMeasure,
+  TargetPeriodType,
+  TargetStatus,
 } from '@/stores/manufacturing.api'
 import { formatAppDate } from '@/lib/date-format'
 import { formatQuantity } from '@/lib/units'
@@ -288,6 +291,64 @@ export const SCRAP_REASON_LABELS: Record<ScrapReason, string> = {
 }
 
 export const fmtQty = (value: number | null | undefined) => formatQuantity(value)
+
+/** A business calendar day ("YYYY-MM-DD", e.g. a target's period) in the app's date format. */
+export const fmtDay = (key?: string | null) => {
+  if (!key) return '—'
+  const [y, m, d] = key.split('-').map(Number)
+  return formatAppDate(new Date(y, m - 1, d))
+}
+
+/** Production targets — the status of a target or of one of its lines. */
+export const TARGET_STATUS_META: Record<
+  TargetStatus,
+  { label: string; className: string; tone?: 'danger' | 'success' | 'muted' }
+> = {
+  missed: {
+    label: 'Missed',
+    className: 'bg-rose-500/10 text-rose-700 border-rose-500/25 dark:text-rose-300',
+    tone: 'danger',
+  },
+  at_risk: {
+    label: 'At risk',
+    className: 'bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300',
+    tone: 'danger',
+  },
+  on_track: {
+    label: 'On track',
+    className: 'bg-sky-500/10 text-sky-700 border-sky-500/25 dark:text-sky-300',
+  },
+  achieved: {
+    label: 'Achieved',
+    className: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/25 dark:text-emerald-300',
+    tone: 'success',
+  },
+  upcoming: {
+    label: 'Upcoming',
+    className: 'bg-muted text-muted-foreground border-border',
+    tone: 'muted',
+  },
+}
+
+export const TARGET_PERIOD_LABELS: Record<TargetPeriodType, string> = {
+  day: 'Daily',
+  week: 'Weekly',
+  month: 'Monthly',
+  quarter: 'Quarterly',
+  year: 'Yearly',
+  custom: 'Custom dates',
+}
+
+export const TARGET_MEASURE_LABELS: Record<TargetMeasure, { label: string; hint: string }> = {
+  production: {
+    label: 'Quantity produced',
+    hint: 'Counts finished goods received (and packs packed) inside the period.',
+  },
+  stock: {
+    label: 'Stock on hand',
+    hint: 'Stock must reach the target by the end date — what is already in stock counts.',
+  },
+}
 
 export const fmtDate = (value?: string | null) =>
   value ? formatAppDate(new Date(value)) : '—'

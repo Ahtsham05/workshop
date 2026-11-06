@@ -1,4 +1,11 @@
-import type { ProductionStatus, OrderType, ScrapStage, ScrapReason } from '@/stores/manufacturing.api'
+import type {
+  ProductionStatus,
+  OrderType,
+  ScrapStage,
+  ScrapReason,
+  ProductionTarget,
+  TargetStatus,
+} from '@/stores/manufacturing.api'
 
 /** Responses of GET /manufacturing/reports/:report (server/src/services/manufacturing/reports.service.js). */
 
@@ -18,6 +25,7 @@ export type ReportKey =
   | 'product-production'
   | 'product-summary'
   | 'stock-sheet'
+  | 'targets'
 
 export interface ReportParams {
   report: ReportKey
@@ -44,6 +52,8 @@ export interface ReportParams {
   groupBy?: StockSheetGroupBy
   interval?: StockSheetInterval
   activeDays?: boolean
+  /** Target vs actual: only targets with this status. */
+  targetStatus?: 'all' | TargetStatus
 }
 
 interface Period {
@@ -906,7 +916,32 @@ export interface StockSheetReport {
   applied: { categories: string[]; subCategories: string[]; brands: string[]; types: string[]; search: string }
 }
 
+/** Target vs actual (server targets.service.js#targetReport). */
+export interface TargetReport {
+  report: 'targets'
+  period: Period
+  today: string
+  targets: ProductionTarget[]
+  byProduct: {
+    productId: string
+    productName: string
+    sku: string
+    unit: string
+    targets: number
+    target: number
+    made: number
+    remaining: number
+    stock: number
+    inOrders: number
+    openOrders: number
+    percent: number
+    toPlan: number
+  }[]
+  totals: { targets: number; lines: number; progress: number; linesAtRisk: number; linesMissed: number; linesAchieved: number } & Record<TargetStatus, number>
+}
+
 export type ManufacturingReport =
+  | TargetReport
   | StockSheetReport
   | ProductProductionReport
   | BatchStockReport

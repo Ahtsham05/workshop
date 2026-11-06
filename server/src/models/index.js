@@ -206,5 +206,6 @@ module.exports.ProductionOutput = require('./productionOutput.model');
 module.exports.ScrapRecord = require('./scrapRecord.model');
 module.exports.PackSize = require('./packSize.model');
 module.exports.PackingVoucher = require('./packingVoucher.model');
+module.exports.ProductionTarget = require('./productionTarget.model');
 module.exports.FloorStockLot = require('./floorStockLot.model');
 module.exports.FloorStockVoucher = require('./floorStockVoucher.model');

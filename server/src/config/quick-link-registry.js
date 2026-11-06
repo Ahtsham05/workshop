@@ -2088,6 +2088,16 @@ const QUICK_LINK_ACTIONS = [
     requiresManufacturing: true,
   },
   {
+    actionKey: 'mfg_targets',
+    label: 'Production Targets',
+    iconKey: 'Target',
+    route: '/manufacturing/targets',
+    category: 'Manufacturing',
+    color: 'bg-red-600 hover:bg-red-700',
+    permission: 'viewManufacturing',
+    requiresManufacturing: true,
+  },
+  {
     actionKey: 'mfg_reports',
     label: 'Production Reports',
     iconKey: 'BarChart3',
@@ -2153,6 +2163,7 @@ const MANUFACTURING_DEFAULT_ACTION_KEY_ORDER = [
   'mfg_production_stock',
   'mfg_packing',
   'mfg_requirements',
+  'mfg_targets',
   'mfg_reports',
 ];
 

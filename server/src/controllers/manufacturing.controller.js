@@ -31,6 +31,7 @@ const {
   reports: reportsService,
   packing: packingService,
   floorStock: floorStockService,
+  targets: targetsService,
 } = manufacturingService;
 
 /** Read context: org always, branch when the client picked one (superAdmins may read org-wide). */
@@ -1277,6 +1278,57 @@ const getReport = catchAsync(async (req, res) => {
   res.send(await reportsService.getReport(readCtx(req), req.params.report, req.query));
 });
 
+// ── Production targets ─────────────────────────────────────────────────────────────
+const listTargets = catchAsync(async (req, res) => {
+  res.send(await targetsService.listTargets(readCtx(req), req.query));
+});
+
+const getTargetAlerts = catchAsync(async (req, res) => {
+  res.send(await targetsService.getAlerts(readCtx(req)));
+});
+
+const getTarget = catchAsync(async (req, res) => {
+  res.send(await targetsService.getTarget(readCtx(req), req.params.targetId));
+});
+
+const targetSummary = (target) => target.lines.map((l) => `${l.productName}: ${l.target} ${l.unit}`).join(', ');
+
+const createTarget = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const target = await targetsService.createTarget({ ...ctx, createdByName: req.user && req.user.name }, req.body);
+  await audit(req, {
+    module: 'ProductionTarget',
+    entity: target,
+    entityName: `${target.targetNumber} (${target.title})`,
+    metadata: { period: `${target.startDay} – ${target.endDay}`, lines: targetSummary(target) },
+  });
+  res.status(httpStatus.CREATED).send(target);
+});
+
+const updateTarget = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const target = await targetsService.updateTarget(ctx, req.params.targetId, req.body);
+  await audit(req, {
+    action: 'update',
+    module: 'ProductionTarget',
+    entity: target,
+    entityName: `${target.targetNumber} (${target.title})`,
+    metadata: { period: `${target.startDay} – ${target.endDay}`, lines: targetSummary(target) },
+  });
+  res.send(target);
+});
+
+const deleteTarget = catchAsync(async (req, res) => {
+  const target = await targetsService.deleteTarget(readCtx(req), req.params.targetId);
+  await audit(req, {
+    action: 'delete',
+    module: 'ProductionTarget',
+    entity: target,
+    entityName: `${target.targetNumber} (${target.title})`,
+  });
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
 const getWip = catchAsync(async (req, res) => {
   res.send(await executionService.getWip(readCtx(req)));
 });
@@ -1304,6 +1356,12 @@ module.exports = {
   postPacking,
   cancelPacking,
   getReport,
+  listTargets,
+  getTargetAlerts,
+  getTarget,
+  createTarget,
+  updateTarget,
+  deleteTarget,
   searchBatches,
   getProductionOrderFilterOptions,
   exportProductionOrders,

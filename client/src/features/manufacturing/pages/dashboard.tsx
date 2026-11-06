@@ -26,6 +26,7 @@ import { DemoDataBanner } from '../components/demo-data'
 import { FilterChips } from '../components/list-controls'
 import { PageHeader, Panel, Stat, StatGrid } from '../components/page'
 import { ProductionAlerts } from '../components/production-alerts'
+import { TargetAlertsPanel } from '../components/target-parts'
 import { fmtDate, fmtQty, orderPath } from '../lib/constants'
 
 const RANGES: { value: AnalyticsRange; label: string }[] = [
@@ -196,6 +197,9 @@ export default function ManufacturingDashboard() {
   return (
     <div className='space-y-6'>
       {/* The plant's everyday shortcuts — each user picks and orders their own. */}
+      {/* Products behind their production target — nothing shows while all are on track. */}
+      <TargetAlertsPanel limit={3} />
+
       <QuickLinksPanel
         board='manufacturing'
         title='Quick links'

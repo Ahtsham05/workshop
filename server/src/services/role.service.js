@@ -263,7 +263,7 @@ const createDefaultRoles = async () => {
         viewPurchaseSuggestions: true,
         viewBarcodeGenerator: true,
         useNotes: true, useTeamChat: true, useVoiceAssistant: true, viewBranchPerformance: true,
-        viewManufacturing: true, manageBoms: true, manageProductionOrders: true, executeProduction: true,
+        viewManufacturing: true, manageBoms: true, manageProductionOrders: true, manageProductionTargets: true, executeProduction: true,
         overIssueMaterials: true, inspectProduction: true, viewManufacturingCosts: true,
         issueMaterials: true, editMaterialIssues: true, receiveFinishedGoods: true, recordScrap: true,
         viewDashboard: true,
@@ -380,6 +380,8 @@ const SPLIT_PERMISSIONS = [
   ['receiveFinishedGoods', ['executeProduction']],
   ['recordScrap', ['executeProduction']],
   ['editMaterialIssues', ['executeProduction', 'manageProductionOrders']],
+  // Targets were new in 2026-11; whoever plans orders sets them.
+  ['manageProductionTargets', ['manageProductionOrders']],
   // Reports that only had the general viewReports key until they got their own.
   ['viewActivityReports', ['viewReports']],
   ['viewSummaryReports', ['viewReports']],

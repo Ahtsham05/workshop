@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Scale,
   Sheet,
+  Target,
   Trash2,
   Workflow,
   type LucideIcon,
@@ -69,6 +70,7 @@ type MenuKey = Exclude<ReportKey, 'stock-register'>
 
 const REPORTS: { key: MenuKey; label: string; hint: string; icon: LucideIcon }[] = [
   { key: 'production', label: 'Production Summary', hint: 'Batch-wise planned, completed, remaining', icon: ClipboardList },
+  { key: 'targets', label: 'Target vs Actual', hint: 'Target, made, in stock, remaining, short', icon: Target },
   { key: 'daily', label: 'Date-wise Summary', hint: 'Issue, production, remaining by date', icon: CalendarDays },
   {
     key: 'product-production',
@@ -139,6 +141,7 @@ export default function ManufacturingReportsPage({
 
   const [period, setPeriod] = useState<LedgerPeriod>(() => getStoredLedgerPeriod(PERIOD_KEY))
   const [status, setStatus] = useState<'all' | 'open' | 'completed'>('all')
+  const [targetStatus, setTargetStatus] = useState<NonNullable<ReportParams['targetStatus']>>('all')
   const [search, setSearch] = useState('')
   const [hideIdle, setHideIdle] = useState(true)
   const [batchKind, setBatchKind] = useState<NonNullable<ReportParams['kind']>>('all')
@@ -173,6 +176,7 @@ export default function ManufacturingReportsPage({
     report,
     ...(DATELESS.includes(report) || isBatch ? {} : { startDate: period.startDate, endDate: period.endDate }),
     ...(WITH_STATUS.includes(report) && status !== 'all' ? { status } : {}),
+    ...(report === 'targets' && targetStatus !== 'all' ? { targetStatus } : {}),
     ...(STATEMENTS.includes(report) ? { search: debouncedSearch.trim() || undefined } : {}),
     ...(IDLE_LABEL[report] ? { hideIdle } : {}),
     ...(isRegister && productId ? { productId } : {}),
@@ -516,6 +520,29 @@ export default function ManufacturingReportsPage({
             search={search}
             onSearchChange={setSearch}
           />
+        )}
+        {report === 'targets' && (
+          <div className='flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between'>
+            <FilterChips
+              label={t('Targets')}
+              value={targetStatus}
+              onChange={(v) => setTargetStatus(v as typeof targetStatus)}
+              options={[
+                { value: 'all', label: t('All targets') },
+                { value: 'at_risk', label: t('At risk') },
+                { value: 'missed', label: t('Missed') },
+                { value: 'on_track', label: t('On track') },
+                { value: 'achieved', label: t('Achieved') },
+                { value: 'upcoming', label: t('Upcoming') },
+              ]}
+            />
+            <Button variant='outline' size='sm' asChild>
+              <Link to={'/manufacturing/targets' as never}>
+                <ExternalLink className='h-4 w-4' />
+                {t('Manage targets')}
+              </Link>
+            </Button>
+          </div>
         )}
         {(WITH_STATUS.includes(report) || STATEMENTS.includes(report) || IDLE_LABEL[report]) && (
           <div className='flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between'>

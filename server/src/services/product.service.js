@@ -1834,10 +1834,10 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}, options = {}) 
   const requestedSkus = [...new Set(rows.map((r) => r.sku).filter(Boolean))];
   const [existingBarcodeDocs, existingSkuDocs] = await Promise.all([
     requestedBarcodes.length
-      ? Product.find({ organizationId, branchId, barcode: { $in: requestedBarcodes } }).select('_id barcode').lean()
+      ? Product.find({ organizationId, branchId, barcode: { $in: requestedBarcodes } }).select('_id barcode unit').lean()
       : [],
     requestedSkus.length
-      ? Product.find({ organizationId, branchId, sku: { $in: requestedSkus } }).select('_id sku').lean()
+      ? Product.find({ organizationId, branchId, sku: { $in: requestedSkus } }).select('_id sku unit').lean()
       : [],
   ]);
   // Keep the matched product's id, not just the fact that the code is taken — that's
@@ -1974,6 +1974,8 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}, options = {}) 
         value: matchedValue,
         filter: { _id: existingMatch._id, organizationId, branchId },
         set,
+        // Copies of the unit on vouchers/invoices/ledger follow it (see after the write).
+        unitChanged: Boolean(unit) && unit !== existingMatch.unit,
       });
       return;
     }
@@ -2146,6 +2148,21 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}, options = {}) 
           error: raw.errmsg || writeError.errmsg || 'Failed to update this product',
         });
       });
+    }
+  }
+
+  // A row that changed a product's unit relabels its copies (BOMs, vouchers, invoices, the
+  // stock ledger…), the same as Edit Product does. Re-read so only units actually written
+  // are followed — a row whose write failed above keeps its old unit, and so do its copies.
+  const unitChangedIds = updateOps.filter((op) => op.unitChanged).map((op) => op.filter._id);
+  if (unitChangedIds.length) {
+    const changed = await Product.find({ _id: { $in: unitChangedIds }, organizationId, branchId })
+      .select('unit hasVariants organizationId branchId')
+      .lean();
+    // eslint-disable-next-line no-restricted-syntax
+    for (const product of changed) {
+      // eslint-disable-next-line no-await-in-loop
+      await syncProductUnit(product);
     }
   }
 

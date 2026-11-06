@@ -52,6 +52,7 @@ const updateSettings = {
         floorIssue: prefix(),
         floorReturn: prefix(),
         floorCount: prefix(),
+        target: prefix(),
       }),
       floorShortfall: Joi.string().valid('auto_issue', 'block'),
       batchNumbering: Joi.string().valid('sequence', 'order'),
@@ -731,7 +732,8 @@ const report = {
         'batch-trace',
         'product-production',
         'product-summary',
-        'stock-sheet'
+        'stock-sheet',
+        'targets'
       )
       .required(),
   }),
@@ -763,6 +765,8 @@ const report = {
     groupBy: Joi.string().valid('category', 'subcategory', 'brand', 'type', 'none'),
     interval: Joi.string().valid('day', 'week', 'month'),
     activeDays: Joi.boolean(),
+    // Target vs actual: only targets whose (computed) status is this.
+    targetStatus: Joi.string().valid('all', 'upcoming', 'achieved', 'on_track', 'at_risk', 'missed'),
   }),
 };
 
@@ -865,6 +869,41 @@ const cancelPacking = {
   ...packingVoucherParam,
   body: Joi.object().keys({ reason: Joi.string().trim().min(2).max(500).required() }),
 };
+
+/* ── Production targets ── */
+const targetIdParam = { params: Joi.object().keys({ targetId: id().required() }) };
+const listTargets = {
+  query: Joi.object().keys({
+    phase: Joi.string().valid('all', 'running', 'upcoming', 'ended'),
+    status: Joi.string().valid('all', 'upcoming', 'achieved', 'on_track', 'at_risk', 'missed'),
+    search: Joi.string().allow('').max(100),
+    page: Joi.number().integer().min(1),
+    limit: Joi.number().integer().min(1).max(100),
+  }),
+};
+const targetBody = Joi.object().keys({
+  title: Joi.string().allow('').max(120),
+  periodType: Joi.string().valid('day', 'week', 'month', 'quarter', 'year', 'custom').required(),
+  startDay: calendarDay().required(),
+  endDay: calendarDay().required(),
+  measure: Joi.string().valid('production', 'stock').required(),
+  alertAtPercent: Joi.number().integer().min(1).max(100),
+  notes: Joi.string().allow('').max(1000),
+  lines: Joi.array()
+    .items(
+      Joi.object().keys({
+        id: id().allow(null, ''),
+        productId: id().required(),
+        targetQuantity: Joi.number().greater(0).max(1e9).required(),
+        notes: Joi.string().allow('').max(300),
+      })
+    )
+    .min(1)
+    .max(200)
+    .required(),
+});
+const createTarget = { body: targetBody };
+const updateTarget = { ...targetIdParam, body: targetBody };
 
 /* ── Production stock (material issued to the floor in bulk) ── */
 const floorPeriod = { dateFrom: calendarDay(), dateTo: calendarDay() };
@@ -1130,6 +1169,10 @@ module.exports = {
   packingVoucherParam,
   savePackSizes,
   createPackProduct,
+  targetIdParam,
+  listTargets,
+  createTarget,
+  updateTarget,
   listPacking,
   postPacking,
   cancelPacking,

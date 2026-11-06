@@ -41,6 +41,7 @@ const PREFIX_FIELDS: { key: PrefixKey; label: string }[] = [
   { key: 'floorIssue', label: 'Issue to production stock' },
   { key: 'floorReturn', label: 'Return from production stock' },
   { key: 'floorCount', label: 'Production stock count' },
+  { key: 'target', label: 'Production target' },
 ]
 
 const TOGGLES: {

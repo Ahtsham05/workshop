@@ -249,6 +249,19 @@ router.post(
 router.get('/material-usage', auth(VIEW), validate(v.materialUsage), c.getMaterialUsage);
 router.get('/reports/:report', auth(VIEW), validate(v.report), c.getReport);
 
+// Production targets: plans measured live against receipts, packing, stock and open
+// orders — services/manufacturing/targets.service.js. A target never moves stock.
+router
+  .route('/targets')
+  .get(auth(VIEW), validate(v.listTargets), c.listTargets)
+  .post(auth('manageProductionTargets'), validate(v.createTarget), c.createTarget);
+router.get('/targets/alerts', auth(VIEW), c.getTargetAlerts);
+router
+  .route('/targets/:targetId')
+  .get(auth(VIEW), validate(v.targetIdParam), c.getTarget)
+  .patch(auth('manageProductionTargets'), validate(v.updateTarget), c.updateTarget)
+  .delete(auth('manageProductionTargets'), validate(v.targetIdParam), c.deleteTarget);
+
 // Packing: bulk finished goods into pack sizes (cartons, bags …) — services/manufacturing/packing.service.js
 router.get('/packing/products', auth(VIEW), c.getPackableProducts);
 router

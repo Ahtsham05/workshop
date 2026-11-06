@@ -79,6 +79,7 @@ import {
 } from '@/components/transaction-engine'
 import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { DeleteIssueDialog } from '../components/delete-issue-dialog'
+import { IssueFinishedGoodCard } from '../components/issue-finished-good'
 import { PageHeader } from '../components/page'
 import { ProductPicker } from '../components/product-picker'
 import { useConfirm } from '../lib/confirm'
@@ -2171,7 +2172,10 @@ function IssueView({ issueId }: { issueId: string }) {
         to={
           orderPath({
             id: v.productionOrderId,
-            orderType: 'production',
+            orderType:
+              v.finishedGood?.orderType === 'assembly'
+                ? 'assembly'
+                : 'production',
           }) as never
         }
         className='font-mono hover:underline'
@@ -2354,6 +2358,7 @@ function IssueView({ issueId }: { issueId: string }) {
           </Button>
         </div>
       )}
+      <IssueFinishedGoodCard issue={v} className='bg-card rounded-xl p-4' />
       <dl className='bg-card grid grid-cols-2 gap-4 rounded-xl border p-4 sm:grid-cols-4'>
         {facts.map(([k, val]) => (
           <div key={k} className='min-w-0'>

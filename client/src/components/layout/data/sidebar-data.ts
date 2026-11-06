@@ -140,6 +140,7 @@ export const sidebarData: SidebarData = {
             { title: 'Material Requirements', url: '/manufacturing/requirements', icon: ListChecks, permission: 'viewManufacturing' },
             { title: 'Production Orders', url: '/manufacturing/production-orders', icon: ClipboardList, permission: 'viewManufacturing' },
             { title: 'Packing', url: '/manufacturing/packing', icon: Package2, permission: 'viewManufacturing' },
+            { title: 'Production Targets', url: '/manufacturing/targets', icon: Target, permission: 'viewManufacturing' },
             { title: 'Production Reports', url: '/manufacturing/reports', icon: BarChart3, permission: 'viewManufacturing' },
             { title: 'Manufacturing Settings', url: '/manufacturing/settings', icon: IconSettings, permission: 'manageManufacturingSettings' },
           ],

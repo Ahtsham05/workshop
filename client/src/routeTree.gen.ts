@@ -139,6 +139,7 @@ import { Route as AuthenticatedMobileShopCashBookImport } from './routes/_authen
 import { Route as AuthenticatedMobileShopBillPaymentsImport } from './routes/_authenticated/mobile-shop/bill-payments'
 import { Route as AuthenticatedManufacturingWipImport } from './routes/_authenticated/manufacturing/wip'
 import { Route as AuthenticatedManufacturingTraceabilityImport } from './routes/_authenticated/manufacturing/traceability'
+import { Route as AuthenticatedManufacturingTargetsImport } from './routes/_authenticated/manufacturing/targets'
 import { Route as AuthenticatedManufacturingSettingsImport } from './routes/_authenticated/manufacturing/settings'
 import { Route as AuthenticatedManufacturingScrapImport } from './routes/_authenticated/manufacturing/scrap'
 import { Route as AuthenticatedManufacturingRequirementsImport } from './routes/_authenticated/manufacturing/requirements'
@@ -1085,6 +1086,13 @@ const AuthenticatedManufacturingTraceabilityRoute =
     getParentRoute: () => AuthenticatedManufacturingRouteRoute,
   } as any)
 
+const AuthenticatedManufacturingTargetsRoute =
+  AuthenticatedManufacturingTargetsImport.update({
+    id: '/targets',
+    path: '/targets',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
 const AuthenticatedManufacturingSettingsRoute =
   AuthenticatedManufacturingSettingsImport.update({
     id: '/settings',
@@ -1985,6 +1993,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/manufacturing/settings'
       preLoaderRoute: typeof AuthenticatedManufacturingSettingsImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/targets': {
+      id: '/_authenticated/manufacturing/targets'
+      path: '/targets'
+      fullPath: '/manufacturing/targets'
+      preLoaderRoute: typeof AuthenticatedManufacturingTargetsImport
       parentRoute: typeof AuthenticatedManufacturingRouteImport
     }
     '/_authenticated/manufacturing/traceability': {
@@ -3124,6 +3139,7 @@ interface AuthenticatedManufacturingRouteRouteChildren {
   AuthenticatedManufacturingRequirementsRoute: typeof AuthenticatedManufacturingRequirementsRoute
   AuthenticatedManufacturingScrapRoute: typeof AuthenticatedManufacturingScrapRoute
   AuthenticatedManufacturingSettingsRoute: typeof AuthenticatedManufacturingSettingsRoute
+  AuthenticatedManufacturingTargetsRoute: typeof AuthenticatedManufacturingTargetsRoute
   AuthenticatedManufacturingTraceabilityRoute: typeof AuthenticatedManufacturingTraceabilityRoute
   AuthenticatedManufacturingWipRoute: typeof AuthenticatedManufacturingWipRoute
   AuthenticatedManufacturingIndexRoute: typeof AuthenticatedManufacturingIndexRoute
@@ -3164,6 +3180,8 @@ const AuthenticatedManufacturingRouteRouteChildren: AuthenticatedManufacturingRo
     AuthenticatedManufacturingScrapRoute: AuthenticatedManufacturingScrapRoute,
     AuthenticatedManufacturingSettingsRoute:
       AuthenticatedManufacturingSettingsRoute,
+    AuthenticatedManufacturingTargetsRoute:
+      AuthenticatedManufacturingTargetsRoute,
     AuthenticatedManufacturingTraceabilityRoute:
       AuthenticatedManufacturingTraceabilityRoute,
     AuthenticatedManufacturingWipRoute: AuthenticatedManufacturingWipRoute,
@@ -3706,6 +3724,7 @@ export interface FileRoutesByFullPath {
   '/manufacturing/requirements': typeof AuthenticatedManufacturingRequirementsRoute
   '/manufacturing/scrap': typeof AuthenticatedManufacturingScrapRoute
   '/manufacturing/settings': typeof AuthenticatedManufacturingSettingsRoute
+  '/manufacturing/targets': typeof AuthenticatedManufacturingTargetsRoute
   '/manufacturing/traceability': typeof AuthenticatedManufacturingTraceabilityRoute
   '/manufacturing/wip': typeof AuthenticatedManufacturingWipRoute
   '/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
@@ -3913,6 +3932,7 @@ export interface FileRoutesByTo {
   '/manufacturing/requirements': typeof AuthenticatedManufacturingRequirementsRoute
   '/manufacturing/scrap': typeof AuthenticatedManufacturingScrapRoute
   '/manufacturing/settings': typeof AuthenticatedManufacturingSettingsRoute
+  '/manufacturing/targets': typeof AuthenticatedManufacturingTargetsRoute
   '/manufacturing/traceability': typeof AuthenticatedManufacturingTraceabilityRoute
   '/manufacturing/wip': typeof AuthenticatedManufacturingWipRoute
   '/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
@@ -4123,6 +4143,7 @@ export interface FileRoutesById {
   '/_authenticated/manufacturing/requirements': typeof AuthenticatedManufacturingRequirementsRoute
   '/_authenticated/manufacturing/scrap': typeof AuthenticatedManufacturingScrapRoute
   '/_authenticated/manufacturing/settings': typeof AuthenticatedManufacturingSettingsRoute
+  '/_authenticated/manufacturing/targets': typeof AuthenticatedManufacturingTargetsRoute
   '/_authenticated/manufacturing/traceability': typeof AuthenticatedManufacturingTraceabilityRoute
   '/_authenticated/manufacturing/wip': typeof AuthenticatedManufacturingWipRoute
   '/_authenticated/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
@@ -4336,6 +4357,7 @@ export interface FileRouteTypes {
     | '/manufacturing/requirements'
     | '/manufacturing/scrap'
     | '/manufacturing/settings'
+    | '/manufacturing/targets'
     | '/manufacturing/traceability'
     | '/manufacturing/wip'
     | '/mobile-shop/bill-payments'
@@ -4542,6 +4564,7 @@ export interface FileRouteTypes {
     | '/manufacturing/requirements'
     | '/manufacturing/scrap'
     | '/manufacturing/settings'
+    | '/manufacturing/targets'
     | '/manufacturing/traceability'
     | '/manufacturing/wip'
     | '/mobile-shop/bill-payments'
@@ -4750,6 +4773,7 @@ export interface FileRouteTypes {
     | '/_authenticated/manufacturing/requirements'
     | '/_authenticated/manufacturing/scrap'
     | '/_authenticated/manufacturing/settings'
+    | '/_authenticated/manufacturing/targets'
     | '/_authenticated/manufacturing/traceability'
     | '/_authenticated/manufacturing/wip'
     | '/_authenticated/mobile-shop/bill-payments'
@@ -5084,6 +5108,7 @@ export const routeTree = rootRoute
         "/_authenticated/manufacturing/requirements",
         "/_authenticated/manufacturing/scrap",
         "/_authenticated/manufacturing/settings",
+        "/_authenticated/manufacturing/targets",
         "/_authenticated/manufacturing/traceability",
         "/_authenticated/manufacturing/wip",
         "/_authenticated/manufacturing/",
@@ -5345,6 +5370,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/manufacturing/settings": {
       "filePath": "_authenticated/manufacturing/settings.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/targets": {
+      "filePath": "_authenticated/manufacturing/targets.tsx",
       "parent": "/_authenticated/manufacturing"
     },
     "/_authenticated/manufacturing/traceability": {

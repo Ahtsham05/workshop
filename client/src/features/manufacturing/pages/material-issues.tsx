@@ -36,11 +36,12 @@ import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { CellStack, DataTable, type Column } from '../components/data-table'
 import { DeleteIssueDialog } from '../components/delete-issue-dialog'
 import { DetailSheet, SheetSection } from '../components/detail-sheet'
+import { IssueFinishedGoodCard } from '../components/issue-finished-good'
 import { FilterChips, SearchField, Toolbar } from '../components/list-controls'
 import { MaterialUsageView } from '../components/material-usage-view'
 import { EmptyState, Field, PageHeader } from '../components/page'
 import { Pager } from '../components/pager'
-import { fmtDate, fmtQty, refName } from '../lib/constants'
+import { fmtDate, fmtQty, orderPath, refName } from '../lib/constants'
 
 function KindBadge({ issue }: { issue: MaterialIssue }) {
   const { t } = useLanguage()
@@ -206,7 +207,13 @@ function IssueVouchers() {
       cell: (issue) => (
         <Link
           to={
-            `/manufacturing/production-orders/${issue.productionOrderId}` as never
+            orderPath({
+              id: issue.productionOrderId,
+              orderType:
+                issue.finishedGood?.orderType === 'assembly'
+                  ? 'assembly'
+                  : 'production',
+            }) as never
           }
           onClick={(e) => e.stopPropagation()}
           className='font-mono text-xs hover:underline'
@@ -214,6 +221,32 @@ function IssueVouchers() {
           {issue.orderNumber}
         </Link>
       ),
+    },
+    {
+      id: 'finishedGood',
+      header: t('Finished good'),
+      className: 'w-64 max-w-64',
+      cell: (issue) => {
+        const fg = issue.finishedGood
+        const meta = [
+          fg?.plannedQuantity
+            ? `${t('Planned')} ${fmtQty(fg.plannedQuantity)} ${fg.unit || ''}`.trim()
+            : '',
+          fg?.batchNumber ? `${t('Batch')} ${fg.batchNumber}` : '',
+        ].filter(Boolean)
+        return (
+          <CellStack
+            primary={
+              <span title={fg?.productName}>{fg?.productName || '—'}</span>
+            }
+            secondary={
+              meta.length ? (
+                <span className='tabular-nums'>{meta.join(' · ')}</span>
+              ) : undefined
+            }
+          />
+        )
+      },
     },
     {
       id: 'materials',
@@ -348,7 +381,7 @@ function IssueVouchers() {
             setSearch(v)
             setPage(1)
           }}
-          placeholder={t('Search document, order or material')}
+          placeholder={t('Search document, order, finished good or material')}
         />
         <FilterChips
           label={t('Filter by document type')}
@@ -407,6 +440,11 @@ function IssueVouchers() {
                 </span>
               )}
             </div>
+            {issue.finishedGood?.productName && (
+              <div className='truncate text-sm font-medium'>
+                {issue.finishedGood.productName}
+              </div>
+            )}
             <div className='text-muted-foreground truncate text-xs'>
               {issue.orderNumber} · {fmtDate(issue.issueDate)} ·{' '}
               {t('{{n}} line(s)').replace('{{n}}', String(issue.lines.length))}
@@ -464,6 +502,7 @@ function IssueVouchers() {
             </div>
           }
         >
+          <IssueFinishedGoodCard issue={open} className='mb-4' />
           <dl className='grid grid-cols-2 gap-4'>
             <Field label={t('Date')}>{fmtDate(open.issueDate)}</Field>
             <Field label={t('Order')}>{open.orderNumber}</Field>

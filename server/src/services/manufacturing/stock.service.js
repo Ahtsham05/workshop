@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { Product, ProductVariant, Inventory, InventoryTransaction, Batch, Imei, ProductionReceipt } = require('../../models');
 const inventorySyncService = require('../inventorySync.service');
+const { unitFor } = require('../productUnitSync.service');
 const ApiError = require('../../utils/ApiError');
 const { roundQty, roundMoney } = require('./common');
 
@@ -115,7 +116,9 @@ const resolveItem = async ({ organizationId, branchId, productId, variantId, ses
     batchTracked,
     inventoryBacked,
     available,
-    unit: (variant && variant.unit) || product.unit,
+    // The product's unit — a hidden default variant's copy can be stale (relabelled on
+    // product edit, but older data kept "pcs" after the product became "kg").
+    unit: unitFor(product, variant),
     unitCost,
     name: variant && !variant.isDefault ? `${product.name}${variant.sku ? ` — ${variant.sku}` : ''}` : product.name,
   };

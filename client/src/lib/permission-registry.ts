@@ -76,7 +76,7 @@ export type PermissionKey =
   | 'viewInsights'
   | 'viewPurchaseSuggestions'
   | 'viewBarcodeGenerator'
-  | 'viewManufacturing' | 'manageBoms' | 'manageProductionOrders' | 'executeProduction' | 'overIssueMaterials' | 'inspectProduction' | 'manageManufacturingSettings' | 'viewManufacturingCosts'
+  | 'viewManufacturing' | 'manageBoms' | 'manageProductionOrders' | 'manageProductionTargets' | 'executeProduction' | 'overIssueMaterials' | 'inspectProduction' | 'manageManufacturingSettings' | 'viewManufacturingCosts'
   | 'issueMaterials' | 'editMaterialIssues' | 'receiveFinishedGoods' | 'recordScrap';
 
 export type Permission = Partial<Record<PermissionKey, boolean>>;
@@ -185,6 +185,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
       'viewManufacturing',
       'manageBoms',
       'manageProductionOrders',
+      'manageProductionTargets',
       'issueMaterials',
       'editMaterialIssues',
       'overIssueMaterials',
@@ -408,6 +409,7 @@ export const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
   viewManufacturing: 'View manufacturing',
   manageBoms: 'Create & edit BOMs',
   manageProductionOrders: 'Plan production orders',
+  manageProductionTargets: 'Set production targets',
   issueMaterials: 'Issue materials',
   editMaterialIssues: 'Edit & cancel issue vouchers',
   overIssueMaterials: 'Issue more than required',
@@ -434,6 +436,7 @@ export const PERMISSION_HINTS: Partial<Record<PermissionKey, string>> = {
   viewManufacturing: 'Open the manufacturing pages — needed for every task below',
   manageBoms: 'Recipes, routing steps and BOM versions',
   manageProductionOrders: 'Create, schedule, release, complete and cancel orders',
+  manageProductionTargets: 'Create, edit and delete targets — everyone with View sees progress and alerts',
   issueMaterials: 'Issue vouchers — move materials to the floor, return unused',
   editMaterialIssues: 'Change or reverse a posted issue voucher',
   overIssueMaterials: 'Issue above what the order still needs',
