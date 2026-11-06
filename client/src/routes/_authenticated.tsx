@@ -22,6 +22,8 @@ import { setAppDateFormat } from '@/lib/date-format'
 import { PushNotificationPrompt } from '@/components/push-notification-prompt'
 import { RolePermissionsSync } from '@/components/role-permissions-sync'
 import { useReminderWatchdog } from '@/hooks/use-reminder-watchdog'
+import { SignupLeadWatchdog } from '@/hooks/use-signup-lead-watchdog'
+import { ImpersonationBanner } from '@/components/impersonation-banner'
 import { ReminderAlarmSplash } from '@/components/reminder-alarm-splash'
 import { QuickLinksVoiceWidget } from '@/components/quick-links-voice-widget'
 import { NotepadProvider } from '@/features/notepad/context/notepad-context'
@@ -91,6 +93,7 @@ function AuthenticatedLayout() {
             </NotepadProvider>
           </WhatsAppProvider>
         </PermissionWrapper>
+        <ImpersonationBanner />
       </>
     )
   }
@@ -126,6 +129,10 @@ function AuthenticatedLayout() {
             <CalculatorWindow />
             {/* One chat socket for the session: live badges, toasts and open threads. */}
             <ChatLiveProvider />
+            {/* Platform admins: alarm on new trial signups and due lead follow-ups. */}
+            <SignupLeadWatchdog />
+            {/* Platform support "Login as user": frame + way back to the admin account. */}
+            <ImpersonationBanner />
             <PrintColorsSync />
           </NotepadProvider>
         </WhatsAppProvider>

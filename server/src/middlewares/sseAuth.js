@@ -22,8 +22,14 @@ const sseAuth = () => async (req, res, next) => {
       throw new ApiError(httpStatus.UNAUTHORIZED, 'Invalid token type');
     }
     const user = await User.findById(payload.sub).populate('role');
-    if (!user) {
+    if (!user || user.isActive === false) {
       throw new ApiError(httpStatus.UNAUTHORIZED, 'User not found');
+    }
+    if (payload.imp) {
+      // eslint-disable-next-line global-require
+      const session = await require('../services/impersonation.service').checkSession(payload.imp, user._id);
+      if (!session) throw new ApiError(httpStatus.UNAUTHORIZED, 'Support session has ended');
+      user.$locals.impersonation = { sessionId: String(session._id), adminId: String(session.adminId), adminName: session.adminName };
     }
     req.user = user;
     next();

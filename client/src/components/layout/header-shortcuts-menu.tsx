@@ -9,12 +9,15 @@ import {
   ChevronDown,
   Globe,
   MessageCircle,
+  Moon,
   Search as SearchIcon,
+  Sun,
   Video,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { useSearch } from '@/context/search-context'
+import { useTheme } from '@/context/theme-context'
 import { useWhatsAppOptional } from '@/context/whatsapp-context'
 import {
   RECORD_SHORTCUT,
@@ -33,7 +36,7 @@ import { useQuickTransfer } from '@/features/stock-transfer/context/quick-transf
 
 /**
  * The header shortcuts that are hidden for lack of room, offered in the profile menu
- * instead: below 640px search, WhatsApp, calculator, stock transfer and language; the
+ * instead: below 640px search, WhatsApp, calculator, stock transfer, theme and language; the
  * camera whenever the header itself has hidden it (it goes by the header's width, which
  * the sidebar changes too — so that one is measured, not guessed from the viewport).
  */
@@ -45,6 +48,7 @@ export function HeaderShortcutsMenu({
 }) {
   const { t, language, setLanguage } = useLanguage()
   const { setOpen: openSearch } = useSearch()
+  const { setTheme } = useTheme()
   const whatsapp = useWhatsAppOptional()
   const quickTransfer = useQuickTransfer()
   const cameraHidden = useHeaderShortcutHidden('capture')
@@ -115,6 +119,20 @@ export function HeaderShortcutsMenu({
             </DropdownMenuShortcut>
           </DropdownMenuItem>
         )}
+        {/* Light/dark (the header's theme switch is hidden on phones to make room for Support). */}
+        <DropdownMenuItem
+          className={phone}
+          onSelect={(event) => {
+            event.preventDefault()
+            const dark = document.documentElement.classList.contains('dark')
+            setTheme(dark ? 'light' : 'dark')
+          }}
+        >
+          <Moon className='mr-2 h-4 w-4 dark:hidden' />
+          <Sun className='mr-2 hidden h-4 w-4 dark:block' />
+          <span className='dark:hidden'>{t('Dark mode')}</span>
+          <span className='hidden dark:inline'>{t('Light mode')}</span>
+        </DropdownMenuItem>
         {/* Languages open inside the menu (a side sub-menu runs off a phone screen). */}
         <DropdownMenuItem
           className={phone}

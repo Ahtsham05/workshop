@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { toJSON, paginate } = require('./plugins');
-const { MANUAL_PAYMENT_METHODS, MANUAL_BILLING_MONTHS } = require('../config/billing');
+const { ADMIN_PAYMENT_METHODS, MANUAL_BILLING_MONTHS } = require('../config/billing');
 
 /** Uppercase, no whitespace — so "abc 123" and "ABC123" collide on the unique index. */
 const normalizeTransactionId = (value) =>
@@ -28,7 +28,11 @@ const manualPaymentSchema = mongoose.Schema(
     // Expected amount from the locked quote, and what the customer says they paid.
     amountPkr: { type: Number, required: true },
     paidAmountPkr: { type: Number, required: true, min: 0 },
-    method: { type: String, enum: MANUAL_PAYMENT_METHODS, required: true },
+    // Customers can only submit MANUAL_PAYMENT_METHODS (enforced by validation); admins recording
+    // an offline payment may also use cash / card / other.
+    method: { type: String, enum: ADMIN_PAYMENT_METHODS, required: true },
+    /** true = entered by a system admin from Admin → Organizations → Activate plan (no customer proof). */
+    recordedByAdmin: { type: Boolean, default: false },
     transactionId: { type: String, required: true, trim: true },
     transactionIdNorm: { type: String, required: true },
     payerName: { type: String, required: true, trim: true },

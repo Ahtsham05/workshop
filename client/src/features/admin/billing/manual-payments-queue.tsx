@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea'
 import {
   billingErrorMessage,
-  METHOD_LABELS,
+  ADMIN_METHOD_LABELS,
   useAdminApproveManualPaymentMutation,
   useAdminGetManualPaymentQuery,
   useAdminListManualPaymentsQuery,
@@ -92,7 +92,7 @@ function ReviewDialog({ id, onClose }: { id: string; onClose: () => void }) {
                 <Field label='Plan'>
                   <span className='capitalize'>{p.planKey}</span> × {p.months} mo ({formatUsd(p.usdAmount)})
                 </Field>
-                <Field label='Method'>{METHOD_LABELS[p.method]}</Field>
+                <Field label='Method'>{ADMIN_METHOD_LABELS[p.method] ?? p.method}</Field>
                 <Field label='Expected'>{formatPkr(p.amountPkr)}</Field>
                 <Field label='Customer says paid'>
                   <span className={p.amountMismatch ? 'font-semibold text-red-600' : ''}>{formatPkr(p.paidAmountPkr)}</span>
@@ -133,7 +133,12 @@ function ReviewDialog({ id, onClose }: { id: string; onClose: () => void }) {
                 </div>
               )}
             </div>
-            {!p.proof?.mimeType && (
+            {p.recordedByAdmin && (
+              <p className='rounded-md border border-dashed p-3 text-sm text-muted-foreground'>
+                Recorded by an admin when activating the plan from Admin → Organizations — no customer proof.
+              </p>
+            )}
+            {!p.proof?.mimeType && !p.recordedByAdmin && (
               <p className='rounded-md border border-dashed p-3 text-sm text-amber-600'>
                 No proof was attached — verify this payment against your bank / wallet statement.
               </p>
@@ -251,7 +256,7 @@ export function ManualPaymentsQueue() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value='all'>All methods</SelectItem>
-              {Object.entries(METHOD_LABELS).map(([k, label]) => (
+              {Object.entries(ADMIN_METHOD_LABELS).map(([k, label]) => (
                 <SelectItem key={k} value={k}>
                   {label}
                 </SelectItem>
@@ -295,7 +300,7 @@ export function ManualPaymentsQueue() {
                   <TableCell className='font-mono text-xs whitespace-nowrap'>
                     {p.reference}
                     <div className='text-muted-foreground'>
-                      {METHOD_LABELS[p.method]} · {p.transactionId}
+                      {ADMIN_METHOD_LABELS[p.method] ?? p.method} · {p.transactionId}
                     </div>
                   </TableCell>
                   <TableCell className='whitespace-nowrap capitalize'>

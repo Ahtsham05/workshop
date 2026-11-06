@@ -97,6 +97,9 @@ async function roomsIfAllowed(socket, conversationId) {
 async function authenticate(token) {
   const payload = jwt.verify(token, config.jwt.secret);
   if (payload.type !== tokenTypes.ACCESS) throw new Error('Invalid token type');
+  // Support sessions ("Login as user") never join the customer's team chat: no messages sent
+  // in their name, and no "online" presence or lastSeenAt written for them.
+  if (payload.imp) throw new Error('Not available during a support session');
   const user = await User.findById(payload.sub);
   if (!user || user.isActive === false) throw new Error('Not a staff account');
   await chatService.assertChatUser(user);

@@ -18,6 +18,13 @@ const jwtVerify = async (payload, done) => {
     if (!user || user.isActive === false) {
       return done(null, false);
     }
+    // Platform-support session ("Login as user"): valid only while the session is open.
+    if (payload.imp) {
+      // eslint-disable-next-line global-require
+      const session = await require('../services/impersonation.service').checkSession(payload.imp, user._id);
+      if (!session) return done(null, false);
+      user.$locals.impersonation = { sessionId: String(session._id), adminId: String(session.adminId), adminName: session.adminName };
+    }
     done(null, user);
   } catch (error) {
     done(error, false);

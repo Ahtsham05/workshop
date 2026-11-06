@@ -1,5 +1,5 @@
 const { z } = require('zod');
-const { MANUAL_PAYMENT_METHODS, MANUAL_BILLING_MONTHS, ALL_MODULES } = require('../config/billing');
+const { MANUAL_PAYMENT_METHODS, ADMIN_PAYMENT_METHODS, MANUAL_BILLING_MONTHS, ALL_MODULES } = require('../config/billing');
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'must be a valid id');
 const planKey = z.string().trim().toLowerCase().min(1).max(40);
@@ -47,7 +47,7 @@ const adminListManualPayments = {
   query: z.object({
     ...pageQuery,
     status: z.enum(['pending', 'approved', 'rejected']).optional(),
-    method: z.enum(MANUAL_PAYMENT_METHODS).optional(),
+    method: z.enum(ADMIN_PAYMENT_METHODS).optional(),
     search: z.string().trim().max(100).optional(),
   }),
 };

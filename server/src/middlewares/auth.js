@@ -26,6 +26,15 @@ const auth = (...requiredPermissions) => async (req, res, next) => {
       });
     }
 
+    const imp = req.user && req.user.$locals && req.user.$locals.impersonation;
+    if (imp) {
+      // eslint-disable-next-line global-require
+      const impersonationService = require('../services/impersonation.service');
+      const reason = impersonationService.blockedReason(req);
+      if (reason) return next(new ApiError(httpStatus.FORBIDDEN, reason));
+      impersonationService.noteActivity(imp.sessionId, req.method !== 'GET');
+    }
+
     if (requiredPermissions.length === 0) {
       return next();
     }

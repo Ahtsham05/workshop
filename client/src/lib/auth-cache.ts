@@ -93,6 +93,9 @@ export function clearAllAuthStorage(): void {
   localStorage.removeItem('activeBranchId')
   localStorage.removeItem('activeBranchName')
   localStorage.removeItem('offlineMode')
+  // A parked admin login from a "Login as user" support session must not outlive sign-out.
+  localStorage.removeItem('impersonation:admin-backup')
+  localStorage.removeItem('impersonation:state')
   // The appearance cache belongs to the person who just signed out — leaving it
   // behind would paint the next user's first screens with someone else's colours.
   // Their own copy is restored from their account when they sign in.

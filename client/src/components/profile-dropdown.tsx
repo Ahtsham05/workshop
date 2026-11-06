@@ -16,7 +16,10 @@ import { RootState } from '@/stores/store'
 import { useLanguage } from '@/context/language-context'
 import toast from 'react-hot-toast'
 import { useGetBranchQuery } from '@/stores/branch.api'
-import { Building2, Download, Settings, UserRound } from 'lucide-react'
+import { Building2, Download, Mail, Phone, Settings, UserRound } from 'lucide-react'
+import { WhatsAppLogo } from '@/components/support/whatsapp-logo'
+import { useSupportContext } from '@/hooks/use-support-context'
+import { SUPPORT, supportMailUrl, supportTelUrl, supportWhatsAppUrl } from '@/config/support'
 import { usePWAInstall } from '@/hooks/use-pwa-install'
 import { useLogout } from '@/hooks/use-logout'
 
@@ -32,6 +35,7 @@ export function ProfileDropdown({
   const { t } = useLanguage()
   const { isInstallable, install } = usePWAInstall()
   const { logout: safeLogout } = useLogout()
+  const supportCtx = useSupportContext()
 
   const logoutHandler = () => {
     void safeLogout()
@@ -111,6 +115,31 @@ export function ProfileDropdown({
               <span>Install App</span>
             </DropdownMenuItem>
           )}
+        </DropdownMenuGroup>
+        {/* Help & Support — every width (the header's Help button is hidden on phones). */}
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className='text-muted-foreground px-2 py-1 text-xs font-normal'>
+          Help &amp; Support
+        </DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuItem asChild>
+            <a href={supportWhatsAppUrl(supportCtx)} target='_blank' rel='noopener noreferrer'>
+              <WhatsAppLogo className='mr-2 h-4 w-4 text-[#25D366]' />
+              <span>WhatsApp support</span>
+            </a>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <a href={supportTelUrl()}>
+              <Phone className='mr-2 h-4 w-4' />
+              <span>Call {SUPPORT.phoneDisplay}</span>
+            </a>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <a href={supportMailUrl(supportCtx)}>
+              <Mail className='mr-2 h-4 w-4' />
+              <span className='truncate'>{SUPPORT.email}</span>
+            </a>
+          </DropdownMenuItem>
         </DropdownMenuGroup>
         {shortcuts}
         <DropdownMenuSeparator />

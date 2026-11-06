@@ -14,6 +14,9 @@ const PAYMENT_SOURCES = ['polar', 'manual'];
 
 const MANUAL_PAYMENT_METHODS = ['bank_transfer', 'jazzcash', 'easypaisa'];
 
+/** Methods a system admin may record when activating a plan by hand (adds cash / card / other). */
+const ADMIN_PAYMENT_METHODS = [...MANUAL_PAYMENT_METHODS, 'cash', 'card', 'other'];
+
 /** Months a manual payment may cover. Polar is monthly only. */
 const MANUAL_BILLING_MONTHS = [1, 3, 6, 12];
 
@@ -167,6 +170,7 @@ module.exports = {
   SUBSCRIPTION_STATUSES,
   PAYMENT_SOURCES,
   MANUAL_PAYMENT_METHODS,
+  ADMIN_PAYMENT_METHODS,
   MANUAL_BILLING_MONTHS,
   MODULES,
   ALL_MODULES,

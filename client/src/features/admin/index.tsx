@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import {
   CheckCircle2,
   XCircle,
@@ -11,7 +12,6 @@ import {
   Loader2,
   AlertTriangle,
   ExternalLink,
-  ChevronRight,
   Calendar,
   Mail,
   Phone,
@@ -22,6 +22,8 @@ import {
   Eraser,
   KeyRound,
   EyeOff,
+  Target,
+  LogIn,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Badge } from '@/components/ui/badge'
@@ -53,6 +55,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ManualPaymentsQueue } from './billing/manual-payments-queue'
 import { BillingConfig } from './billing/billing-config'
+import { OrganizationsList } from './organizations/organizations-list'
+import { LeadsTab } from './leads/leads-tab'
+import { LeadSheet } from './leads/lead-sheet'
+import { LoginAsDialog, type LoginAsTarget } from './support/login-as-dialog'
+import { SupportLoginsCard } from './support/support-logins-card'
+import { LEAD_ALERTS_POLL_OPTIONS, useAdminGetLeadAlertsQuery } from '@/stores/admin-leads.api'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -69,7 +77,6 @@ import {
   useAdminGetDashboardQuery,
   useAdminApprovePaymentMutation,
   useAdminRejectPaymentMutation,
-  useAdminGetAllOrganizationsQuery,
   useAdminGetOrganizationQuery,
   useAdminGetAllUsersQuery,
   useAdminDeleteUserMutation,
@@ -142,7 +149,7 @@ function resolvePaymentDate(payment: Payment): string {
 }
 
 // ─── Org Detail Panel ────────────────────────────────────────────────────────
-function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }) {
+function OrgDetailPanel({ orgId, onBack, onOpenLead }: { orgId: string; onBack: () => void; onOpenLead: (orgId: string) => void }) {
   const { data, isLoading } = useAdminGetOrganizationQuery(orgId)
   const org = data?.organization
   const payments = data?.payments ?? []
@@ -156,6 +163,7 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
   const [clearDataDialogOpen, setClearDataDialogOpen] = useState(false)
   const [clearDataConfirmName, setClearDataConfirmName] = useState('')
   const [clearOrgData, { isLoading: isClearing }] = useAdminClearOrgDataMutation()
+  const [loginAs, setLoginAs] = useState<LoginAsTarget | null>(null)
 
   if (isLoading) {
     return (
@@ -207,7 +215,7 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
   return (
     <div className='space-y-6'>
       {/* Back button + header + delete button */}
-      <div className='flex items-center justify-between gap-3'>
+      <div className='flex flex-wrap items-center justify-between gap-3'>
         <div className='flex items-center gap-3'>
           <Button variant='ghost' size='sm' onClick={onBack}>
             <ArrowLeft className='h-4 w-4 mr-1' /> Back
@@ -217,7 +225,19 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
             <p className='text-sm text-muted-foreground capitalize'>{org.businessType}</p>
           </div>
         </div>
-        <div className='flex items-center gap-2'>
+        <div className='flex flex-wrap items-center gap-2'>
+          {org.owner?.id && (
+            <Button
+              size='sm'
+              variant='outline'
+              onClick={() => setLoginAs({ id: org.owner.id, name: org.owner.name, email: org.owner.email, organizationName: org.name })}
+            >
+              <LogIn className='h-3.5 w-3.5 mr-1' /> Login as owner
+            </Button>
+          )}
+          <Button size='sm' onClick={() => onOpenLead(orgId)}>
+            <Target className='h-3.5 w-3.5 mr-1' /> Sales lead
+          </Button>
           <Button
             size='sm'
             variant='outline'
@@ -411,6 +431,7 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
                   <TableHead>App Role</TableHead>
                   <TableHead>Branches</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className='text-right'>Support</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -436,6 +457,16 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
                         <Badge className='bg-gray-100 text-gray-700 border-gray-200'>Inactive</Badge>
                       )}
                     </TableCell>
+                    <TableCell className='text-right'>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        disabled={!user.isActive || user.systemRole === 'system_admin'}
+                        onClick={() => setLoginAs({ id: user.id, name: user.name, email: user.email, organizationName: org.name })}
+                      >
+                        <LogIn className='h-3.5 w-3.5 mr-1' /> Login as
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -443,6 +474,9 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
           )}
         </CardContent>
       </Card>
+
+      <SupportLoginsCard organizationId={orgId} />
+      <LoginAsDialog target={loginAs} onOpenChange={(open) => !open && setLoginAs(null)} />
 
       {/* Payment history */}
       <Card>
@@ -631,72 +665,6 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
   )
 }
 
-// ─── Organizations List ───────────────────────────────────────────────────────
-function OrganizationsTab({ onSelectOrg }: { onSelectOrg: (id: string) => void }) {
-  const { data, isLoading } = useAdminGetAllOrganizationsQuery({ limit: 50 })
-  const orgs = data?.results ?? []
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className='flex items-center gap-2'>
-          <Building2 className='h-4 w-4' /> All Organizations
-        </CardTitle>
-        <CardDescription>{data?.totalResults ?? 0} organizations registered</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className='space-y-2'>{[1, 2, 3].map((i) => <Skeleton key={i} className='h-14' />)}</div>
-        ) : orgs.length === 0 ? (
-          <p className='text-sm text-muted-foreground text-center py-8'>No organizations found.</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Owner</TableHead>
-                <TableHead>Business Type</TableHead>
-                <TableHead>Plan</TableHead>
-                <TableHead>Sub Status</TableHead>
-                <TableHead>Trial</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className='text-right'>Details</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orgs.map((org: any) => (
-                <TableRow key={org.id}>
-                  <TableCell className='font-medium'>{org.name}</TableCell>
-                  <TableCell className='text-sm text-muted-foreground'>
-                    {typeof org.owner === 'object' ? org.owner?.name : '—'}
-                  </TableCell>
-                  <TableCell className='capitalize text-sm'>{org.businessType ?? '—'}</TableCell>
-                  <TableCell>
-                    <Badge variant='outline'>{PLAN_LABELS[org.subscription?.planType] ?? org.subscription?.planType ?? '—'}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={org.subscription?.status ?? 'pending'} />
-                  </TableCell>
-                  <TableCell className='text-sm'>{org.subscription?.isTrial ? 'Yes' : 'No'}</TableCell>
-                  <TableCell className='text-xs text-muted-foreground'>
-                    {org.createdAt ? safeFormatWithTime(org.createdAt) : '—'}
-                  </TableCell>
-                  <TableCell className='text-right'>
-                    <Button size='sm' variant='ghost' onClick={() => onSelectOrg(org.id)}>
-                      <Eye className='h-3.5 w-3.5 mr-1' /> View
-                      <ChevronRight className='h-3.5 w-3.5 ml-1' />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
 function UsersTab() {
   const { data, isLoading } = useAdminGetAllUsersQuery({ limit: 100 })
   const [deleteUser, { isLoading: isDeletingUser }] = useAdminDeleteUserMutation()
@@ -709,6 +677,7 @@ function UsersTab() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [loginAs, setLoginAs] = useState<LoginAsTarget | null>(null)
   const users = data?.results ?? []
 
   const handleDeleteUser = async () => {
@@ -813,6 +782,15 @@ function UsersTab() {
                     </TableCell>
                     <TableCell className='text-right'>
                       <div className='flex items-center justify-end gap-2'>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          disabled={!user.isActive || user.systemRole === 'system_admin'}
+                          onClick={() => setLoginAs({ id: user.id, name: user.name, email: user.email, organizationName: user.organizationName })}
+                          title='Open their account for support — no password needed'
+                        >
+                          <LogIn className='h-3.5 w-3.5 mr-1' /> Login as
+                        </Button>
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -847,6 +825,8 @@ function UsersTab() {
           </div>
         )}
       </CardContent>
+
+      <LoginAsDialog target={loginAs} onOpenChange={(open) => !open && setLoginAs(null)} />
 
       {/* ── Change Password Dialog ── */}
       <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
@@ -972,10 +952,22 @@ function UsersTab() {
 }
 
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
-type AdminTab = 'manual' | 'billing-config' | 'payments' | 'organizations' | 'users'
+type AdminTab = 'manual' | 'billing-config' | 'payments' | 'organizations' | 'leads' | 'users'
 
 export default function AdminPaymentsPage() {
-  const [activeTab, setActiveTab] = useState<AdminTab>('manual')
+  // Tab + open lead live in the URL (?tab=leads&lead=<orgId>) so signup alerts, push
+  // notifications and the header bell can deep-link straight to a lead.
+  const search = useSearch({ from: '/_authenticated/admin/' })
+  const navigate = useNavigate({ from: '/admin' })
+  const activeTab: AdminTab = search.tab ?? 'manual'
+  const leadOrgId = search.lead ?? null
+  const setActiveTab = (tab: AdminTab) => navigate({ search: (prev) => ({ ...prev, tab }), replace: true })
+  const setLeadOrgId = (id: string | null) => navigate({ search: (prev) => ({ ...prev, lead: id ?? undefined }) })
+  const { data: leadAlerts } = useAdminGetLeadAlertsQuery(undefined, LEAD_ALERTS_POLL_OPTIONS)
+  const leadBadge = new Set([
+    ...(leadAlerts?.newSignups ?? []).map((a) => a.organizationId),
+    ...(leadAlerts?.dueFollowUps ?? []).map((a) => a.organizationId),
+  ]).size
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null)
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
@@ -1043,7 +1035,7 @@ export default function AdminPaymentsPage() {
   }
 
   return (
-    <div className='p-6 space-y-6'>
+    <div className='space-y-6 p-4 sm:p-6'>
       {/* Header */}
       <div>
         <h1 className='text-2xl font-bold'>System Admin Dashboard</h1>
@@ -1091,6 +1083,12 @@ export default function AdminPaymentsPage() {
           </TabsTrigger>
           <TabsTrigger value='organizations' className='flex items-center gap-1'>
             <Building2 className='h-3.5 w-3.5' /> Organizations
+          </TabsTrigger>
+          <TabsTrigger value='leads' className='flex items-center gap-1'>
+            <Target className='h-3.5 w-3.5' /> Leads
+            {leadBadge > 0 && (
+              <span className='ml-1 rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-4 text-white'>{leadBadge}</span>
+            )}
           </TabsTrigger>
           <TabsTrigger value='users' className='flex items-center gap-1'>
             <Users className='h-3.5 w-3.5' /> Users
@@ -1221,16 +1219,22 @@ export default function AdminPaymentsPage() {
         {/* ── Organizations tab ── */}
         <TabsContent value='organizations' className='mt-4'>
           {selectedOrgId ? (
-            <OrgDetailPanel orgId={selectedOrgId} onBack={() => setSelectedOrgId(null)} />
+            <OrgDetailPanel orgId={selectedOrgId} onBack={() => setSelectedOrgId(null)} onOpenLead={setLeadOrgId} />
           ) : (
-            <OrganizationsTab onSelectOrg={setSelectedOrgId} />
+            <OrganizationsList onSelectOrg={setSelectedOrgId} onOpenLead={setLeadOrgId} />
           )}
+        </TabsContent>
+
+        <TabsContent value='leads' className='mt-4'>
+          <LeadsTab onOpenLead={setLeadOrgId} />
         </TabsContent>
 
         <TabsContent value='users' className='mt-4'>
           <UsersTab />
         </TabsContent>
       </Tabs>
+
+      <LeadSheet orgId={leadOrgId} onOpenChange={(open) => !open && setLeadOrgId(null)} />
 
       {/* Approve confirmation dialog */}
       <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>

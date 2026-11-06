@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { METHOD_LABELS, useGetMyManualPaymentsQuery, type ManualPayment } from '@/stores/billing.api'
+import { ADMIN_METHOD_LABELS, useGetMyManualPaymentsQuery, type ManualPayment } from '@/stores/billing.api'
 import { formatDate, formatPkr } from './format'
 
 const STATUS_TONE: Record<ManualPayment['status'], string> = {
@@ -43,7 +43,7 @@ export function PaymentHistory() {
                 </TableCell>
                 <TableCell className='text-right whitespace-nowrap tabular-nums'>
                   {formatPkr(p.paidAmountPkr)}
-                  <div className='text-muted-foreground text-xs'>{METHOD_LABELS[p.method]}</div>
+                  <div className='text-muted-foreground text-xs'>{ADMIN_METHOD_LABELS[p.method] ?? p.method}</div>
                 </TableCell>
                 <TableCell>
                   <Badge className={STATUS_TONE[p.status]}>{p.status}</Badge>

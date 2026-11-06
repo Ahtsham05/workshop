@@ -3,6 +3,7 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import { AlertTriangle, Lock } from 'lucide-react'
 import { useGetBillingSummaryQuery, type BillingSummary } from '@/stores/billing.api'
 import { isElectronApp } from '@/lib/sync/electron'
+import { supportWhatsAppUrl } from '@/config/support'
 
 /** Height reserved for the trial/subscription top banner (sidebar + main content offset). */
 export const APP_TOP_BANNER_HEIGHT = '4.5rem'
@@ -119,6 +120,15 @@ export function TrialExpirationBoundary({ children }: TrialExpirationBoundaryPro
             <Link to='/settings/billing' className='font-semibold whitespace-nowrap underline hover:text-white'>
               {banner.cta}
             </Link>
+            <span className='opacity-60'> · </span>
+            <a
+              href={supportWhatsAppUrl()}
+              target='_blank'
+              rel='noopener noreferrer'
+              className='font-semibold whitespace-nowrap underline hover:text-white'
+            >
+              Need help? WhatsApp us
+            </a>
           </p>
         </div>
       </div>

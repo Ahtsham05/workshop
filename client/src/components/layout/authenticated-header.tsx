@@ -14,6 +14,8 @@ import { ChatHeaderButton } from '@/components/layout/chat-header-button'
 import { BackgroundTasksIndicator } from '@/components/layout/background-tasks-indicator'
 import { QuickTransferButton } from '@/components/layout/quick-transfer-button'
 import { HeaderShortcutsMenu } from '@/components/layout/header-shortcuts-menu'
+import { AdminLeadsBell } from '@/components/layout/admin-leads-bell'
+import { SupportButton } from '@/components/support/support-button'
 import { useScreenCapture } from '@/hooks/use-screen-capture'
 
 type AuthenticatedHeaderProps = {
@@ -30,16 +32,21 @@ export function AuthenticatedHeader({ showSearch = true }: AuthenticatedHeaderPr
     <Header fixed className='@container/header'>
       <BranchIndicator />
       <HeaderClock />
-      <div className='ml-auto flex items-center space-x-4'>
+      {/* Tighter gaps on phones so every always-visible button (Support included) fits at 320px. */}
+      <div className='ml-auto flex items-center space-x-2 sm:space-x-4'>
         <SyncStatusBadge />
         {/* Only visible while something is finishing in the background (or just finished). */}
         <BackgroundTasksIndicator />
         {/* Hidden on phones so the branch name gets the room (sm = 640px) */}
         {showSearch ? <Search className='hidden sm:inline-flex' /> : null}
         <WhatsAppHeaderButton className='hidden sm:inline-flex' />
+        {/* Help & Support (WhatsApp / call / email the Logix Plus team) — every width, phones included. */}
+        <SupportButton />
         {/* Always visible, phones included — jotting something down is the one tool
             you never want to hunt for in a menu. */}
         {/* Team chat with its unread count — phones included, a message from another branch is never hunted for. */}
+        {/* Platform admins only: new trial signups + lead follow-ups due. */}
+        <AdminLeadsBell />
         <ChatHeaderButton />
         <NotepadButton />
         {/* Business calculator (also Ctrl+Alt+C). On phones it is in the profile menu. */}
@@ -50,7 +57,8 @@ export function AuthenticatedHeader({ showSearch = true }: AuthenticatedHeaderPr
         <QuickTransferButton className='hidden sm:inline-flex' />
         <ScreenCaptureButton capture={capture} className='hidden @min-[880px]/header:inline-flex' />
         <LanguageSwitch className='hidden sm:inline-flex' />
-        <ThemeSwitch />
+        {/* On phones the theme toggle is in the profile menu — the room goes to Support. */}
+        <ThemeSwitch className='hidden sm:inline-flex' />
         {/* Whatever the header hides for room shows in the profile menu instead. */}
         <ProfileDropdown shortcuts={<HeaderShortcutsMenu capture={capture} />} />
       </div>

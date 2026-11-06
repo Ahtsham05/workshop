@@ -3,6 +3,9 @@ const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
 const pick = require('../utils/pick');
 const { paymentService, organizationService } = require('../services');
+const organizationPurgeService = require('../services/organizationPurge.service');
+const { DeletedOrganization } = require('../models');
+const adminActivationService = require('../services/billing/adminActivation.service');
 
 /**
  * GET /v1/admin/payments
@@ -136,8 +139,49 @@ const getOrganization = catchAsync(async (req, res) => {
  * Delete an organization and all related data (system_admin only)
  */
 const deleteOrganization = catchAsync(async (req, res) => {
-  const result = await organizationService.deleteOrganization(req.params.orgId);
+  const expectBucket = req.query.expectBucket || null;
+  const result = await organizationService.deleteOrganization(req.params.orgId, {
+    actor: req.user,
+    expectBucket,
+    reason: expectBucket === 'trial_expired' ? 'trial_expired_cleanup' : 'manual',
+  });
   res.send(result);
+});
+
+/**
+ * GET /v1/admin/organizations/purge-candidates?bucket=trial_expired
+ * Orgs in a subscription bucket that the bulk clean-up would delete (preview only).
+ */
+const getPurgeCandidates = catchAsync(async (req, res) => {
+  const bucket = ['trial_expired', 'lapsed'].includes(req.query.bucket) ? req.query.bucket : 'trial_expired';
+  const results = await organizationPurgeService.listPurgeCandidates({ bucket, actor: req.user });
+  res.send({ bucket, results });
+});
+
+/** GET /v1/admin/organizations/:orgId/activation — plans + current subscription for the Activate plan dialog */
+const getActivationOptions = catchAsync(async (req, res) => {
+  res.send(await adminActivationService.getOptions(req.params.orgId));
+});
+
+/** GET /v1/admin/organizations/:orgId/activation/preview?planKey&months|until — what activating would do */
+const previewActivation = catchAsync(async (req, res) => {
+  const { planKey, months, until } = req.query;
+  res.send(await adminActivationService.preview({ orgId: req.params.orgId, planKey, months, until }));
+});
+
+/** POST /v1/admin/organizations/:orgId/activation — activate / renew / change the plan without a customer payment */
+const activatePlan = catchAsync(async (req, res) => {
+  const { planKey, months, until, note, payment, notifyOwner } = req.body;
+  res.send(
+    await adminActivationService.activate({ orgId: req.params.orgId, admin: req.user, planKey, months, until, note, payment, notifyOwner })
+  );
+});
+
+/** GET /v1/admin/organizations/deleted — audit log of permanently deleted organizations */
+const getDeletedOrganizations = catchAsync(async (req, res) => {
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+  const results = await DeletedOrganization.find({}).sort({ deletedAt: -1 }).limit(limit).lean();
+  res.send({ results });
 });
 
 /**
@@ -301,6 +345,38 @@ const changeUserPassword = catchAsync(async (req, res) => {
   res.status(httpStatus.OK).send({ message: 'Password updated successfully' });
 });
 
+
+/**
+ * POST /v1/admin/users/:userId/impersonate — open a time-limited support session as this user.
+ */
+const impersonateUser = catchAsync(async (req, res) => {
+  // eslint-disable-next-line global-require
+  const impersonationService = require('../services/impersonation.service');
+  const result = await impersonationService.startSession({
+    admin: req.user,
+    targetUserId: req.params.userId,
+    minutes: req.body.minutes,
+    reason: req.body.reason,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  });
+  res.status(httpStatus.CREATED).send(result);
+});
+
+/** GET /v1/admin/impersonations — support-login history (filter by organizationId / targetUserId). */
+const listImpersonations = catchAsync(async (req, res) => {
+  // eslint-disable-next-line global-require
+  const impersonationService = require('../services/impersonation.service');
+  res.send({ results: await impersonationService.listSessions(req.query) });
+});
+
+/** POST /v1/admin/impersonations/:sessionId/end — cut a session off from the admin panel. */
+const endImpersonation = catchAsync(async (req, res) => {
+  // eslint-disable-next-line global-require
+  const impersonationService = require('../services/impersonation.service');
+  res.send(await impersonationService.endSession(req.params.sessionId, 'admin_panel'));
+});
+
 module.exports = {
   getAllPayments,
   getPayment,
@@ -309,9 +385,17 @@ module.exports = {
   getAllOrganizations,
   getOrganization,
   deleteOrganization,
+  getPurgeCandidates,
+  getActivationOptions,
+  previewActivation,
+  activatePlan,
+  getDeletedOrganizations,
   clearOrganizationData,
   getAllUsers,
   deleteUser,
   changeUserPassword,
   getDashboard,
+  impersonateUser,
+  listImpersonations,
+  endImpersonation,
 };

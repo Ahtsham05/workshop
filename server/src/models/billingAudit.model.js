@@ -32,6 +32,7 @@ const billingAuditSchema = mongoose.Schema(
         'settings.updated',
         'plan_config.updated',
         'subscription.admin_override',
+        'subscription.admin_activated',
       ],
       index: true,
     },

@@ -51,6 +51,18 @@ const manualPaymentApproved = (org, payment, plan) =>
       : `Paid through:   ${fmtDate(payment.appliedPeriodEnd)}`,
   ]);
 
+/** Plan switched on by a system admin without a payment record (complimentary / arranged offline). */
+const planActivatedByAdmin = (org, plan, result) =>
+  send(org, `Your ${plan.name} plan is active`, [
+    `Hi ${org.name},`,
+    '',
+    result.appliedAs === 'scheduledDowngrade'
+      ? `Your plan will change to ${plan.name} on ${fmtDate(result.periodStart)} and run until ${fmtDate(result.periodEnd)}.`
+      : `Your ${plan.name} plan has been activated by the Logix Plus team.`,
+    '',
+    `Active until: ${fmtDate(result.periodEnd)}`,
+  ]);
+
 const manualPaymentRejected = (org, payment) =>
   send(org, 'We could not verify your payment', [
     `Hi ${org.name},`,
@@ -97,6 +109,7 @@ const becameReadOnly = (org, planName) =>
 module.exports = {
   manualPaymentApproved,
   manualPaymentRejected,
+  planActivatedByAdmin,
   renewalReminder,
   trialEndingReminder,
   gracePeriodStarted,

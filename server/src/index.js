@@ -199,6 +199,12 @@ async function startApplication() {
           logger.warn('Chat socket skipped:', err.message);
         }
         try {
+          const { startSignupLeadScheduler } = require('./jobs/signupLeadScheduler');
+          startSignupLeadScheduler();
+        } catch (schedulerError) {
+          logger.warn('Signup lead scheduler skipped:', schedulerError.message);
+        }
+        try {
           const { startPayrollScheduler } = require('./jobs/payrollScheduler');
           startPayrollScheduler();
         } catch (schedulerError) {

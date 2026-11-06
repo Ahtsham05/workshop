@@ -46,6 +46,16 @@ export const METHOD_LABELS: Record<ManualMethod, string> = {
   easypaisa: 'Easypaisa',
 }
 
+/** Methods a system admin can record when activating a plan by hand (never offered to customers). */
+export type AdminPaymentMethod = ManualMethod | 'cash' | 'card' | 'other'
+
+export const ADMIN_METHOD_LABELS: Record<AdminPaymentMethod, string> = {
+  cash: 'Cash',
+  ...METHOD_LABELS,
+  card: 'Card',
+  other: 'Other',
+}
+
 export interface PlanLimits {
   maxUsers: number
   maxInvoicesPerMonth: number
@@ -130,7 +140,9 @@ export interface ManualPayment {
   pkrPerUsd: number
   amountPkr: number
   paidAmountPkr: number
-  method: ManualMethod
+  method: AdminPaymentMethod
+  /** Entered by a system admin from Admin → Organizations → Activate plan (no customer proof). */
+  recordedByAdmin?: boolean
   transactionId: string
   payerName: string
   paidOn: string

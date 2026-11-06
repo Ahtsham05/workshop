@@ -14,6 +14,18 @@ router.get('/login-refresh', authController.loginRefresh);
 router.post('/forgot-password', validate(authValidation.forgotPassword), authController.forgotPassword);
 router.post('/reset-password', validate(authValidation.resetPassword), authController.resetPassword);
 router.post('/send-verification-email', auth(), authController.sendVerificationEmail);
+// End the current "Login as user" support session (called with the session's own token).
+router.post('/impersonation/end', auth(), async (req, res, next) => {
+  try {
+    const imp = req.user.$locals && req.user.$locals.impersonation;
+    if (!imp) return res.send({ ended: false });
+    // eslint-disable-next-line global-require
+    const result = await require('../../services/impersonation.service').endSession(imp.sessionId, 'admin');
+    return res.send(result);
+  } catch (err) {
+    return next(err);
+  }
+});
 router.post('/verify-email', validate(authValidation.verifyEmail), authController.verifyEmail);
 
 module.exports = router;

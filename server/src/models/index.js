@@ -209,3 +209,6 @@ module.exports.PackingVoucher = require('./packingVoucher.model');
 module.exports.ProductionTarget = require('./productionTarget.model');
 module.exports.FloorStockLot = require('./floorStockLot.model');
 module.exports.FloorStockVoucher = require('./floorStockVoucher.model');
+module.exports.SignupLead = require('./signupLead.model');
+module.exports.ImpersonationSession = require('./impersonationSession.model');
+module.exports.DeletedOrganization = require('./deletedOrganization.model');
