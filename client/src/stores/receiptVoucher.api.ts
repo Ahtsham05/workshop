@@ -54,6 +54,12 @@ export interface ReceiptVoucherLine {
   customerName?: string
   payerName: string
   amount: number
+  /** Settlement discount given with this line (no cash) — features/ledger-discounts. */
+  discountAmount?: number
+  discountReason?: string
+  discountPercent?: number
+  discountApprovalNote?: string
+  discountNote?: string
   description?: string
   customerLedgerEntryId?: string
 }
@@ -74,6 +80,8 @@ export interface ReceiptVoucherRecord {
   bankAccountName?: string
   lines: ReceiptVoucherLine[]
   totalAmount: number
+  /** Sum of line discounts (no cash). */
+  totalDiscount?: number
   reference?: string
   notes?: string
   createdBy?: ReceiptVoucherUser | string
@@ -87,6 +95,12 @@ export interface CreateReceiptVoucherLine {
   category?: string
   customerId?: string
   amount: number
+  /** Settlement discount given with this line (no cash) — features/ledger-discounts. */
+  discountAmount?: number
+  discountReason?: string
+  discountPercent?: number
+  discountApprovalNote?: string
+  discountNote?: string
   description?: string
 }
 

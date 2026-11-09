@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { useIsPlatformAdmin } from '@/hooks/use-signup-lead-watchdog'
 import { LEAD_ALERTS_POLL_OPTIONS, useAdminGetLeadAlertsQuery } from '@/stores/admin-leads.api'
 import { relativeTime } from '@/features/admin/leads/lead-utils'
+import { useRefetchOnFocusIfStale } from '@/hooks/use-refetch-on-focus-if-stale'
 
 /**
  * System admins only: new trial signups + lead follow-ups that are due, with a count badge.
@@ -14,7 +15,9 @@ import { relativeTime } from '@/features/admin/leads/lead-utils'
 export function AdminLeadsBell({ className }: { className?: string }) {
   const isAdmin = useIsPlatformAdmin()
   const navigate = useNavigate()
-  const { data } = useAdminGetLeadAlertsQuery(undefined, { ...LEAD_ALERTS_POLL_OPTIONS, skip: !isAdmin })
+  const { data, refetch, fulfilledTimeStamp } = useAdminGetLeadAlertsQuery(undefined, { ...LEAD_ALERTS_POLL_OPTIONS, skip: !isAdmin })
+  // Back on the tab after a while → fresh signups at once; not on every focus flicker.
+  useRefetchOnFocusIfStale(refetch, fulfilledTimeStamp, { enabled: isAdmin })
   if (!isAdmin) return null
 
   const fresh = data?.newSignups ?? []

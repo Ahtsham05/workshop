@@ -151,6 +151,8 @@ export interface Purchase {
   // The supplier's own invoice/bill number for this purchase, as printed on their paper
   // bill — distinct from `invoiceNumber` (our own internally-generated purchase number).
   vendorBillNumber?: string;
+  /** Warehouse the goods are received into (multi-warehouse). Empty = the branch's default. */
+  warehouseId?: string | null;
   supplier: Supplier;
   items: PurchaseItem[];
   attachments?: PurchaseAttachment[];

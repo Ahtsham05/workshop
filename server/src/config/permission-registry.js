@@ -33,6 +33,14 @@ const PERMISSION_GROUPS = [
     permissions: ['countStock', 'approveStockCounts'],
   },
   {
+    // Multi-warehouse (routes/v1/warehouse.route.js, Settings → Warehouses turns it on).
+    // Roles created before this keep working: viewProducts can look, editProducts can manage
+    // (see config/warehousePermissions.js).
+    id: 'warehouses',
+    label: 'Warehouses',
+    permissions: ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers'],
+  },
+  {
     id: 'imei_tracking',
     label: 'IMEI / Serial Tracking',
     permissions: ['viewImeiTracking', 'manageImeiTracking'],
@@ -88,7 +96,11 @@ const PERMISSION_GROUPS = [
   {
     id: 'customers',
     label: 'Customers',
-    permissions: ['viewCustomers', 'createCustomers', 'editCustomers', 'deleteCustomers'],
+    // manageCreditLimits: set/raise limits, temporary limits, credit hold, credit settings.
+    // overrideCreditLimit: save a sale over the limit with a logged reason.
+    // viewCustomerProfit: per-customer profit & margin (reveals cost) — Reports → Customer
+    // Profit, the ledger's Profitability card (services/customerProfit.service.js).
+    permissions: ['viewCustomers', 'createCustomers', 'editCustomers', 'deleteCustomers', 'manageCreditLimits', 'overrideCreditLimit', 'viewCustomerProfit'],
   },
   {
     id: 'suppliers',
@@ -108,7 +120,10 @@ const PERMISSION_GROUPS = [
   {
     id: 'accounting',
     label: 'Accounts & Expenses',
-    permissions: ['viewAccounting', 'manageExpenses', 'manageLedgers', 'managePersonalWallet'],
+    // giveLedgerDiscount: record Discount Allowed / Received on customer & supplier ledgers
+    // (with a payment or on its own). approveLedgerDiscount: save one above the limit set
+    // in Settings → Ledger Discounts (services/ledgerDiscount.service.js).
+    permissions: ['viewAccounting', 'manageExpenses', 'manageLedgers', 'managePersonalWallet', 'giveLedgerDiscount', 'approveLedgerDiscount'],
   },
   {
     id: 'cash',
@@ -118,7 +133,9 @@ const PERMISSION_GROUPS = [
   {
     id: 'payment_vouchers',
     label: 'Payments & Receipts',
-    permissions: ['viewPaymentVouchers', 'managePaymentVouchers'],
+    // viewLedgerFromVouchers: on Receipt/Payment Vouchers, see each party's balance and open a
+    // read-only quick view of their ledger (GET customer/supplier ledger + balance routes).
+    permissions: ['viewPaymentVouchers', 'managePaymentVouchers', 'viewLedgerFromVouchers'],
   },
   {
     id: 'bank_reconciliation',

@@ -52,6 +52,9 @@ import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { useFormatMoney } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
+import { ExpenseNatureBadge } from '@/features/accounting/components/expense-nature'
+import { ExpenseCategoryIcon } from '@/features/accounting/components/expense-category-icon'
+import { useGetExpenseCategoriesQuery } from '@/stores/expenseCategory.api'
 
 interface ExpenseReportProps {
   startDate: string
@@ -76,6 +79,11 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
     const { t } = useLanguage()
     const { data, isFetching: isLoading, refetch } = useGetExpenseReportQuery({ startDate, endDate })
     const [fetchCategory] = useLazyGetExpenseReportQuery()
+    // Cached by the Expenses page already — no extra request there.
+    const { data: categoryList } = useGetExpenseCategoriesQuery({ transactionType: 'business_expense' })
+    const categoryColorByName = new Map(
+      (Array.isArray(categoryList) ? categoryList : []).map((c) => [c.name.trim().toLowerCase(), c.color]),
+    )
 
     const [sheetOpen, setSheetOpen] = useState(false)
     const [activeCategory, setActiveCategory] = useState<string | null>(null)
@@ -102,6 +110,9 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
           const summarySheet = XLSX.utils.json_to_sheet(
             data.categoryBreakdown.map((c) => ({
               [t('category')]: c._id,
+              [t('Type')]: (c.directAmount || 0) > 0 && (c.indirectAmount || 0) > 0
+                ? 'Mixed'
+                : (c.directAmount || 0) > 0 ? 'Direct' : 'Indirect',
               [t('count')]: c.expenseCount,
               [t('total_amount')]: c.totalAmount,
               [t('avg_amount')]: c.avgAmount?.toFixed(2),
@@ -163,24 +174,33 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
       .map(([date, amount]) => ({ date: format(new Date(date), 'dd MMM'), amount }))
 
     const pieData = categories.map((c) => ({ name: c._id, value: c.totalAmount }))
+    // Each category's own colour (Expense Categories), so a category looks the same on every
+    // screen; the palette is only the fallback for names no longer in the list.
+    const colorFor = (name: string, index: number) => {
+      const own = categoryColorByName.get(String(name || '').trim().toLowerCase())
+      return own && /^#[0-9a-f]{6}$/i.test(own) ? own : COLORS[index % COLORS.length]
+    }
 
     const detailTotal = detailData.reduce((s, e) => s + (e.amount || 0), 0)
 
+    const directTotal = data?.summary?.directExpenses || 0
+    const indirectTotal = data?.summary?.indirectExpenses ?? totalExpenses - directTotal
     const totalEntryCount = data?.summary?.expenseCount || 0
     const avgExpense = data?.summary?.avgExpense || 0
 
     const categoryTotalBar = categoriesOnly && categories.length > 0 && (
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-rose-200 bg-rose-50/60 px-5 py-4 dark:border-rose-900 dark:bg-rose-950/30">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-rose-200 bg-rose-50/60 px-5 py-4 max-sm:gap-3 max-sm:px-4 max-sm:py-3 dark:border-rose-900 dark:bg-rose-950/30">
         <div className="flex items-center gap-3">
           <div className={cn('rounded-xl p-3', toneIconWrapClass('rose'))}>
             <TrendingDown className="h-5 w-5" />
           </div>
           <div>
             <p className="text-sm font-medium text-muted-foreground">{t('total_expenses')}</p>
-            <p className="text-3xl font-bold text-rose-600 tabular-nums">{fmt(totalExpenses)}</p>
+            <p className="text-3xl font-bold text-rose-600 tabular-nums max-sm:text-2xl">{fmt(totalExpenses)}</p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-6 sm:gap-10">
+        {/* Phones: count + average side by side under the total, split by a rule. */}
+        <div className="flex flex-wrap gap-6 sm:gap-10 max-sm:grid max-sm:w-full max-sm:grid-cols-2 max-sm:gap-3 max-sm:border-t max-sm:border-rose-200 max-sm:pt-3 max-sm:dark:border-rose-900">
           <div>
             <p className="text-sm text-muted-foreground">{t('expense_count')}</p>
             <p className="text-xl font-bold tabular-nums">{totalEntryCount}</p>
@@ -188,6 +208,14 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
           <div>
             <p className="text-sm text-muted-foreground">{t('avg_expense')}</p>
             <p className="text-xl font-bold tabular-nums">{fmt(avgExpense)}</p>
+          </div>
+          <div title={t('Cost of buying or making what you sell — reduces Gross Profit')}>
+            <p className="text-sm text-muted-foreground">{t('Direct')}</p>
+            <p className="text-xl font-bold tabular-nums text-amber-700 dark:text-amber-400">{fmt(directTotal)}</p>
+          </div>
+          <div title={t('Cost of running the business — reduces Net Profit')}>
+            <p className="text-sm text-muted-foreground">{t('Indirect')}</p>
+            <p className="text-xl font-bold tabular-nums text-sky-700 dark:text-sky-400">{fmt(indirectTotal)}</p>
           </div>
         </div>
       </div>
@@ -215,10 +243,10 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
             <p>{t('no_results_found')}</p>
           </div>
         ) : (
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 max-sm:gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {filteredCategories.map((cat, idx) => {
             const share = totalExpenses ? ((cat.totalAmount / totalExpenses) * 100).toFixed(1) : '0'
-            const color = COLORS[idx % COLORS.length]
+            const color = colorFor(cat._id, idx)
             return (
               <button
                 key={cat._id}
@@ -226,15 +254,14 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
                 className="text-left rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group"
               >
                 <div className="flex items-center justify-between mb-3">
-                  <span
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white text-xs font-bold"
-                    style={{ backgroundColor: color }}
-                  >
-                    {cat._id.charAt(0).toUpperCase()}
-                  </span>
+                  <ExpenseCategoryIcon name={cat._id} color={color} />
                   <Badge variant="secondary" className="text-xs">{share}%</Badge>
                 </div>
                 <p className="font-semibold text-sm leading-tight mb-0.5">{cat._id}</p>
+                <div className="mb-1 flex flex-wrap gap-1">
+                  {(cat.directAmount || 0) > 0 && <ExpenseNatureBadge nature="direct" compact />}
+                  {(cat.directAmount || 0) < cat.totalAmount - 0.005 && <ExpenseNatureBadge nature="indirect" compact />}
+                </div>
                 <p className="text-xl font-bold" style={{ color }}>{fmt(cat.totalAmount)}</p>
                 <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
                   <span>{cat.expenseCount} {t('entries')}</span>
@@ -246,7 +273,7 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
                     style={{ width: `${share}%`, backgroundColor: color }}
                   />
                 </div>
-                <p className="mt-1.5 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                <p className="mt-1.5 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity max-sm:hidden">
                   {t('Click to view details →')}
                 </p>
               </button>
@@ -277,6 +304,9 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
               <div>
                 <p className="text-sm text-muted-foreground">{t('total_expenses')}</p>
                 <p className="text-2xl font-bold">{fmt(totalExpenses)}</p>
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  {t('Direct')} {fmt(directTotal)} · {t('Indirect')} {fmt(indirectTotal)}
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -357,7 +387,7 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
                       labelLine={false}
                     >
                       {pieData.map((_, i) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                        <Cell key={i} fill={colorFor(pieData[i].name, i)} />
                       ))}
                     </Pie>
                     <Tooltip formatter={(v: any) => fmt(v)} />

@@ -35,6 +35,8 @@ export interface ReturnItem {
 
 export interface SalesReturnPayload {
   invoiceId: string
+  /** Multi-warehouse: unset = server default (the source document's warehouse). */
+  warehouseId?: string | null
   customerId?: string | null
   customerName?: string
   items: Array<{
@@ -97,6 +99,8 @@ export interface SalesReturnFilters {
 
 export interface PurchaseReturnPayload {
   purchaseId?: string | null  // optional for free-form returns
+  /** Multi-warehouse: unset = server default (the source document's warehouse). */
+  warehouseId?: string | null
   salesReturnId?: string | null  // set when converting a customer return to supplier return
   supplierId: string
   items: Array<{

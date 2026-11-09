@@ -45,6 +45,7 @@ import {
   type TransferPeriodPreset,
 } from './lib/transfer-period'
 import { useFormatMoney } from '@/lib/format-money'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 
 
 import { toPrintLanguage } from '@/features/invoice/utils/language'
@@ -99,6 +100,10 @@ export default function StockTransfer() {
   })
 
   const [completeTransfer, { isLoading: completing }] = useCompleteTransferMutation()
+  // Multi-warehouse: which of this branch's warehouses incoming goods are received into.
+  const [receiveWarehouseId, setReceiveWarehouseId] = useState('')
+  const receivePicker = useWarehousePicker('receipt')
+  const receiveArg = (id: string) => (receivePicker.visible && receiveWarehouseId ? { id, toWarehouseId: receiveWarehouseId } : id)
   const [cancelTransfer, { isLoading: cancelling }] = useCancelTransferMutation()
   const [fetchGroup] = useLazyGetTransferGroupQuery()
 
@@ -202,6 +207,16 @@ export default function StockTransfer() {
             <CardDescription>{t('Outgoing and incoming transfers for this branch')}</CardDescription>
           </div>
           <div className='flex flex-wrap gap-2 max-sm:grid max-sm:w-full max-sm:grid-cols-2'>
+            {receivePicker.visible ? (
+              <WarehouseField
+                kind='receipt'
+                id='transfer-receive-warehouse'
+                className='flex items-center gap-2 max-sm:col-span-2 max-sm:w-full [&_label]:shrink-0 [&_label]:text-xs [&_label]:font-normal [&_label]:whitespace-nowrap [&_label]:text-muted-foreground [&>button]:h-9 [&>button]:w-60 max-sm:[&>button]:flex-1'
+                label={t('Receive into')}
+                value={receiveWarehouseId}
+                onValueChange={setReceiveWarehouseId}
+              />
+            ) : null}
             <Select value={directionFilter} onValueChange={(v) => { setDirectionFilter(v as typeof directionFilter); setPage(1) }}>
               <SelectTrigger className='h-9 w-36 max-sm:w-full'>
                 <SelectValue placeholder={t('Direction')} />
@@ -393,7 +408,7 @@ export default function StockTransfer() {
                             <Button
                               size='sm'
                               disabled={busy}
-                              onClick={() => runAction(() => completeTransfer(tr.singleItemId!).unwrap(), 'Stock received')}
+                              onClick={() => runAction(() => completeTransfer(receiveArg(tr.singleItemId!)).unwrap(), 'Stock received')}
                             >
                               <ArrowDownToLine className='mr-1 h-3.5 w-3.5' />
                               {t('Receive')}

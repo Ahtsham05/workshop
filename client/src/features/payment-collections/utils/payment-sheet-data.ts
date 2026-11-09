@@ -5,12 +5,14 @@ export const DIRECTION_LABELS: Record<string, string> = {
   payment: 'Payment',
   refund: 'Refund',
   return_credit: 'Return Credit',
+  discount: 'Discount',
 }
 
 export const DIRECTION_BADGE_CLASS: Record<string, string> = {
   payment: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100',
   refund: 'bg-orange-100 text-orange-700 hover:bg-orange-100',
   return_credit: 'bg-slate-100 text-slate-700 hover:bg-slate-100',
+  discount: 'bg-amber-100 text-amber-800 hover:bg-amber-100',
 }
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -58,7 +60,7 @@ export interface PaymentSheetData {
   walletType?: string
   referenceNumber?: string
   notes?: string
-  direction: 'payment' | 'refund' | 'return_credit'
+  direction: 'payment' | 'refund' | 'return_credit' | 'discount'
   status: 'posted' | 'void'
   voidReason?: string
   allocatedTotal: number

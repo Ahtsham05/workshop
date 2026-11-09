@@ -28,6 +28,9 @@ const PurchaseSchema = new mongoose.Schema({
   // self-service "Reset Demo Data" action without touching anything the user added.
   isDemo: { type: Boolean, default: false, index: true },
   supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', required: true },
+  // Warehouse the goods are received into (multi-warehouse). Unset = the branch's default
+  // warehouse. warehouse.service.js#syncPurchase mirrors the lines into WarehouseMove.
+  warehouseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', default: null },
   // Not unique here — uniqueness is per-organization via the compound index below (see
   // documentNumbering.service.js). A global index would let two different tenants collide.
   invoiceNumber: { type: String, required: true },

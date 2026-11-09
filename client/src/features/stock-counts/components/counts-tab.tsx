@@ -265,6 +265,7 @@ function CountsTable({ counts }: { counts: StockCount[] }) {
               <div className='font-medium'>{count.number}</div>
               <div className='max-w-[260px] truncate text-xs text-muted-foreground' title={count.title}>
                 {count.title}
+                {count.warehouseId && typeof count.warehouseId === 'object' ? ` · ${count.warehouseId.name}` : ''}
               </div>
             </TableCell>
             <TableCell>

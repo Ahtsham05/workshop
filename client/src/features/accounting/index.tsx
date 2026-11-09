@@ -104,19 +104,19 @@ export default function AccountingPage() {
   }, [searchParams?.tab, searchParams?.customerId, searchParams?.customerName, searchParams?.supplierId, searchParams?.supplierName, searchParams?.ledgerEntry]);
 
   return (
-    <div className="h-full w-full p-4 space-y-6">
+    <div className="h-full w-full p-4 space-y-6 max-sm:space-y-4 max-sm:p-0">
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t('Accounts')}</h1>
-          <p className="text-muted-foreground mt-2">
+          <h1 className="text-3xl font-bold tracking-tight max-sm:text-2xl">{t('Accounts')}</h1>
+          <p className="text-muted-foreground mt-2 max-sm:mt-1 max-sm:text-sm">
             {t('Manage expenses, customer and supplier ledgers')}
           </p>
         </div>
       </div>
 
       {/* Main Content Tabs */}
-      <Tabs value={manualTab || activeTab} onValueChange={setManualTab} className="space-y-6">
+      <Tabs value={manualTab || activeTab} onValueChange={setManualTab} className="space-y-6 max-sm:space-y-4">
         <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 lg:w-fit">
           {canDashboard && (
             <TabsTrigger value="dashboard" className="flex items-center gap-2">

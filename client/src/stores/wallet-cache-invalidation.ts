@@ -2,6 +2,7 @@ import { mobileShopApi } from './mobile-shop.api'
 import { reportsApi } from './reports.api'
 import { bankReconciliationApi } from './bankReconciliation.api'
 import { schoolApi } from './school.api'
+import { ledgerAlertsApi } from './ledgerAlerts.api'
 
 /**
  * Every RTK Query mutation that moves a Bank Account's balance or posts a Cash Book entry
@@ -32,4 +33,6 @@ export const invalidateWalletCaches = (dispatch: (action: unknown) => unknown) =
   dispatch(reportsApi.util.invalidateTags(['WalletBalanceStatement', 'BankPositionReport', 'BankReconciliationSessionsReport']))
   dispatch(bankReconciliationApi.util.invalidateTags(['ReconciliationSummary', 'UnreconciledEntries']))
   dispatch(schoolApi.util.invalidateTags(['BankAccount', 'AccountsDashboard']))
+  // Sales and payments change who is overdue — refresh the ledger colours (ledgerAlerts.api.ts).
+  dispatch(ledgerAlertsApi.util.invalidateTags(['LedgerStatus']))
 }

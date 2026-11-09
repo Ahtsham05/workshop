@@ -127,10 +127,14 @@ export const bulkAddCustomers = createAsyncThunk(
   // duplicateStrategy decides what happens to a row matching a customer that already
   // exists: 'skip' (default), 'update', or 'error'.
   catchAsync(async (
-    { customers, duplicateStrategy }: { customers: any[]; duplicateStrategy?: 'skip' | 'update' | 'error' },
+    {
+      customers,
+      duplicateStrategy,
+      openingBalanceDate,
+    }: { customers: any[]; duplicateStrategy?: 'skip' | 'update' | 'error'; openingBalanceDate?: string },
     { dispatch }
   ) => {
-    const response = await Axios.post(summery.bulkAddCustomers.url, { customers, duplicateStrategy })
+    const response = await Axios.post(summery.bulkAddCustomers.url, { customers, duplicateStrategy, openingBalanceDate })
     dispatch(customerApi.util.invalidateTags(['Customer']));
     return response.data
   })

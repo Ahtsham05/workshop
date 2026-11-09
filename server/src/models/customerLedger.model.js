@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { paginate, toJSON } = require('./plugins');
+const { ledgerDiscountSchema } = require('./schemas/ledgerDiscount.schema');
 
 // Transaction types for ledger entries
 const transactionTypes = {
@@ -13,6 +14,8 @@ const transactionTypes = {
   ADJUSTMENT: 'adjustment',
   OPENING_BALANCE: 'opening_balance',
   SALES_RETURN: 'sales_return',
+  // Settlement / cash discount we gave the customer — a credit with no cash movement.
+  DISCOUNT_ALLOWED: 'discount_allowed',
 };
 
 const customerLedgerSchema = new mongoose.Schema({
@@ -80,6 +83,15 @@ const customerLedgerSchema = new mongoose.Schema({
   notes: {
     type: String,
   },
+  /** Only on discount_allowed rows — see schemas/ledgerDiscount.schema.js. */
+  discount: {
+    type: ledgerDiscountSchema,
+    default: undefined,
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
 }, {
   timestamps: true,
 });
@@ -92,6 +104,8 @@ customerLedgerSchema.plugin(paginate);
 customerLedgerSchema.index({ customer: 1, transactionDate: -1 });
 customerLedgerSchema.index({ customer: 1, createdAt: -1 });
 customerLedgerSchema.index({ organizationId: 1, branchId: 1 });
+customerLedgerSchema.index({ organizationId: 1, transactionType: 1, transactionDate: -1 });
+customerLedgerSchema.index({ 'discount.linkedEntryId': 1 }, { sparse: true });
 
 const CustomerLedger = mongoose.model('CustomerLedger', customerLedgerSchema);
 

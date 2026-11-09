@@ -492,9 +492,36 @@ const getAdjustmentStats = async ({ organizationId, branchId, dateFrom, dateTo }
   return { byType, totalLossValue, totalAdjustments };
 };
 
+// ── Multi-warehouse (services/warehouse.service.js) ─────────────────────────────────────
+// Every adjustment (manual, stock count, warranty, repair part) lands in the warehouse it
+// names (`warehouseId` param), else the default; a reversal follows its original.
+const warehouseService = require('./warehouse.service');
+
+const createAdjustmentWithWarehouse = async (params = {}) => {
+  const warehouseId = params.warehouseId || null;
+  if (warehouseId) {
+    await warehouseService.assertDocWarehouse({ organizationId: params.organizationId, branchId: params.branchId, warehouseId });
+  }
+  const adjustment = await createAdjustment(params);
+  if (adjustment && adjustment._id) {
+    if (warehouseId) {
+      await StockAdjustment.updateOne({ _id: adjustment._id }, { $set: { warehouseId } });
+      adjustment.warehouseId = warehouseId;
+    }
+    await warehouseService.syncAdjustment(adjustment._id);
+  }
+  return adjustment;
+};
+
+const reverseAdjustmentWithWarehouse = async (params) => {
+  const reversal = await reverseAdjustment(params);
+  if (reversal && reversal._id) await warehouseService.syncAdjustment(reversal._id);
+  return reversal;
+};
+
 module.exports = {
-  createAdjustment,
-  reverseAdjustment,
+  createAdjustment: createAdjustmentWithWarehouse,
+  reverseAdjustment: reverseAdjustmentWithWarehouse,
   getAdjustmentById,
   queryAdjustments,
   getAdjustmentStats,

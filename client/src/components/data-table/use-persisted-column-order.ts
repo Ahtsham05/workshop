@@ -12,9 +12,22 @@ function loadColumnOrder(storageKey: string, defaultOrder: string[]): string[] {
       const saved: string[] = JSON.parse(raw)
       // Keep only ids that still exist (a column may have been removed/renamed since this
       // was saved) and append any new columns that weren't part of the saved order.
-      const savedValid = saved.filter((id) => defaultOrder.includes(id))
-      const missing = defaultOrder.filter((id) => !savedValid.includes(id))
-      return [...savedValid, ...missing]
+      const result = saved.filter((id) => defaultOrder.includes(id))
+      // A column added since then goes right after the column it follows in the default
+      // order (not at the very end, past "Actions").
+      defaultOrder.forEach((id, i) => {
+        if (result.includes(id)) return
+        let at = -1
+        for (let j = i - 1; j >= 0; j -= 1) {
+          const k = result.indexOf(defaultOrder[j])
+          if (k >= 0) {
+            at = k
+            break
+          }
+        }
+        result.splice(at + 1, 0, id)
+      })
+      return result
     }
   } catch {
     // Corrupt JSON or storage blocked (private browsing) — fall back to the definition order.

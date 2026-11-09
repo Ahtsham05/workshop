@@ -10,6 +10,7 @@ const createAdjustment = {
   // validation for the same pattern.
   body: Joi.object().keys({
     productId: Joi.string().custom(objectId).required(),
+    warehouseId: Joi.string().custom(objectId).allow('', null).optional(),
     variantId: Joi.string().custom(objectId),
     batchId: Joi.string().custom(objectId),
     // 'count' adjustments are only ever posted by a stock count (stockCount.service.js),

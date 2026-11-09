@@ -12,6 +12,7 @@ import {
   type PrintLanguage,
 } from '@/lib/native-language'
 import { toPrintLanguage } from '@/features/invoice/utils/language'
+import { discountReasonLabel, discountReasonUrdu, isDiscountType } from '@/features/ledger-discounts/lib/ledger-discounts'
 /** English or a native print language (Urdu, Arabic, Hindi — lib/native-language.ts). */
 export type BankStatementLanguage = PrintLanguage
 export type BankStatementParty = 'customer' | 'supplier'
@@ -29,6 +30,11 @@ export interface BankStatementRow {
   credit: number
   /** Running balance after this row. */
   balance: number
+  /** Reason code on a discount row (features/ledger-discounts). */
+  discountReason?: string
+  /** Rest of a discount row's details, for a proper line instead of the stored English text. */
+  discount?: { percent?: number; linkedAmount?: number; overLimit?: boolean; approvalNote?: string } | null
+  notes?: string
   /** Product lines, printed under the entry in the product-wise layout (sale invoices). */
   items?: BankStatementItem[]
 }
@@ -68,6 +74,8 @@ export interface BankStatementData {
   currencyMeta?: CurrencyOption
   /** 'products' lists each sale's items (qty × rate) under its entry. */
   layout?: 'bank' | 'products'
+  /** Print the "Discounts in this period" total (Settings → Ledger Discounts). Default on. */
+  showDiscountSummary?: boolean
 }
 
 const labels = {
@@ -86,6 +94,8 @@ const labels = {
     bill_adjustment: 'Bill adjustment (discount / tax / charges)',
     codes_title: 'Type codes',
     short_types: {
+      discount_allowed: 'DISC',
+      discount_received: 'DISC',
       sale: 'Sale',
       sale_manual: 'CP',
       payment_received: 'CV',
@@ -102,6 +112,7 @@ const labels = {
       refund: 'RF',
     } as Record<string, string>,
     code_meanings: {
+      DISC: 'Discount allowed / received (no cash)',
       Sale: 'Sale invoice',
       CP: 'Cash paid to customer',
       CV: 'Cash / payment received',
@@ -130,6 +141,19 @@ const labels = {
     total_credit: 'Total Credits',
     closing: 'Closing Balance',
     entries: 'entries',
+    discounts_label: 'Discounts in this period',
+    entry: 'entry',
+    with_payment: 'with payment',
+    settled: 'settled',
+    approved: 'Approved above limit',
+    credits_include: 'Credits include',
+    debits_include: 'Debits include',
+    b_payments: 'Payments',
+    b_discounts_c: 'Discount allowed',
+    b_discounts_s: 'Discount received',
+    b_returns: 'Returns',
+    b_other: 'Other credits',
+    b_other_s: 'Other debits',
     entries_label: 'Entries',
     col_date: 'Date',
     col_details: 'Transaction Details',
@@ -152,6 +176,8 @@ const labels = {
     credit: 'Credit',
     pending: 'Pending',
     types: {
+      discount_allowed: 'Discount Allowed',
+      discount_received: 'Discount Received',
       sale: 'Sale',
       sale_manual: 'Cash Paid',
       payment_received: 'Payment Received',
@@ -183,6 +209,8 @@ const labels = {
     bill_adjustment: 'بل ایڈجسٹمنٹ (رعایت / ٹیکس / اخراجات)',
     codes_title: '',
     short_types: {
+      discount_allowed: 'رعایت',
+      discount_received: 'رعایت',
       sale: 'فروخت',
       sale_manual: 'ادائیگی',
       payment_received: 'وصولی',
@@ -214,6 +242,19 @@ const labels = {
     total_credit: 'کل جمع',
     closing: 'اختتامی بیلنس',
     entries: 'اندراجات',
+    discounts_label: 'اس مدت میں رعایت',
+    entry: 'اندراج',
+    with_payment: 'ادائیگی کے ساتھ',
+    settled: 'کل ادا شدہ',
+    approved: 'حد سے زائد منظور شدہ',
+    credits_include: 'کل جمع میں شامل',
+    debits_include: 'کل بنام میں شامل',
+    b_payments: 'وصولیاں',
+    b_discounts_c: 'رعایت (دی گئی)',
+    b_discounts_s: 'رعایت (ملی)',
+    b_returns: 'واپسی',
+    b_other: 'دیگر جمع',
+    b_other_s: 'دیگر بنام',
     entries_label: 'اندراجات',
     col_date: 'تاریخ',
     col_details: 'تفصیل',
@@ -236,6 +277,8 @@ const labels = {
     credit: 'ادھار',
     pending: 'زیر التوا',
     types: {
+      discount_allowed: 'رعایت (دی گئی)',
+      discount_received: 'رعایت (ملی)',
       sale: 'فروخت',
       sale_manual: 'نقد ادائیگی',
       payment_received: 'وصولی',
@@ -267,6 +310,8 @@ const labels = {
     bill_adjustment: 'تسوية الفاتورة (خصم / ضريبة / رسوم)',
     codes_title: '',
     short_types: {
+      discount_allowed: 'خصم',
+      discount_received: 'خصم',
       sale: 'بيع',
       sale_manual: 'مدفوع',
       payment_received: 'مستلم',
@@ -298,6 +343,19 @@ const labels = {
     total_credit: 'إجمالي الدائن',
     closing: 'الرصيد الختامي',
     entries: 'قيود',
+    discounts_label: 'الخصومات في هذه الفترة',
+    entry: 'قيد',
+    with_payment: 'مع دفعة',
+    settled: 'إجمالي التسوية',
+    approved: 'معتمد فوق الحد',
+    credits_include: 'يشمل الدائن',
+    debits_include: 'يشمل المدين',
+    b_payments: 'المدفوعات',
+    b_discounts_c: 'خصم مسموح به',
+    b_discounts_s: 'خصم مكتسب',
+    b_returns: 'المرتجعات',
+    b_other: 'دائن آخر',
+    b_other_s: 'مدين آخر',
     entries_label: 'القيود',
     col_date: 'التاريخ',
     col_details: 'تفاصيل الحركة',
@@ -320,6 +378,8 @@ const labels = {
     credit: 'آجل',
     pending: 'معلّق',
     types: {
+      discount_allowed: 'خصم مسموح به',
+      discount_received: 'خصم مكتسب',
       sale: 'بيع',
       sale_manual: 'نقد مدفوع',
       payment_received: 'دفعة مستلمة',
@@ -351,6 +411,8 @@ const labels = {
     bill_adjustment: 'बिल समायोजन (छूट / कर / शुल्क)',
     codes_title: '',
     short_types: {
+      discount_allowed: 'छूट',
+      discount_received: 'छूट',
       sale: 'बिक्री',
       sale_manual: 'भुगतान',
       payment_received: 'प्राप्त',
@@ -382,6 +444,19 @@ const labels = {
     total_credit: 'कुल क्रेडिट',
     closing: 'अंतिम शेष',
     entries: 'प्रविष्टियाँ',
+    discounts_label: 'इस अवधि में छूट',
+    entry: 'प्रविष्टि',
+    with_payment: 'भुगतान के साथ',
+    settled: 'कुल निपटान',
+    approved: 'सीमा से ऊपर स्वीकृत',
+    credits_include: 'कुल क्रेडिट में',
+    debits_include: 'कुल डेबिट में',
+    b_payments: 'भुगतान',
+    b_discounts_c: 'दी गई छूट',
+    b_discounts_s: 'मिली छूट',
+    b_returns: 'वापसी',
+    b_other: 'अन्य क्रेडिट',
+    b_other_s: 'अन्य डेबिट',
     entries_label: 'प्रविष्टियाँ',
     col_date: 'दिनांक',
     col_details: 'लेन-देन विवरण',
@@ -404,6 +479,8 @@ const labels = {
     credit: 'उधार',
     pending: 'लंबित',
     types: {
+      discount_allowed: 'दी गई छूट',
+      discount_received: 'मिली छूट',
       sale: 'बिक्री',
       sale_manual: 'नकद भुगतान',
       payment_received: 'भुगतान प्राप्त',
@@ -476,6 +553,24 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
   const debitCount = rows.filter((r) => Number(r.debit) > 0).length
   const creditCount = rows.filter((r) => Number(r.credit) > 0).length
   const closingBalance = rows.length ? Number(rows[rows.length - 1].balance) || 0 : data.openingBalance
+  const discountRows = rows.filter((r) => isDiscountType(r.transactionType))
+  // What makes up the side that brings the balance DOWN (customer credits / supplier debits):
+  // payments, discounts, returns, anything else — so the total ties out line by line.
+  const reducing = (r: BankStatementRow) => Number(data.party === 'customer' ? r.credit : r.debit) || 0
+  const bucketOf = (r: BankStatementRow) => {
+    if (isDiscountType(r.transactionType)) return 'discounts'
+    if (/^payment_(received|made)$|^payment$/.test(r.transactionType)) return 'payments'
+    if (/return/.test(r.transactionType)) return 'returns'
+    return 'other'
+  }
+  const breakdown = { payments: { amount: 0, count: 0 }, discounts: { amount: 0, count: 0 }, returns: { amount: 0, count: 0 }, other: { amount: 0, count: 0 } }
+  rows.forEach((r) => {
+    const amt = reducing(r)
+    if (isZero(amt)) return
+    const b = breakdown[bucketOf(r) as keyof typeof breakdown]
+    b.amount += amt
+    b.count += 1
+  })
 
   const businessName = (native && data.companyNameUrdu?.trim()) || data.companyName?.trim() || 'Business'
   const accountName = (native && data.accountNameUrdu?.trim()) || data.accountName
@@ -489,10 +584,34 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
     if (terms && (row.transactionType === 'sale' || row.transactionType === 'purchase') && !row.isManual) {
       label += ` · ${terms}`
     }
+    if (isDiscountType(row.transactionType) && row.discountReason) {
+      label += ` · ${language === 'ur' ? discountReasonUrdu(row.discountReason) : discountReasonLabel(row.discountReason)}`
+    }
     return label
   }
 
   const colCount = 5
+
+  // A discount row's own words, in the print language: reason, %, the payment it came with,
+  // and what was settled — instead of the English text the server wrote. A description the
+  // user typed themselves is kept.
+  const isAutoDiscountText = (desc?: string) => !desc || /^discount (allowed|received)\b/i.test(desc.trim())
+  const discountDetails = (row: BankStatementRow) => {
+    const amount = (Number(row.debit) || 0) + (Number(row.credit) || 0)
+    const d = row.discount || {}
+    const parts: string[] = []
+    if (d.percent) parts.push(`<span class="num">${Math.round(Number(d.percent) * 100) / 100}%</span>`)
+    if (d.linkedAmount) {
+      parts.push(
+        `${L.with_payment} <span class="num">${figure(d.linkedAmount)}</span> → ${L.settled} <span class="num">${figure(Number(d.linkedAmount) + amount)}</span>`
+      )
+    }
+    const desc = row.description?.trim()
+    if (desc && !isAutoDiscountText(desc)) parts.push(escapeHtml(desc))
+    if (row.notes?.trim()) parts.push(escapeHtml(row.notes.trim()))
+    const approval = d.overLimit ? `<div class="desc approval">${L.approved}${d.approvalNote ? `: ${escapeHtml(d.approvalNote)}` : ''}</div>` : ''
+    return { inline: parts.join(' · '), approval }
+  }
 
   // No separate Reference column: the invoice/receipt number usually already sits in the
   // description ("Bill sent to party - Bill #BILL-…"), so only add it when it doesn't.
@@ -518,13 +637,15 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
   // ---------- Bank layout: Date | Details | Debit | Credit | Balance ----------
   const bankBody = rows
     .map((row) => {
+      const isDisc = isDiscountType(row.transactionType)
       const desc = row.description?.trim()
+      const disc = isDisc ? discountDetails(row) : null
       return `
-      <tr>
+      <tr${isDisc ? ' class="disc"' : ''}>
         <td class="c-date"><span class="ltr">${formatAppDate(new Date(row.date))}</span></td>
         <td class="c-details">
           <div class="type">${escapeHtml(typeLabel(row))}</div>
-          ${desc ? `<div class="desc">${escapeHtml(desc)}</div>` : ''}
+          ${disc ? (disc.inline ? `<div class="desc">${disc.inline}</div>` : '') + disc.approval : desc ? `<div class="desc">${escapeHtml(desc)}</div>` : ''}
           ${refLine(row, desc)}
         </td>
         <td class="c-amt">${amountCell(Number(row.debit) || 0)}</td>
@@ -558,7 +679,7 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
       const inv = invoiceNo(row)
       const items = row.items ?? []
 
-      type Line = { product: string; qty?: string; price?: string; debit: number; credit: number; muted?: boolean }
+      type Line = { product: string; qty?: string; price?: string; debit: number; credit: number; muted?: boolean; discount?: boolean }
       const lines: Line[] = []
       if (items.length) {
         let itemsTotal = 0
@@ -577,6 +698,14 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
         const diff = debit - itemsTotal
         if (!isZero(diff)) lines.push({ product: L.bill_adjustment, debit: diff, credit: 0, muted: true })
         if (!isZero(credit)) lines[lines.length - 1].credit = credit
+      } else if (isDiscountType(row.transactionType)) {
+        const disc = discountDetails(row)
+        lines.push({
+          product: `<span class="type">${escapeHtml(typeLabel(row))}</span>${disc.inline ? `<span class="desc-inline"> — ${disc.inline}</span>` : ''}${disc.approval}`,
+          debit,
+          credit,
+          discount: true,
+        })
       } else {
         const desc = row.description?.trim()
         lines.push({
@@ -592,7 +721,7 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
           const first = idx === 0
           const last = idx === span - 1
           return `
-      <tr class="${first ? 'grp' : 'sub'}${line.muted ? ' adj' : ''}">
+      <tr class="${first ? 'grp' : 'sub'}${line.muted ? ' adj' : ''}${line.discount ? ' disc' : ''}">
         ${first ? `<td class="p-date" rowspan="${span}"><span class="ltr">${formatAppDate(new Date(row.date))}</span></td>
         <td class="p-type" rowspan="${span}">${escapeHtml(type)}</td>
         ${showRefs ? `<td class="p-inv" rowspan="${span}"><span class="ltr">${inv ? escapeHtml(inv) : '—'}</span></td>` : ''}` : ''}
@@ -739,6 +868,15 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
     .summary > div:last-child .val { font-size: 1.3em; }
     .summary .val { font-size: 1.2em; font-weight: 700; margin-top: 2px; }
     .summary .cnt { font-size: 0.85em; color: #444; }
+    .disc-note { border: 1px solid #000; border-radius: 4px; padding: 5px 10px; margin: -6px 0 12px; font-weight: 600; }
+    .disc-note .num { font-weight: 800; }
+    .disc-note .cnt { font-weight: 500; color: #222; }
+    .disc-note .part { white-space: nowrap; font-weight: 500; }
+    .disc-note .part.strong { font-weight: 700; }
+    .disc-note .sep { color: #444; }
+    tr.disc td { font-style: italic; }
+    tr.disc .type { font-style: normal; }
+    .desc.approval { font-weight: 700; font-style: normal; }
     .side { font-size: 0.85em; font-weight: 700; margin-${start}: 5px; }
 
     table.register { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -836,6 +974,25 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
     <div><div class="lbl">${L.total_credit}</div><div class="val"><span class="num">${money(totalCredit)}</span></div><div class="cnt"><span class="ltr">${creditCount}</span> ${L.entries}</div></div>
     <div><div class="lbl">${L.closing}</div><div class="val">${balanceCell(closingBalance)}</div></div>
   </div>
+
+  ${
+    discountRows.length && data.showDiscountSummary !== false
+      ? `<div class="disc-note"><span class="lbl">${data.party === 'customer' ? L.credits_include : L.debits_include}:</span> ${(
+          [
+            ['payments', L.b_payments],
+            ['discounts', data.party === 'customer' ? L.b_discounts_c : L.b_discounts_s],
+            ['returns', L.b_returns],
+            ['other', data.party === 'customer' ? L.b_other : L.b_other_s],
+          ] as const
+        )
+          .filter(([k]) => breakdown[k].count > 0)
+          .map(
+            ([k, label]) =>
+              `<span class="part${k === 'discounts' ? ' strong' : ''}">${label} <span class="num">${money(breakdown[k].amount)}</span> <span class="cnt">(<span class="ltr">${breakdown[k].count}</span> ${breakdown[k].count === 1 ? L.entry : L.entries})</span></span>`
+          )
+          .join('<span class="sep"> · </span>')}</div>`
+      : ''
+  }
 
   ${registerHtml}
 

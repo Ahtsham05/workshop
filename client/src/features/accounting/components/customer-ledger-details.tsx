@@ -29,7 +29,7 @@ import { RootState } from '@/stores/store';
 import { AppDispatch } from '@/stores/store';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
-import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, FileText, List, LayoutGrid, ExternalLink, Target } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, FileText, List, LayoutGrid, ExternalLink, Target, FileStack, Boxes } from 'lucide-react';
 import { expiryBadge } from '@/features/reports/utils/expiry-badge';
 import { useNavigate } from '@tanstack/react-router';
 import * as XLSX from 'xlsx';
@@ -57,9 +57,20 @@ import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button';
 import { balanceBeforeFromLedgerEntry, fetchSupplierBalanceBeforeInvoice } from '@/features/invoice/utils/invoice-print-balance';
 import { LedgerStatementTable } from './ledger-statement-table';
+import {
+  discountReasonLabel,
+  indexLinkedDiscounts,
+  isDiscountType,
+  sumDiscounts,
+} from '@/features/ledger-discounts/lib/ledger-discounts';
+import { useLedgerDiscountSettings } from '@/features/ledger-discounts/hooks/use-ledger-discount-settings';
+import { CustomerProfitCard } from '@/features/customer-profit/components/customer-profit-card';
 import { LedgerCategoryCards, type LedgerCategoryGroup } from './ledger-category-cards';
 import { CommunicationLogPanel } from './communication-log-panel';
+import { LedgerInvoiceWiseView, LedgerProductWiseView, useLedgerInvoiceDetails } from './customer-ledger-detail-views';
 import { CustomerBalanceReconciliation } from './customer-balance-reconciliation';
+import { CustomerCreditCard } from '@/features/customers/credit/customer-credit-card';
+import { CustomerAgingCard } from '@/features/ledger-alerts/components/customer-aging-card';
 import { useGetLeadByCustomerIdQuery } from '@/stores/lead.api';
 import { Can } from '@/context/permission-context';
 import { LEDGER_STATEMENT_SORT, formatLedgerBalanceLabel, getLedgerBalanceTone } from '@/features/accounting/utils/ledger-display';
@@ -106,6 +117,16 @@ interface LedgerEntry {
   paymentMethod?: string;
   /** Sale terms from invoice: cash / credit / pending (not payment rail). */
   invoiceType?: string;
+  notes?: string;
+  /** Only on discount_allowed rows (features/ledger-discounts). */
+  discount?: {
+    reason?: string;
+    percent?: number;
+    linkedEntryId?: string;
+    linkedAmount?: number;
+    overLimit?: boolean;
+    approvalNote?: string;
+  } | null;
 }
 
 function formatLedgerInvoiceType(entry: LedgerEntry, t: (key: string) => string): string {
@@ -761,12 +782,14 @@ function getStoredStatementLayout(): StatementLayout {
   }
 }
 
-type LedgerViewMode = 'list' | 'category';
+/** list = plain statement · invoices = each sale with its products · products = one line per product sold. */
+type LedgerViewMode = 'list' | 'invoices' | 'products' | 'category';
+const LEDGER_VIEW_MODES: LedgerViewMode[] = ['list', 'invoices', 'products', 'category'];
 
 function getStoredLedgerViewMode(): LedgerViewMode {
   try {
     const stored = localStorage.getItem(CUSTOMER_LEDGER_VIEW_MODE_KEY);
-    if (stored === 'list' || stored === 'category') return stored;
+    if (LEDGER_VIEW_MODES.includes(stored as LedgerViewMode)) return stored as LedgerViewMode;
   } catch {
     /* ignore */
   }
@@ -823,6 +846,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
   };
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
+  const discountRules = useLedgerDiscountSettings('customer');
   const [printingRowId, setPrintingRowId] = useState<string | null>(null);
   const [printingStatement, setPrintingStatement] = useState(false);
   const [statementDialogOpen, setStatementDialogOpen] = useState(false);
@@ -887,7 +911,18 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
         'Invoice Type': formatLedgerInvoiceType(entry, t),
         'Debit': entry.debit > 0 ? entry.debit.toFixed(2) : '-',
         'Credit': entry.credit > 0 ? entry.credit.toFixed(2) : '-',
-        'Balance': entry.balance.toFixed(2)
+        'Balance': entry.balance.toFixed(2),
+        // Discount lines explain themselves in the sheet too.
+        'Discount reason': isDiscountType(entry.transactionType) ? discountReasonLabel(entry.discount?.reason) : '',
+        'Discount details': isDiscountType(entry.transactionType)
+          ? [
+              entry.discount?.percent ? `${entry.discount.percent}%` : '',
+              entry.discount?.linkedAmount ? `with payment ${entry.discount.linkedAmount}` : '',
+              entry.discount?.overLimit ? `approved over limit${entry.discount.approvalNote ? `: ${entry.discount.approvalNote}` : ''}` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ')
+          : '',
       }));
 
       const ws = XLSX.utils.json_to_sheet(data);
@@ -927,7 +962,11 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
   };
 
   const handleDeleteEntry = async (entry: LedgerEntry) => {
-    if (!confirm(t('Are you sure you want to delete this entry? This action cannot be undone.'))) {
+    const linkedDiscount = linkedDiscounts.get(String(entry.id || entry._id));
+    const message = linkedDiscount
+      ? `${t('Are you sure you want to delete this entry? This action cannot be undone.')}\n\n${t('The discount given with this payment will be deleted too')}: ${formatMoney(Number(linkedDiscount.credit) || 0)}`
+      : t('Are you sure you want to delete this entry? This action cannot be undone.');
+    if (!confirm(message)) {
       return;
     }
 
@@ -978,10 +1017,15 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
     const entryIndex = entries.findIndex(e => (e.id || e._id) === (entry.id || entry._id));
     const previousBalance = entryIndex > 0 ? entries[entryIndex - 1].balance : entry.balance - entry.credit + entry.debit;
 
+    // A discount given with this payment is its own row right after it — the receipt shows
+    // both, and the balance after BOTH.
+    const discountRow = linkedDiscounts.get(String(entry.id || entry._id));
     setSelectedPayment({
       entry,
+      discount: discountRow ? Number(discountRow.credit) || 0 : 0,
+      discountReason: discountRow?.discount?.reason,
       previousBalance,
-      currentBalance: entry.balance,
+      currentBalance: discountRow ? discountRow.balance : entry.balance,
     });
     setReceiptDialogOpen(true);
   };
@@ -995,10 +1039,21 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
     const closingBalance = entries.length > 0
       ? entries[entries.length - 1].balance
       : openingBalance;
-    return { periodDebit, periodCredit, closingBalance };
+    return { periodDebit, periodCredit, closingBalance, discount: sumDiscounts(entries) };
   }, [entries, openingBalance]);
 
+  const linkedDiscounts = useMemo(() => indexLinkedDiscounts(entries), [entries]);
+
   const categoryGroups = useMemo(() => groupCustomerLedgerEntries(entries), [entries]);
+
+  // Products of the sale invoices — only loaded for the invoice-wise / product-wise views.
+  const invoiceDetails = useLedgerInvoiceDetails({
+    customerId: customer._id,
+    entries,
+    startDate: dateRange.startDate,
+    endDate: dateRange.endDate,
+    enabled: viewMode === 'invoices' || viewMode === 'products',
+  });
 
   const totalCategoryActivity = useMemo(
     () => categoryGroups.reduce((sum, group) => sum + group.totalDebit + group.totalCredit, 0),
@@ -1413,6 +1468,9 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
             debit: Number(entry.debit) || 0,
             credit: Number(entry.credit) || 0,
             balance: Number(entry.balance) || 0,
+            discountReason: isDiscountType(entry.transactionType) ? entry.discount?.reason : undefined,
+            discount: isDiscountType(entry.transactionType) ? entry.discount : undefined,
+            notes: isDiscountType(entry.transactionType) ? entry.notes : undefined,
             items: invoice
               ? (invoice.items || []).map((item: any) => ({
                   name: item.name,
@@ -1437,6 +1495,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
         language: options.language,
         showReferences: options.showInvoiceNumbers,
         currencyMeta,
+        showDiscountSummary: discountRules.settings.showOnStatements,
       }, sheetSize);
 
       openPrintWindowForFormat(html, sheetSize);
@@ -1469,6 +1528,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
       adjustment: t('Adjustment'),
       opening_balance: t('Opening Balance'),
       purchase: t('Used Phone Purchase'),
+      discount_allowed: t('Discount Allowed'),
     };
     return labels[type] || type;
   };
@@ -1483,6 +1543,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
       adjustment: 'outline',
       opening_balance: 'outline',
       purchase: 'secondary',
+      discount_allowed: 'outline',
     };
     return variants[type] || 'outline';
   };
@@ -1535,6 +1596,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               editingEntry={editingEntry}
               defaultTransactionType={ledgerFormPreset?.transactionType}
               defaultPaymentMethod={ledgerFormPreset?.paymentMethod}
+              currentBalance={currentBalance ?? customer.balance ?? 0}
               onSuccess={(createdEntry) => {
                 handleCloseForm();
                 fetchLedgerEntries();
@@ -1544,10 +1606,13 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                 if (createdEntry && createdEntry.transactionType === 'payment_received') {
                   setTimeout(() => {
                     const previousBalance = currentBalance || 0;
-                    const newBalance = previousBalance - createdEntry.credit;
+                    const discount = Number(createdEntry.discountEntry?.credit) || 0;
+                    const newBalance = previousBalance - createdEntry.credit - discount;
 
                     setSelectedPayment({
                       entry: createdEntry,
+                      discount,
+                      discountReason: createdEntry.discountEntry?.discount?.reason,
                       previousBalance: previousBalance,
                       currentBalance: newBalance,
                     });
@@ -1758,6 +1823,8 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                 reference: selectedPayment.entry.reference,
                 paymentMethod: selectedPayment.entry.paymentMethod,
                 description: selectedPayment.entry.description,
+                discount: discountRules.settings.showOnReceipts ? selectedPayment.discount : 0,
+                discountReason: selectedPayment.discountReason,
               }}
               balance={{
                 previousBalance: selectedPayment.previousBalance,
@@ -1799,6 +1866,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                         name: customer.name,
                         amount: selectedPayment.entry.credit,
                         remainingBalance: selectedPayment.currentBalance,
+                        discount: selectedPayment.discount,
                         currency: currencyMeta.symbol,
                       })}
                       templateCategory="payment_received"
@@ -1819,6 +1887,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                         name: customer.name,
                         amount: selectedPayment.entry.credit,
                         remainingBalance: selectedPayment.currentBalance,
+                        discount: selectedPayment.discount,
                         currency: currencyMeta.symbol,
                       })}
                     />
@@ -1902,6 +1971,11 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               <p className="mt-1 text-lg font-semibold tabular-nums text-green-600">
                 {formatMoney(periodSummary.periodCredit)}
               </p>
+              {periodSummary.discount.count > 0 && (
+                <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                  {t('incl. discount allowed')} {formatMoney(periodSummary.discount.total)} ({periodSummary.discount.count})
+                </p>
+              )}
             </div>
             <div className="rounded-lg border px-4 py-3">
               <p className="text-xs text-muted-foreground">{t('Closing Balance')}</p>
@@ -1910,6 +1984,23 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               </p>
             </div>
           </div>
+
+          <CustomerProfitCard
+            customerId={customer._id}
+            customerName={customer.name}
+            startDate={dateRange.startDate}
+            endDate={dateRange.endDate}
+            className="mb-6"
+          />
+
+          <CustomerCreditCard customerId={customer._id} className="mb-6" />
+          <CustomerAgingCard
+            customerId={customer._id}
+            customerName={customer.name}
+            phone={customer.phone}
+            whatsapp={customer.whatsapp}
+            className="mb-6"
+          />
 
 
           {originLead && (
@@ -1948,32 +2039,48 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                   {' · '}
                   {totalResults} {t('entries')}
                 </span>
-                <div className="flex items-center gap-1 rounded-lg border p-1">
-                  <Button
-                    type="button"
-                    variant={viewMode === 'list' ? 'default' : 'ghost'}
-                    size="sm"
-                    className="h-8 gap-1.5"
-                    onClick={() => handleViewModeChange('list')}
-                  >
-                    <List className="h-4 w-4" />
-                    {t('List View')}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={viewMode === 'category' ? 'default' : 'ghost'}
-                    size="sm"
-                    className="h-8 gap-1.5"
-                    onClick={() => handleViewModeChange('category')}
-                  >
-                    <LayoutGrid className="h-4 w-4" />
-                    {t('Category View')}
-                  </Button>
+                <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border p-1">
+                  {([
+                    { mode: 'list', label: t('List View'), icon: List },
+                    { mode: 'invoices', label: t('Invoice-wise'), icon: FileStack },
+                    { mode: 'products', label: t('Product-wise'), icon: Boxes },
+                    { mode: 'category', label: t('Category View'), icon: LayoutGrid },
+                  ] as const).map(({ mode, label, icon: Icon }) => (
+                    <Button
+                      key={mode}
+                      type="button"
+                      variant={viewMode === mode ? 'default' : 'ghost'}
+                      size="sm"
+                      className="h-8 shrink-0 gap-1.5"
+                      onClick={() => handleViewModeChange(mode)}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {label}
+                    </Button>
+                  ))}
                 </div>
               </div>
 
               {viewMode === 'list' ? (
                 renderStatementTable(entries, { showOpeningBalance: true })
+              ) : viewMode === 'invoices' || viewMode === 'products' ? (
+                (() => {
+                  const ViewComponent = viewMode === 'invoices' ? LedgerInvoiceWiseView : LedgerProductWiseView;
+                  return (
+                    <ViewComponent
+                      entries={entries}
+                      openingBalance={openingBalance}
+                      detailsById={invoiceDetails.detailsById}
+                      loading={invoiceDetails.loading}
+                      failed={invoiceDetails.failed}
+                      t={t}
+                      getTypeLabel={getTransactionTypeLabel}
+                      getTypeBadgeVariant={getTransactionTypeBadge}
+                      renderReference={renderLedgerReference}
+                      renderActions={renderLedgerActions}
+                    />
+                  );
+                })()
               ) : (
                 <LedgerCategoryCards
                   groups={categoryGroups}

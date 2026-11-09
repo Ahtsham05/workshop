@@ -6,6 +6,8 @@ const customerLedgerService = require('./customerLedger.service');
 // Shared spreadsheet-cell parsing for the bulk import below — see utils/importRow.js
 const { toImportText, parseImportNumber, matchKey, phoneKey, isValidEmail } = require('../utils/importRow');
 const accountsSystemService = require('./accountsSystem.service');
+const { startOfBusinessDay } = require('../utils/businessTimezone');
+const creditControlService = require('./creditControl.service');
 
 /**
  * Create a customer
@@ -93,7 +95,7 @@ const updateCustomerById = async (customerId, updateBody) => {
         amount: newBalance,
         organizationId: customer.organizationId,
         branchId: customer.branchId,
-        transactionDate: customer.createdAt,
+        defaultDate: customer.createdAt,
       });
     }
   }
@@ -213,6 +215,10 @@ const bulkAddCustomers = async (customersToAdd, branchContext = {}, options = {}
   const duplicateStrategy = ['skip', 'update', 'error'].includes(options.duplicateStrategy)
     ? options.duplicateStrategy
     : 'skip';
+  // Optional "Opening balance date" for every imported opening balance (YYYY-MM-DD),
+  // stored at 00:00 Pakistan time — the same convention as receipts and other dated
+  // vouchers, so the opening balance sorts first on that day.
+  const openingBalanceDate = startOfBusinessDay(options.openingBalanceDate);
 
   // The whole branch's customers, projected down to the three fields duplicate matching
   // needs. Fetched in full rather than filtered by this batch's values because matching
@@ -220,8 +226,13 @@ const bulkAddCustomers = async (customersToAdd, branchContext = {}, options = {}
   // names match case-insensitively) — an $in on the raw values would miss exactly the
   // duplicates this is here to catch. Same approach as category.service.js#bulkAddCategories.
   const existing = await Customer.find({ organizationId, branchId })
-    .select('_id name phone email')
+    .select('_id name phone email creditLimit creditHold')
     .lean();
+  // Credit columns (creditControl.service.js): only someone allowed to manage credit limits
+  // may set a limit or a hold from a file; payment terms are an ordinary customer detail.
+  const canManageCredit = options.canManageCredit !== false;
+  const defaultCreditLimit = Number(options.defaultCreditLimit) || 0;
+  const creditChanges = [];
 
   const byPhone = new Map();
   const byEmail = new Map();
@@ -256,6 +267,9 @@ const bulkAddCustomers = async (customersToAdd, branchContext = {}, options = {}
 
     const creditLimit = parseImportNumber(row.creditLimit);
     if (!creditLimit.valid) return fail(`Credit limit "${row.creditLimit}" is not a number`);
+    if (creditLimit.value !== undefined && creditLimit.value < 0) return fail(`Credit limit "${row.creditLimit}" cannot be negative`);
+    const creditHold = creditControlService.parseYesNo(row.creditHold);
+    const terms = creditControlService.parsePaymentTerms(row.paymentTerms);
 
     const phone = toImportText(row.phone);
     const whatsapp = toImportText(row.whatsapp) || phone;
@@ -301,7 +315,24 @@ const bulkAddCustomers = async (customersToAdd, branchContext = {}, options = {}
     const customerType = matchKey(row.customerType);
     if (['retail', 'wholesale', 'vip', 'corporate'].includes(customerType)) fields.customerType = customerType;
     else if (customerType) warnings.push({ index, name, message: `Customer type "${row.customerType}" is not recognised — imported without it` });
-    if (creditLimit.value !== undefined) fields.creditLimit = creditLimit.value;
+    const wantsCredit = creditLimit.value !== undefined || (creditHold !== undefined && creditHold !== null);
+    if (wantsCredit && !canManageCredit) {
+      warnings.push({ index, name, message: 'Credit limit / hold left unchanged — you are not allowed to manage credit limits' });
+    } else {
+      if (creditLimit.value !== undefined) fields.creditLimit = creditLimit.value;
+      if (creditHold === null) {
+        warnings.push({ index, name, message: `Credit hold "${row.creditHold}" should be Yes or No — left unchanged` });
+      } else if (creditHold !== undefined) {
+        fields.creditHold = creditHold;
+        const holdReason = toImportText(row.creditHoldReason);
+        if (creditHold) {
+          fields.creditHoldReason = holdReason || 'Set by Excel import';
+          fields.creditHoldAt = new Date();
+        }
+      }
+    }
+    if (terms.value) fields.paymentTerms = terms.value;
+    else if (terms.invalid) warnings.push({ index, name, message: `Payment terms "${row.paymentTerms}" not recognised (use Cash, Due on receipt, Net 15, Net 30 or Net 60) — left unchanged` });
 
     if (match && duplicateStrategy === 'update') {
       // Only fields the file actually filled in — an empty cell means "no change",
@@ -312,12 +343,29 @@ const bulkAddCustomers = async (customersToAdd, branchContext = {}, options = {}
       Object.entries(fields).forEach(([key, value]) => {
         if (value !== '' && value !== undefined) set[key] = value;
       });
-      updateOps.push({ index, name, filter: { _id: match._id, organizationId, branchId }, set });
+      const updateOp = { index, name, filter: { _id: match._id, organizationId, branchId }, set };
+      if (set.creditHold === false) {
+        updateOp.unset = { creditHoldReason: '', creditHoldAt: '', creditHoldBy: '' };
+      }
+      updateOps.push(updateOp);
+      if (set.creditLimit !== undefined || set.creditHold !== undefined) {
+        creditChanges.push({
+          organizationId,
+          branchId,
+          customerId: match._id,
+          previousLimit: match.creditLimit || 0,
+          newLimit: set.creditLimit,
+          previousHold: Boolean(match.creditHold),
+          hold: set.creditHold,
+          holdReason: set.creditHoldReason,
+        });
+      }
       return;
     }
 
     validDocs.push({
       ...fields,
+      creditLimit: fields.creditLimit !== undefined ? fields.creditLimit : defaultCreditLimit,
       balance: balance.value ?? 0,
       organizationId,
       branchId,
@@ -353,7 +401,9 @@ const bulkAddCustomers = async (customersToAdd, branchContext = {}, options = {}
   if (updateOps.length) {
     try {
       const result = await Customer.bulkWrite(
-        updateOps.map((op) => ({ updateOne: { filter: op.filter, update: { $set: op.set } } })),
+        updateOps.map((op) => ({
+          updateOne: { filter: op.filter, update: op.unset ? { $set: op.set, $unset: op.unset } : { $set: op.set } },
+        })),
         { ordered: false },
       );
       updatedCount = Math.max(result.modifiedCount ?? 0, result.matchedCount ?? 0);
@@ -383,7 +433,9 @@ const bulkAddCustomers = async (customersToAdd, branchContext = {}, options = {}
           amount: customer.balance || 0,
           organizationId: customer.organizationId,
           branchId: customer.branchId,
-          transactionDate: customer.createdAt,
+          // The import's \"Opening balance date\" (e.g. the 1st of the month the books start),
+          // not the moment of the upload — falls back to creation time when not chosen.
+          transactionDate: openingBalanceDate || customer.createdAt,
         });
         await accountsSystemService.ensureCustomerAccount(
           { organizationId: customer.organizationId, branchId: customer.branchId, createdBy: customer.createdBy },
@@ -400,6 +452,22 @@ const bulkAddCustomers = async (customersToAdd, branchContext = {}, options = {}
       }
     });
   }
+
+  insertedCustomers.forEach((customer) => {
+    if ((customer.creditLimit || 0) > 0 || customer.creditHold) {
+      creditChanges.push({
+        organizationId: customer.organizationId,
+        branchId: customer.branchId,
+        customerId: customer._id,
+        previousLimit: 0,
+        newLimit: customer.creditLimit || 0,
+        previousHold: false,
+        hold: customer.creditHold || undefined,
+        holdReason: customer.creditHoldReason,
+      });
+    }
+  });
+  await creditControlService.recordImportChanges(creditChanges, options.actor);
 
   errors.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
 

@@ -47,6 +47,7 @@ import { BilingualName } from '@/components/bilingual-name'
 import { SerialPickDialog } from '@/components/serial-pick-dialog'
 import { InactiveProductMatches, pickerEmptyMessage, useInactiveProductMatches } from '@/components/inactive-product-matches'
 import { formatAppDate } from '@/lib/date-format'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 
 import { toPrintLanguage } from '@/features/invoice/utils/language'
 type LangFn = (key: string, vars?: Record<string, string | number>) => string
@@ -497,6 +498,9 @@ export function BulkTransferPanel({
   const [reason, setReason] = useState('')
   const [notes, setNotes] = useState('')
   const [transferDate, setTransferDate] = useState(() => getBusinessToday())
+  // Multi-warehouse: which warehouse of this branch the goods leave from.
+  const [fromWarehouseId, setFromWarehouseId] = useState('')
+  const warehousePicker = useWarehousePicker('any')
   const [lines, setLines] = useState<BulkTransferLine[]>(() => Array.from({ length: INITIAL_ROWS }, createEmptyRow))
 
   const [productSelectOpen, setProductSelectOpen] = useState('')
@@ -721,6 +725,7 @@ export function BulkTransferPanel({
         reason: reason.trim() || undefined,
         notes: notes.trim() || undefined,
         transferDate,
+        ...(warehousePicker.visible && fromWarehouseId ? { fromWarehouseId } : {}),
       }).unwrap()
       toast.success(t('Bulk transfer {{n}} created — {{count}} product(s) left the source branch', { n: result.transferNumber, count: String(filledLines.length) }))
       if (printWindow) {
@@ -796,6 +801,17 @@ export function BulkTransferPanel({
                   />
                 </div>
               </div>
+
+              {warehousePicker.visible ? (
+                <WarehouseField
+                  kind='any'
+                  id='bulk-from-warehouse'
+                  className='[&_label]:mb-1 [&_label]:text-xs [&_label]:font-normal [&_label]:text-muted-foreground'
+                  label={t('Send from warehouse')}
+                  value={fromWarehouseId}
+                  onValueChange={setFromWarehouseId}
+                />
+              ) : null}
 
               <div>
                 <label htmlFor='bulk-transfer-date' className='mb-1 block text-xs text-muted-foreground'>{t('Transfer date')}</label>

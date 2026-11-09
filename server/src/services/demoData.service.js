@@ -29,6 +29,7 @@ const {
 const invoiceService = require('./invoice.service');
 const purchaseService = require('./purchase.service');
 const expenseService = require('./expense.service');
+const expenseCategoryService = require('./expenseCategory.service');
 const walletService = require('./wallet.service');
 const customerLedgerService = require('./customerLedger.service');
 const supplierLedgerService = require('./supplierLedger.service');
@@ -288,6 +289,13 @@ const seedInvoices = async ({ organizationId, branchId, userId }, customers, pro
 
 const seedExpenses = async ({ organizationId, branchId, userId }) => {
   const created = [];
+  // Expense categories are no longer created automatically, so the sample expenses bring
+  // their own (find-or-create: a category the user already made is reused).
+  const categoryNames = [...new Set(EXPENSE_SEEDS.map((seed) => seed.category))];
+  for (const name of categoryNames) {
+    // eslint-disable-next-line no-await-in-loop
+    await expenseCategoryService.findOrCreateEmployeeCategory(organizationId, branchId, userId, name).catch(() => null);
+  }
   for (const seed of EXPENSE_SEEDS) {
     try {
       // eslint-disable-next-line no-await-in-loop

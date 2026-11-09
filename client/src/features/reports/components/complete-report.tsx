@@ -472,6 +472,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
             const overviewRows = [
               { Metric: 'Net Revenue', Value: pnl.revenue.netRevenue },
               { Metric: 'Cost of Goods Sold', Value: pnl.revenue.costOfGoodsSold },
+              { Metric: 'Direct Expenses', Value: pnl.revenue.directExpenses ?? 0 },
               { Metric: 'Gross Profit', Value: pnl.revenue.grossProfit },
               { Metric: 'Load Profit', Value: pnl.additionalProfits.loadProfit },
               { Metric: 'Repair Profit', Value: pnl.additionalProfits.repairProfit },
@@ -480,7 +481,8 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
               { Metric: 'Bill Net Profit', Value: pnl.additionalProfits.billNetProfit },
               { Metric: 'Withdrawal Profit', Value: pnl.additionalProfits.withdrawalProfit },
               { Metric: 'Deposit Profit', Value: pnl.additionalProfits.depositProfit },
-              { Metric: 'Expenses', Value: pnl.expenses },
+              { Metric: 'Indirect Expenses', Value: pnl.indirectExpenses ?? pnl.expenses },
+              { Metric: 'Expenses (all)', Value: pnl.expenses },
               { Metric: 'Net Profit', Value: pnl.netProfit },
             ]
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(overviewRows), 'Overview')
@@ -1492,7 +1494,8 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                       const isSimSale = row.module === 'Sim Sale'
                       const isCashManagement = row.module === 'Cash Management'
                       const totalCost = pnl?.revenue.costOfGoodsSold ?? 0
-                      const grossProfit = pnl?.revenue.grossProfit ?? 0
+                      // Sale − cost of goods only; direct expenses belong to the P&L, not this card.
+                      const grossProfit = pnl?.revenue.salesProfit ?? pnl?.revenue.grossProfit ?? 0
                       const loadProfit = pnl?.additionalProfits.loadProfit ?? 0
                       const simSaleProfit = pnl?.additionalProfits.simSaleProfit ?? 0
                       // Withdrawal/deposit commission earned on cash sent and received — the

@@ -34,6 +34,17 @@ import { invoiceApi } from '@/stores/invoice.api';
 import { customerPaymentApi } from '@/stores/customerPayment.api';
 import { formatMoneyWithMeta } from '@/lib/format-money';
 import { formatAppDate } from '@/lib/date-format'
+import { ledgerDiscountsApi } from '@/stores/ledgerDiscounts.api'
+import type { LedgerDiscountReason } from '@/stores/ledgerDiscounts.api'
+import { useLedgerDiscountSettings } from '@/features/ledger-discounts/hooks/use-ledger-discount-settings'
+import {
+  DISCOUNT_REASONS,
+  DISCOUNT_TYPE,
+  discountReasonLabel,
+  isDiscountType,
+} from '@/features/ledger-discounts/lib/ledger-discounts'
+import { SettlementDiscountFields } from '@/features/ledger-discounts/components/settlement-discount-fields'
+import { emptyDiscountDraft, resolveDiscount, type DiscountDraft } from '@/features/ledger-discounts/lib/discount-draft'
 
 interface LedgerEntryFormProps {
   ledgerType: 'customer' | 'supplier';
@@ -42,6 +53,8 @@ interface LedgerEntryFormProps {
   editingEntry?: any;
   defaultTransactionType?: string;
   defaultPaymentMethod?: string;
+  /** The party's balance now (customer: + = receivable, supplier: + = payable) — the discount ceiling. */
+  currentBalance?: number | null;
   onSuccess?: (entry?: any) => void;
   onCancel?: () => void;
 }
@@ -53,6 +66,7 @@ export function LedgerEntryForm({
   editingEntry,
   defaultTransactionType,
   defaultPaymentMethod,
+  currentBalance,
   onSuccess,
   onCancel,
 }: LedgerEntryFormProps) {
@@ -95,6 +109,27 @@ export function LedgerEntryForm({
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // ── Ledger discount (Discount Allowed / Received) ──
+  const discountType = DISCOUNT_TYPE[ledgerType];
+  const paymentType = ledgerType === 'customer' ? 'payment_received' : 'payment_made';
+  const discountRules = useLedgerDiscountSettings(ledgerType);
+  const [discountDraft, setDiscountDraft] = useState<DiscountDraft>(() =>
+    emptyDiscountDraft((editingEntry?.discount?.reason as LedgerDiscountReason) || discountRules.settings.defaultReason),
+  );
+  const [editDiscountReason, setEditDiscountReason] = useState<string>(editingEntry?.discount?.reason || '');
+  const outstanding = Math.max(0, Number(currentBalance) || 0);
+  const isStandaloneDiscount = formData.transactionType === discountType;
+  const showSettlementDiscount =
+    !entryId && formData.transactionType === paymentType && discountRules.available;
+  const paymentAmountForDiscount = ledgerType === 'customer' ? parseFloat(formData.credit) || 0 : parseFloat(formData.debit) || 0;
+  const resolvedDiscount = resolveDiscount(discountDraft, {
+    paymentAmount: isStandaloneDiscount ? 0 : paymentAmountForDiscount,
+    outstanding,
+    settings: discountRules.settings,
+    canApprove: discountRules.canApprove,
+    t,
+  });
+
   const customerTransactionTypes = [
     { value: 'sale', label: t('Cash Paid') },
     { value: 'payment_received', label: t('Cash Received') },
@@ -102,6 +137,7 @@ export function LedgerEntryForm({
     { value: 'debit_note', label: t('Debit Note') },
     { value: 'adjustment', label: t('Adjustment') },
     { value: 'opening_balance', label: t('Opening Balance') },
+    { value: 'discount_allowed', label: t('Discount Allowed') },
   ];
 
   const supplierTransactionTypes = [
@@ -112,6 +148,7 @@ export function LedgerEntryForm({
     { value: 'credit_note', label: t('Credit Note') },
     { value: 'adjustment', label: t('Adjustment') },
     { value: 'opening_balance', label: t('Opening Balance') },
+    { value: 'discount_received', label: t('Discount Received') },
   ];
 
   // Paying a supplier (Cash Paid) is money-out — show wallet balances there.
@@ -139,7 +176,13 @@ export function LedgerEntryForm({
     currencyMeta,
   );
 
-  const transactionTypes = ledgerType === 'customer' ? customerTransactionTypes : supplierTransactionTypes;
+  // The discount type only shows to people who may give one (or when editing one).
+  const transactionTypes = (ledgerType === 'customer' ? customerTransactionTypes : supplierTransactionTypes).filter(
+    (type) =>
+      !isDiscountType(type.value) ||
+      Boolean(entryId) ||
+      (discountRules.available && discountRules.settings.allowStandalone),
+  );
 
   // Determine which field should be enabled based on transaction type
   const getFieldState = (transactionType: string) => {
@@ -167,6 +210,8 @@ export function LedgerEntryForm({
   const handleTransactionTypeChange = (value: string) => {
     const newFieldState = getFieldState(value);
     const keepsCreditMethod = ledgerType === 'customer' && ['sale', 'debit_note', 'adjustment'].includes(value);
+    setDiscountDraft(emptyDiscountDraft(discountRules.settings.defaultReason));
+    setErrors({});
     setFormData({
       ...formData,
       transactionType: value,
@@ -180,7 +225,19 @@ export function LedgerEntryForm({
     const newErrors: Record<string, string> = {};
 
     if (!formData.transactionType) newErrors.transactionType = t('Transaction type is required');
+
+    // A discount on its own: amount comes from the discount box, description can be automatic.
+    if (isStandaloneDiscount && !entryId) {
+      if (resolvedDiscount.error || resolvedDiscount.amount <= 0) {
+        newErrors.discount = resolvedDiscount.error || t('Enter the discount amount');
+      }
+      setErrors(newErrors);
+      return Object.keys(newErrors).length === 0;
+    }
     if (!formData.description) newErrors.description = t('Description is required');
+    if (showSettlementDiscount && discountDraft.enabled && resolvedDiscount.error) {
+      newErrors.discount = resolvedDiscount.error;
+    }
     
     const debit = parseFloat(formData.debit) || 0;
     const credit = parseFloat(formData.credit) || 0;
@@ -223,8 +280,11 @@ export function LedgerEntryForm({
           transactionDate: date.toISOString(),
           description: formData.description,
           reference: formData.reference || undefined,
-          paymentMethod: resolvedPaymentMethod || undefined,
+          paymentMethod: isDiscountType(editingEntry?.transactionType) ? undefined : resolvedPaymentMethod || undefined,
           notes: formData.notes || undefined,
+          ...(isDiscountType(editingEntry?.transactionType) && editDiscountReason && editDiscountReason !== editingEntry?.discount?.reason
+            ? { discountReason: editDiscountReason }
+            : {}),
         };
 
         const url = ledgerType === 'customer'
@@ -245,17 +305,45 @@ export function LedgerEntryForm({
           ? `Wallet (${formData.walletType})`
           : formData.paymentMethod;
 
-        const createPayload = {
-          [ledgerType]: entityId,
-          transactionType: formData.transactionType,
-          transactionDate: date.toISOString(),
-          description: formData.description,
-          reference: formData.reference || undefined,
-          debit: parseFloat(formData.debit) || 0,
-          credit: parseFloat(formData.credit) || 0,
-          paymentMethod: resolvedPaymentMethod || undefined,
-          notes: formData.notes || undefined,
+        const discountDetails = {
+          reason: discountDraft.reason,
+          ...(resolvedDiscount.percent ? { percent: resolvedDiscount.percent, baseAmount: resolvedDiscount.baseAmount } : {}),
+          ...(resolvedDiscount.overLimit && discountDraft.approvalNote.trim() ? { approvalNote: discountDraft.approvalNote.trim() } : {}),
         };
+        const createPayload = isStandaloneDiscount
+          ? {
+              [ledgerType]: entityId,
+              transactionType: discountType,
+              transactionDate: date.toISOString(),
+              description:
+                formData.description.trim() ||
+                `${ledgerType === 'customer' ? t('Discount allowed') : t('Discount received')} — ${discountReasonLabel(discountDraft.reason, t)}`,
+              reference: formData.reference || undefined,
+              debit: ledgerType === 'supplier' ? resolvedDiscount.amount : 0,
+              credit: ledgerType === 'customer' ? resolvedDiscount.amount : 0,
+              notes: discountDraft.note.trim() || formData.notes || undefined,
+              discount: discountDetails,
+            }
+          : {
+              [ledgerType]: entityId,
+              transactionType: formData.transactionType,
+              transactionDate: date.toISOString(),
+              description: formData.description,
+              reference: formData.reference || undefined,
+              debit: parseFloat(formData.debit) || 0,
+              credit: parseFloat(formData.credit) || 0,
+              paymentMethod: resolvedPaymentMethod || undefined,
+              notes: formData.notes || undefined,
+              ...(showSettlementDiscount && discountDraft.enabled && resolvedDiscount.amount > 0
+                ? {
+                    settlementDiscount: {
+                      amount: resolvedDiscount.amount,
+                      ...discountDetails,
+                      ...(discountDraft.note.trim() ? { note: discountDraft.note.trim() } : {}),
+                    },
+                  }
+                : {}),
+            };
 
         const url = ledgerType === 'customer'
           ? summery.addCustomerLedgerEntry.url
@@ -271,6 +359,24 @@ export function LedgerEntryForm({
         // columns are now stale — and the user should be told which bills their money just
         // cleared, not left to go and check.
         const allocation = response.data?.invoiceAllocation;
+        const discountEntry = response.data?.discountEntry || (isStandaloneDiscount ? response.data : null);
+        if (discountEntry || isStandaloneDiscount) {
+          dispatch(ledgerDiscountsApi.util.invalidateTags(['DiscountRegister']));
+          // A discount settles invoices too, even without a payment.
+          if (ledgerType === 'customer') {
+            dispatch(invoiceApi.util.invalidateTags(['Invoice']));
+            dispatch(customerPaymentApi.util.invalidateTags(['CustomerPayment', 'CustomerAccount']));
+          } else {
+            dispatch(purchaseApi.util.invalidateTags(['Purchase']));
+            dispatch(supplierPaymentApi.util.invalidateTags(['SupplierPayment', 'SupplierAccount']));
+          }
+        }
+        const discountNote = discountEntry
+          ? `${ledgerType === 'customer' ? t('Discount allowed') : t('Discount received')}: ${formatMoneyWithMeta(
+              Number(discountEntry.credit || discountEntry.debit) || 0,
+              currencyMeta,
+            )}`
+          : '';
         if (allocation) {
           if (ledgerType === 'customer') {
             dispatch(invoiceApi.util.invalidateTags(['Invoice']));
@@ -294,13 +400,18 @@ export function LedgerEntryForm({
               allocation.unappliedAmount > 0
                 ? `${formatMoneyWithMeta(allocation.unappliedAmount, currencyMeta)} ${t('kept as advance')}`
                 : '',
+              discountNote,
             ]
               .filter(Boolean)
               .join(' · '),
           });
         } else if (allocation) {
           toast.success(t('Payment recorded'), {
-            description: `${t('No open invoices — kept as an advance against')} ${entityName}`,
+            description: [`${t('No open invoices — kept as an advance against')} ${entityName}`, discountNote].filter(Boolean).join(' · '),
+          });
+        } else if (isStandaloneDiscount) {
+          toast.success(ledgerType === 'customer' ? t('Discount allowed recorded') : t('Discount received recorded'), {
+            description: formatMoneyWithMeta(resolvedDiscount.amount, currencyMeta),
           });
         } else {
           toast.success(t('Ledger entry added successfully'));
@@ -374,12 +485,12 @@ export function LedgerEntryForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">{t('Description')} *</Label>
+            <Label htmlFor="description">{t('Description')}{isStandaloneDiscount && !entryId ? '' : ' *'}</Label>
             <Input
               id="description"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder={t('Enter description')}
+              placeholder={isStandaloneDiscount && !entryId ? t('Optional — written automatically from the reason') : t('Enter description')}
             />
             {errors.description && (
               <p className="text-sm text-red-600">{errors.description}</p>
@@ -397,6 +508,27 @@ export function LedgerEntryForm({
               />
             </div>
 
+            {isStandaloneDiscount || isDiscountType(editingEntry?.transactionType) ? (
+            <div className="space-y-2">
+              <Label>{t('Reason')}</Label>
+              {entryId ? (
+                <Select value={editDiscountReason || 'other'} onValueChange={setEditDiscountReason}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DISCOUNT_REASONS.map((r) => (
+                      <SelectItem key={r.value} value={r.value}>{t(r.label)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="flex min-h-9 items-center rounded-md border bg-muted/40 px-3 py-1 text-sm text-muted-foreground">
+                  {t('No cash moves')}
+                </p>
+              )}
+            </div>
+            ) : (
             <div className="space-y-2">
               <Label htmlFor="paymentMethod">{t('Payment Method')}</Label>
               <Select
@@ -431,7 +563,24 @@ export function LedgerEntryForm({
                 </p>
               )}
             </div>
+            )}
           </div>
+
+          {isStandaloneDiscount && !entryId ? (
+            <div className="space-y-1">
+              <SettlementDiscountFields
+                side={ledgerType}
+                draft={discountDraft}
+                onChange={setDiscountDraft}
+                paymentAmount={0}
+                outstanding={outstanding}
+                settings={discountRules.settings}
+                canApprove={discountRules.canApprove}
+                standalone
+              />
+              {errors.discount && <p className="text-sm text-red-600">{errors.discount}</p>}
+            </div>
+          ) : (
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -476,6 +625,23 @@ export function LedgerEntryForm({
               )}
             </div>
           </div>
+
+          )}
+
+          {showSettlementDiscount && (
+            <div className="space-y-1">
+              <SettlementDiscountFields
+                side={ledgerType}
+                draft={discountDraft}
+                onChange={setDiscountDraft}
+                paymentAmount={paymentAmountForDiscount}
+                outstanding={outstanding}
+                settings={discountRules.settings}
+                canApprove={discountRules.canApprove}
+              />
+              {errors.discount && discountDraft.enabled && <p className="text-sm text-red-600">{errors.discount}</p>}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="notes">{t('Notes')}</Label>

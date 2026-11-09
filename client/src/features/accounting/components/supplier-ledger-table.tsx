@@ -1,6 +1,6 @@
 import { formatDistanceToNow } from 'date-fns'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
-import { Eye } from 'lucide-react'
+import { ChevronRight, Eye } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -49,7 +49,53 @@ export function SupplierLedgerTable({ suppliers, loading, onSelectSupplier, pagi
             {t('No suppliers available')}
           </div>
         ) : (
-          <div className='border rounded-lg overflow-hidden'>
+          <>
+          {/* Phones: a tappable list — the 6-column table can't fit and was clipped. */}
+          <div className='divide-y overflow-hidden rounded-lg border sm:hidden'>
+            {suppliers.map((supplier) => (
+              // A div, not a <button>: the name cell holds its own photo-preview buttons.
+              <div
+                key={supplier._id}
+                role='button'
+                tabIndex={0}
+                className='flex w-full cursor-pointer items-center gap-3 px-3 py-3 text-left active:bg-muted/60'
+                onClick={() => onSelectSupplier(supplier)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onSelectSupplier(supplier)
+                  }
+                }}
+              >
+                <div className='min-w-0 flex-1 space-y-1'>
+                  <ContactMediaNameCell
+                    compact
+                    name={supplier.name}
+                    nameUrdu={supplier.nameUrdu}
+                    picture={supplier.picture}
+                    idCardFront={supplier.idCardFront}
+                    idCardBack={supplier.idCardBack}
+                  />
+                  <div className='flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground'>
+                    {supplier.phone ? <span className='tabular-nums'>{supplier.phone}</span> : null}
+                    {supplier.lastTransactionDate ? (
+                      <span>· {formatDistanceToNow(new Date(supplier.lastTransactionDate), { addSuffix: true })}</span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className='shrink-0 text-right'>
+                  <div className={`font-semibold tabular-nums ${getBalanceColor(supplier.balance)}`}>
+                    {formatBalance(supplier.balance)}
+                  </div>
+                  <div className={`text-[11px] font-medium ${getBalanceColor(supplier.balance)}`}>
+                    {supplier.balance > 0 ? t('Payable') : supplier.balance < 0 ? t('Receivable') : t('Settled')}
+                  </div>
+                </div>
+                <ChevronRight className='h-4 w-4 shrink-0 text-muted-foreground' />
+              </div>
+            ))}
+          </div>
+          <div className='border rounded-lg overflow-hidden max-sm:hidden'>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -133,6 +179,7 @@ export function SupplierLedgerTable({ suppliers, loading, onSelectSupplier, pagi
               </TableBody>
             </Table>
           </div>
+          </>
         )}
       </TableLoadingOverlay>
 

@@ -989,6 +989,9 @@ export const generateA4InvoiceHTML = (
 
   const documentDate = resolvePrintDocumentDate(data)
   const formattedDocumentDate = formatAppDate(documentDate)
+  // Due date (ledger alerts) — credit/pending sales only; stored at UTC midnight of the day.
+  const formattedDueDate =
+    data.dueDate && (data.type === 'credit' || data.type === 'pending') ? formatAppDate(String(data.dueDate).slice(0, 10)) : ''
 
   const headerBlock = `
 <div class="invoice-header">
@@ -1027,6 +1030,10 @@ export const generateA4InvoiceHTML = (
         <span class="info-label">${urduTexts.issue_date}</span>
         <span class="detail-value">${formattedDocumentDate}</span>
       </div>
+      ${formattedDueDate ? `<div class="info-row detail-row">
+        <span class="info-label">${urduTexts.due_date}</span>
+        <span class="detail-value">${formattedDueDate}</span>
+      </div>` : ''}
     </div>
   </div>
 `

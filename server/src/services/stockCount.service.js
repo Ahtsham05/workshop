@@ -14,6 +14,7 @@ const {
 } = require('../models');
 const productService = require('./product.service');
 const stockAdjustmentService = require('./stockAdjustment.service');
+const warehouseService = require('./warehouse.service');
 const { resolvePeriod, getBranchAnalytics } = require('./productAnalytics.service');
 const { matchesEitherImei } = require('./imei.service');
 
@@ -57,6 +58,12 @@ const todayKey = () => toBusinessCalendarDate(new Date());
 const shiftKey = (key, days) => toBusinessCalendarDate(new Date(parseBusinessDateBoundary(key, false).getTime() + days * DAY_MS + DAY_MS / 2));
 const daysBetweenKeys = (fromKey, toKey) =>
   Math.round((parseBusinessDateBoundary(toKey, false) - parseBusinessDateBoundary(fromKey, false)) / DAY_MS);
+
+/** Plan items re-based on one warehouse: its quantities, no serialized units. */
+const forWarehouse = async (items, { organizationId, branchId, warehouseId }) => {
+  const read = await warehouseService.quantityReader({ organizationId, branchId, warehouseId });
+  return items.filter((item) => item.kind !== 'serialized').map((item) => ({ ...item, systemQty: read(item.productId, item.variantId) }));
+};
 
 const requireBranch = (branchId) => {
   if (!branchId) throw new ApiError(httpStatus.BAD_REQUEST, 'Select a branch first — stock is counted per branch');
@@ -409,7 +416,11 @@ const createCount = async ({ organizationId, branchId, createdBy, body }) => {
   requireBranch(branchId);
   const { type } = body;
   const plan = await buildPlan({ organizationId, branchId });
-  const { policy, today, all } = plan;
+  const { policy, today } = plan;
+  // A count of one warehouse expects that warehouse's quantities; serialized units are
+  // tracked per branch, so they stay on branch-wide counts.
+  const warehouseId = body.warehouseId || null;
+  const all = warehouseId ? await forWarehouse(plan.all, { organizationId, branchId, warehouseId }) : plan.all;
   const openItems = new Set(all.filter((item) => item.onOpenCount).map((item) => item.key));
 
   let picked;
@@ -478,6 +489,7 @@ const createCount = async ({ organizationId, branchId, createdBy, body }) => {
         number,
         type,
         title: (body.title && body.title.trim()) || `${TYPE_TITLES[type]} — ${today}`,
+        warehouseId,
         notes: body.notes,
         blind,
         scheduledFor: type === 'cycle' ? today : undefined,
@@ -616,6 +628,7 @@ const getCount = async ({ organizationId, branchId, countId, canViewCost }) => {
   const hideCost = !canViewCost;
   const doc = await StockCount.findById(count._id)
     .populate('createdBy', 'name')
+    .populate('warehouseId', 'name code')
     .populate('submittedBy', 'name')
     .populate('postedBy', 'name')
     .populate('cancelledBy', 'name');
@@ -641,14 +654,18 @@ const queryCounts = async ({ organizationId, branchId, status, type }, options) 
   return StockCount.paginate(filter, {
     ...options,
     sortBy: options.sortBy || 'createdAt:desc',
-    populate: 'createdBy,postedBy',
+    populate: 'createdBy,postedBy,warehouseId',
   });
 };
 
 // ── Counting ────────────────────────────────────────────────────────────────────────
 
 /** Current on-hand quantity for each line (product stock, variant inventory). */
-const readOnHand = async (lines) => {
+const readOnHand = async (lines, count = null) => {
+  if (count && count.warehouseId) {
+    const read = await warehouseService.quantityReader({ organizationId: count.organizationId, branchId: count.branchId, warehouseId: count.warehouseId });
+    return (line) => read(line.productId, line.kind === 'variant' ? line.variantId : null);
+  }
   const productIds = lines.filter((l) => l.kind === 'product').map((l) => l.productId);
   const variantIds = lines.filter((l) => l.kind === 'variant').map((l) => l.variantId);
   const [products, inventories] = await Promise.all([
@@ -703,7 +720,7 @@ const recordCounts = async ({ organizationId, branchId, countId, entries, userId
   const lines = await StockCountLine.find({ _id: { $in: lineIds }, countId: count._id });
   if (lines.length !== lineIds.length) throw new ApiError(httpStatus.BAD_REQUEST, 'Some items are not on this count');
   const byId = new Map(lines.map((l) => [String(l._id), l]));
-  const onHand = await readOnHand(lines);
+  const onHand = await readOnHand(lines, count);
   const now = new Date();
 
   for (const entry of entries) {
@@ -786,7 +803,10 @@ const addLines = async ({ organizationId, branchId, countId, itemKeys }) => {
     StockCountLine.findOne({ countId: count._id }).sort({ sortKey: -1 }).select('sortKey').lean(),
   ]);
   const wanted = new Set(itemKeys);
-  const picked = withClasses(items, classes).filter((item) => wanted.has(item.key));
+  const scoped = count.warehouseId
+    ? await forWarehouse(items, { organizationId, branchId: count.branchId, warehouseId: count.warehouseId })
+    : items;
+  const picked = withClasses(scoped, classes).filter((item) => wanted.has(item.key));
   const fresh = picked.filter((item) => !openItems.has(item.key));
   if (fresh.length === 0) {
     throw new ApiError(httpStatus.BAD_REQUEST, picked.length ? 'Already on this or another open count' : 'Item not found in this branch');
@@ -876,6 +896,8 @@ const applyLine = async ({ count, line, delta, userId }) => {
     notes: line.note || undefined,
     stockCountId: count._id,
     createdBy: userId,
+    // Differences go into the counted warehouse (unset = branch default).
+    ...(count.warehouseId ? { warehouseId: count.warehouseId } : {}),
   };
   const adjustmentIds = [];
   const notes = [];
@@ -994,7 +1016,7 @@ const postCount = async ({ organizationId, branchId, countId, userId, uncountedP
 
   if (zeroUncounted) {
     const uncounted = lines.filter((l) => l.countedQty === null || l.countedQty === undefined);
-    const onHand = await readOnHand(uncounted.filter((l) => l.kind !== 'serialized'));
+    const onHand = await readOnHand(uncounted.filter((l) => l.kind !== 'serialized'), count);
     for (const line of uncounted) {
       if (line.kind === 'serialized') {
         const result = await checkSerialized(line, []);

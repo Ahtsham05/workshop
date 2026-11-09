@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { escapeHtml } from '@/lib/escape-html';
 import { useLanguage } from '@/context/language-context';
 import { paymentReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language';
+import { discountReasonLabel, discountReasonUrdu } from '@/features/ledger-discounts/lib/ledger-discounts';
 import { openPrintWindowForFormat } from '@/features/invoice/utils/print-utils';
 import { PAPER_FORMATS, useBranchPaperSize, useBranchPrintOrientation, withPrintOrientation, type PaperSize, type SheetSize } from '@/features/invoice/utils/paper-format';
 import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences';
@@ -79,6 +80,10 @@ interface PaymentReceiptProps {
     reference?: string;
     paymentMethod?: string;
     description?: string;
+    /** Discount given with this payment (its own ledger row). */
+    discount?: number;
+    /** Reason code, e.g. 'cash_discount' (features/ledger-discounts). */
+    discountReason?: string;
   };
   balance: {
     previousBalance: number;
@@ -144,6 +149,28 @@ export function PaymentReceipt({
   const language = printNative ? nativePrintLanguage() : resolveInvoiceLanguage({ userPreferredLanguage });
   const nativeNames = printNative || language !== 'en';
   const labels = paymentReceiptLabels[language];
+  const discountAmount = Math.abs(Number(payment.discount) || 0);
+  const hasDiscount = discountAmount > 0.004;
+  const discountReasonText = payment.discountReason
+    ? language === 'ur'
+      ? discountReasonUrdu(payment.discountReason)
+      : discountReasonLabel(payment.discountReason)
+    : '';
+  const discountLabel = (() => {
+    const supplier = partyType === 'supplier';
+    switch (language) {
+      case 'ur':
+        return supplier ? 'ملی رعایت' : 'رعایت';
+      case 'ar':
+        return supplier ? 'خصم مكتسب' : 'خصم مسموح به';
+      case 'hi':
+        return supplier ? 'मिली छूट' : 'दी गई छूट';
+      default:
+        return supplier ? 'Discount Received' : 'Discount Allowed';
+    }
+  })();
+  const settledLabel =
+    language === 'ur' ? 'کل ادائیگی' : language === 'ar' ? 'إجمالي التسوية' : language === 'hi' ? 'कुल निपटान' : 'Total Settled';
   const rtl = isRtlPrintLanguage(language);
   const dir = printDirection(language);
   const startAlign = rtl ? 'right' : 'left';
@@ -224,6 +251,8 @@ export function PaymentReceipt({
       description: payment.description,
       previousBalance: balance.previousBalance,
       currentBalance: balance.currentBalance,
+      discount: hasDiscount ? discountAmount : undefined,
+      discountReason: discountReasonText || undefined,
       company: printData.company,
       isTrial: printData.isTrial,
       formatMoney: formatCurrency,
@@ -600,6 +629,15 @@ export function PaymentReceipt({
       <span>${labels.previous_balance}:</span>
       <span>${formatCurrency(data.balance.previousBalance)}</span>
     </div>
+    ${hasDiscount ? `
+    <div class="amount-row">
+      <span>${discountLabel}${discountReasonText ? ` (${escapeHtml(discountReasonText)})` : ''}:</span>
+      <span>${formatCurrency(discountAmount)}</span>
+    </div>
+    <div class="amount-row">
+      <span><strong>${settledLabel}:</strong></span>
+      <span><strong>${formatCurrency(Math.abs(Number(data.payment.amount) || 0) + discountAmount)}</strong></span>
+    </div>` : ''}
     <div class="amount-row total">
       <span>${labels.remaining_balance}:</span>
       <span>
@@ -942,6 +980,21 @@ export function PaymentReceipt({
             <span>{labels.previous_balance}:</span>
             <span>{formatCurrency(balance.previousBalance)}</span>
           </div>
+          {hasDiscount && (
+            <>
+              <div className="amount-row">
+                <span>
+                  {discountLabel}
+                  {discountReasonText ? ` (${discountReasonText})` : ''}:
+                </span>
+                <span>{formatCurrency(discountAmount)}</span>
+              </div>
+              <div className="amount-row">
+                <span><strong>{settledLabel}:</strong></span>
+                <span><strong>{formatCurrency(Math.abs(Number(payment.amount) || 0) + discountAmount)}</strong></span>
+              </div>
+            </>
+          )}
           <div className="amount-row total">
             <span>{labels.remaining_balance}:</span>
             <span>

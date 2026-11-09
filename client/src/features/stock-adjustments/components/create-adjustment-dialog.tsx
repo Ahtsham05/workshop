@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { Check, ChevronDown, ListChecks, Loader2, Package, Search, ArrowUpCircle, ArrowDownCircle, Info } from 'lucide-react'
 
 import { useCreateAdjustmentMutation } from '@/stores/stockAdjustment.api'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 import type { AdjustmentDirection, AdjustmentType } from '@/stores/stockAdjustment.api'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { useLanguage } from '@/context/language-context'
@@ -56,6 +57,9 @@ export function CreateAdjustmentDialog({ open, onOpenChange, prefill }: CreateAd
   const [quantity, setQuantity] = useState('')
   const [reason, setReason] = useState('')
   const [notes, setNotes] = useState('')
+  // Multi-warehouse: which warehouse gains / loses the stock (default warehouse unless picked).
+  const [warehouseId, setWarehouseId] = useState('')
+  const warehousePicker = useWarehousePicker('any')
 
   // IMEI/serial-tracked products move per-unit, and only ever decrease via an adjustment
   // (see stockAdjustment.service.js#resolveSerializedTarget) — bringing stock back in
@@ -99,6 +103,7 @@ export function CreateAdjustmentDialog({ open, onOpenChange, prefill }: CreateAd
     setQuantity('')
     setReason('')
     setNotes('')
+    setWarehouseId('')
     setSearchQuery('')
     setSelectedImeis([])
     setSerialDialogOpen(false)
@@ -151,6 +156,7 @@ export function CreateAdjustmentDialog({ open, onOpenChange, prefill }: CreateAd
         ...(isSerialized ? { imeis: selectedImeis } : { quantity: qtyNum }),
         reason: reason.trim() || undefined,
         notes: notes.trim() || undefined,
+        ...(warehousePicker.visible && warehouseId ? { warehouseId } : {}),
       }).unwrap()
       toast.success(t('Stock adjustment recorded'))
       onOpenChange(false)
@@ -444,6 +450,7 @@ export function CreateAdjustmentDialog({ open, onOpenChange, prefill }: CreateAd
             </div>
           )}
 
+          <WarehouseField kind='any' id='adjustment-warehouse' label={t('Warehouse')} value={warehouseId} onValueChange={setWarehouseId} />
           <div className='space-y-1.5'>
             <Label>
               {t('Reason')} {type === 'other' ? <span className='text-destructive'>*</span> : <span className='text-muted-foreground'>({t('optional')})</span>}

@@ -71,7 +71,7 @@ const getSupplierStats = catchAsync(async (req, res) => {
 });
 
 const bulkAddSuppliers = catchAsync(async (req, res) => {
-  const { suppliers, duplicateStrategy } = req.body;
+  const { suppliers, duplicateStrategy, openingBalanceDate } = req.body;
 
   if (!suppliers || !Array.isArray(suppliers) || suppliers.length === 0) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Suppliers array is required');
@@ -83,7 +83,10 @@ const bulkAddSuppliers = catchAsync(async (req, res) => {
   // imported" failure product.controller.js had to fix for the same reason.
   await resolveWriteBranchId(req);
 
-  const result = await supplierService.bulkAddSuppliers(suppliers, getBranchContext(req), { duplicateStrategy });
+  const result = await supplierService.bulkAddSuppliers(suppliers, getBranchContext(req), {
+    duplicateStrategy,
+    openingBalanceDate,
+  });
 
   const failedCount = result.errors?.length || 0;
   const parts = [];

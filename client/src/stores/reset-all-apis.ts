@@ -41,6 +41,7 @@ import { inventoryTransferApi } from './inventoryTransfer.api'
 import { stockAdjustmentApi } from './stockAdjustment.api'
 import { manufacturingApi } from './manufacturing.api'
 import { stockCountApi } from './stockCount.api'
+import { warehouseApi } from './warehouse.api'
 import { productListApi } from './productList.api'
 import { inventoryCleanupApi } from './inventoryCleanup.api'
 import { warrantyClaimApi } from './warrantyClaim.api'
@@ -53,6 +54,8 @@ import { reminderApi } from './reminder.api'
 import { noteApi } from './note.api'
 import { chatApi } from './chat.api'
 import { leadApi } from './lead.api'
+import { creditControlApi } from './creditControl.api'
+import { ledgerAlertsApi } from './ledgerAlerts.api'
 
 // Every RTK Query slice registered in store.ts — kept as a flat list so this stays a
 // plain, dependency-free array of `.util.resetApiState` action creators, safely
@@ -66,9 +69,9 @@ const ALL_APIS = [
   whatsappCloudApi, smsGatewayApi, cashRegisterApi, imeiApi, usedPhoneBuybackApi,
   insightApi, purchaseSuggestionsApi, productAttributeApi, productVariantApi,
   productApi, inventoryApi, batchApi, brandApi, purchaseCatalogApi,
-  inventoryTransferApi, stockAdjustmentApi, stockCountApi, productListApi, inventoryCleanupApi, warrantyClaimApi, auditLogApi, aiAssistantApi,
+  inventoryTransferApi, stockAdjustmentApi, stockCountApi, warehouseApi, productListApi, inventoryCleanupApi, warrantyClaimApi, auditLogApi, aiAssistantApi,
   recurringExpenseApi, expenseApi, communicationLogApi, reminderApi, noteApi, chatApi, leadApi,
-  productAnalyticsApi, manufacturingApi,
+  productAnalyticsApi, manufacturingApi, creditControlApi, ledgerAlertsApi,
 ]
 
 /**

@@ -115,6 +115,8 @@ export const sidebarData: SidebarData = {
             { title: 'Stock Transfer', url: '/stock-transfer', icon: IconTransfer, anyPermission: ['viewStockTransfers', 'manageStockTransfers'] },
             { title: 'Stock Adjustments', url: '/stock-adjustments', icon: ClipboardEdit, anyPermission: ['viewStockAdjustments', 'manageStockAdjustments'] },
             { title: 'Stock Counts', url: '/stock-counts', icon: ClipboardCheck, anyPermission: ['viewProducts', 'countStock', 'approveStockCounts'] },
+            // Hidden until Settings → Warehouses turns the module on (use-filtered-nav-groups.ts).
+            { title: 'Warehouses', url: '/warehouses', icon: Warehouse, module: 'warehouses', anyPermission: ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers', 'viewProducts'] },
             { title: 'IMEI / Serial Tracking', url: '/mobile-shop/imei-tracking', icon: ShieldCheck, permission: 'viewImeiTracking' },
             { title: 'Warranty Claims', url: '/warranty-claims', icon: ShieldCheck, anyPermission: ['viewWarrantyClaims', 'manageWarrantyClaims', 'viewImeiTracking', 'viewProducts'] },
             { title: 'Price Checker', url: '/price-checker', icon: DollarSign, permission: 'viewPriceChecker' },

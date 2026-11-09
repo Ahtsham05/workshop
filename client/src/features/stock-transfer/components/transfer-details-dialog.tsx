@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import { ArrowDownToLine, Ban, Printer } from 'lucide-react'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -57,6 +58,10 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
 
   const [completeTransfer, { isLoading: completing }] = useCompleteTransferMutation()
+  // Multi-warehouse: which of this branch's warehouses incoming goods are received into.
+  const [receiveWarehouseId, setReceiveWarehouseId] = useState('')
+  const receivePicker = useWarehousePicker('receipt')
+  const receiveArg = (id: string) => (receivePicker.visible && receiveWarehouseId ? { id, toWarehouseId: receiveWarehouseId } : id)
   const [cancelTransfer, { isLoading: cancelling }] = useCancelTransferMutation()
   const busy = completing || cancelling
   const canManage = usePermissions().hasExplicitPermission('manageStockTransfers')
@@ -118,6 +123,15 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
             {first?.transferNumber && <span className='text-sm font-normal text-muted-foreground'>{first.transferNumber}</span>}
           </DialogTitle>
         </DialogHeader>
+        {receivableIds.length > 0 ? (
+          <WarehouseField
+            kind='receipt'
+            id='details-receive-warehouse'
+            label={t('Receive into warehouse')}
+            value={receiveWarehouseId}
+            onValueChange={setReceiveWarehouseId}
+          />
+        ) : null}
 
         {isFetching || !items ? (
           <div className='space-y-2'>
@@ -186,7 +200,7 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
                               size='sm'
                               variant='outline'
                               disabled={busy}
-                              onClick={() => runLineAction(() => completeTransfer(line.id).unwrap(), 'Stock received')}
+                              onClick={() => runLineAction(() => completeTransfer(receiveArg(line.id)).unwrap(), 'Stock received')}
                             >
                               <ArrowDownToLine className='mr-1 h-3.5 w-3.5' />
                               {t('Receive')}
@@ -221,7 +235,7 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
                   <Button
                     size='sm'
                     disabled={busy}
-                    onClick={() => runBulkAction(receivableIds, (id) => completeTransfer(id).unwrap(), 'All remaining products received')}
+                    onClick={() => runBulkAction(receivableIds, (id) => completeTransfer(receiveArg(id)).unwrap(), 'All remaining products received')}
                   >
                     <ArrowDownToLine className='mr-2 h-4 w-4' />
                     {t('Receive all remaining ({{count}})', { count: String(receivableIds.length) })}

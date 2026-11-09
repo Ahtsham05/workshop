@@ -5,6 +5,7 @@ import { imeiApi } from './imei.api'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
 import { batchApi } from './batch.api'
 import { invalidateWalletCaches } from './wallet-cache-invalidation'
+import { creditControlApi } from './creditControl.api'
 import type { PossibleDuplicate, RecordNavigationParams, RecordNavigationResult, TransactionHistoryResult } from './transactionHistory.types'
 
 /** Invoice mutations live in separate RTK Query slices from imeiApi/purchaseCatalogApi/
@@ -21,6 +22,8 @@ const invalidateDownstreamCaches = async (_arg: unknown, { dispatch, queryFulfil
     dispatch(imeiApi.util.invalidateTags(['Imei']))
     dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
     dispatch(batchApi.util.invalidateTags(['Batch']))
+    // A sale changes what the customer owes, so their credit used/available too.
+    dispatch(creditControlApi.util.invalidateTags(['CreditStatus', 'CreditOverview']))
     invalidateWalletCaches(dispatch)
   } catch {
     // mutation failed — nothing to invalidate

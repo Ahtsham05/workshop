@@ -1,5 +1,6 @@
 const Joi = require('joi');
 const { objectId } = require('./custom.validation');
+const { LEDGER_DISCOUNT_REASONS } = require('../models/schemas/ledgerDiscount.schema');
 
 const voucherLine = Joi.object().keys({
   sourceType: Joi.string().valid('customer', 'income').required(),
@@ -15,6 +16,12 @@ const voucherLine = Joi.object().keys({
   }),
   amount: Joi.number().positive().required(),
   description: Joi.string().trim().allow('', null).optional(),
+  discountAmount: Joi.number().min(0).optional(),
+  discountReason: Joi.string().valid(...LEDGER_DISCOUNT_REASONS).optional(),
+  discountPercent: Joi.number().min(0).max(100).optional().allow(null),
+  discountBaseAmount: Joi.number().min(0).optional().allow(null),
+  discountApprovalNote: Joi.string().trim().allow('', null).max(300).optional(),
+  discountNote: Joi.string().trim().allow('', null).max(300).optional(),
 });
 
 const createVoucher = {

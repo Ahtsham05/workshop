@@ -2,6 +2,7 @@ import { DEFAULT_PAGE_SIZE_OPTIONS, formatPageSize } from '@/lib/page-size'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { fitValueSize } from '@/lib/fit-value-size';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -967,21 +968,23 @@ export function PersonalLedger() {
   return (
     <div className="space-y-4">
       {/* Date Range Filter */}
-      <Card>
-        <CardContent className="pt-5 pb-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+      <Card className="max-sm:py-0">
+        <CardContent className="pt-5 pb-5 max-sm:p-3">
+          {/* Phones: start | end side by side ("Last 30 days" full width below); stacked under
+              360px, where two date fields at the 16px no-zoom font can't both fit. */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end max-sm:grid max-sm:grid-cols-1 max-sm:gap-2 min-[360px]:max-sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="wallet-start-date" className="text-sm font-medium">
                 {t('start_date')}
               </Label>
               <div className="relative">
-                <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none max-sm:hidden" />
                 <Input
                   id="wallet-start-date"
                   type="date"
                   value={startDate}
                   onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
-                  className="w-[180px] pl-9"
+                  className="w-[180px] pl-9 max-sm:w-full max-sm:px-0"
                 />
               </div>
             </div>
@@ -991,13 +994,13 @@ export function PersonalLedger() {
                 {t('end_date')}
               </Label>
               <div className="relative">
-                <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none max-sm:hidden" />
                 <Input
                   id="wallet-end-date"
                   type="date"
                   value={endDate}
                   onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
-                  className="w-[180px] pl-9"
+                  className="w-[180px] pl-9 max-sm:w-full max-sm:px-0"
                 />
               </div>
             </div>
@@ -1009,6 +1012,7 @@ export function PersonalLedger() {
                 setEndDate(format(new Date(), 'yyyy-MM-dd'));
                 setCurrentPage(1);
               }}
+              className="max-sm:col-span-full"
             >
               {t('last_30_days')}
             </Button>
@@ -1018,88 +1022,46 @@ export function PersonalLedger() {
 
       {/* Summary Cards — 2-up on phones, unchanged from sm up */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-6">
-        <Card>
-          <CardContent className="pt-5 pb-5 min-h-[110px]">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">{t('Total Money In')}</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(summary.totalCredit)}</p>
-              </div>
-              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                <ArrowDownLeft className="h-5 w-5 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-5 pb-5 min-h-[110px]">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">{t('total_money_out_expense')}</p>
-                <p className="text-2xl font-bold text-red-600">{formatCurrency(summary.totalDebit)}</p>
-              </div>
-              <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                <ArrowUpRight className="h-5 w-5 text-red-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-5 pb-5 min-h-[110px]">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">{t('Net Balance')}</p>
-                <p className={`text-2xl font-bold ${balanceColor}`}>
-                  {formatCurrency(summary.netBalance)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {summary.netBalance >= 0 ? t('Positive') : t('Negative')}
-                </p>
-              </div>
-              <div className={`h-10 w-10 rounded-full flex items-center justify-center ${summary.netBalance >= 0 ? 'bg-green-100' : 'bg-red-100'}`}>
-                <Wallet className={`h-5 w-5 ${balanceColor}`} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-5 pb-5 min-h-[110px]">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Opening Balance</p>
-                <p className="text-xl font-bold">{formatCurrency(reportAnalytics.openingBalance)}</p>
-              </div>
-              <TrendingUp className="h-5 w-5 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-5 pb-5 min-h-[110px]">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Closing Balance</p>
-                <p className="text-xl font-bold text-purple-600">{formatCurrency(reportAnalytics.closingBalance)}</p>
-              </div>
-              <Wallet className="h-5 w-5 text-purple-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-5 pb-5 min-h-[110px]">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Avg Transaction</p>
-                <p className="text-xl font-bold">{formatCurrency(reportAnalytics.avgTxn)}</p>
-              </div>
-              <Search className="h-5 w-5 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
+        <WalletStat
+          title={t('Total Money In')}
+          value={formatCurrency(summary.totalCredit)}
+          valueClassName="text-2xl text-green-600"
+          icon={<ArrowDownLeft className="h-5 w-5 text-green-600 max-sm:h-4 max-sm:w-4" />}
+          iconWrapClassName="bg-green-100"
+        />
+        <WalletStat
+          title={t('total_money_out_expense')}
+          value={formatCurrency(summary.totalDebit)}
+          valueClassName="text-2xl text-red-600"
+          icon={<ArrowUpRight className="h-5 w-5 text-red-600 max-sm:h-4 max-sm:w-4" />}
+          iconWrapClassName="bg-red-100"
+        />
+        <WalletStat
+          title={t('Net Balance')}
+          value={formatCurrency(summary.netBalance)}
+          valueClassName={`text-2xl ${balanceColor}`}
+          note={summary.netBalance >= 0 ? t('Positive') : t('Negative')}
+          icon={<Wallet className={`h-5 w-5 max-sm:h-4 max-sm:w-4 ${balanceColor}`} />}
+          iconWrapClassName={summary.netBalance >= 0 ? 'bg-green-100' : 'bg-red-100'}
+        />
+        <WalletStat
+          title="Opening Balance"
+          value={formatCurrency(reportAnalytics.openingBalance)}
+          valueClassName="text-xl"
+          icon={<TrendingUp className="h-5 w-5 text-blue-600 max-sm:h-4 max-sm:w-4" />}
+        />
+        <WalletStat
+          title="Closing Balance"
+          value={formatCurrency(reportAnalytics.closingBalance)}
+          valueClassName="text-xl text-purple-600"
+          icon={<Wallet className="h-5 w-5 text-purple-600 max-sm:h-4 max-sm:w-4" />}
+        />
+        <WalletStat
+          title="Avg Transaction"
+          value={formatCurrency(reportAnalytics.avgTxn)}
+          valueClassName="text-xl"
+          icon={<Search className="h-5 w-5 text-muted-foreground max-sm:h-4 max-sm:w-4" />}
+        />
       </div>
 
       {hasCategoryBreakdown && (
@@ -1157,12 +1119,12 @@ export function PersonalLedger() {
       {/* Toolbar */}
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap gap-2 items-center">
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <div className="relative">
+          <form onSubmit={handleSearch} className="flex gap-2 max-sm:w-full">
+            <div className="relative max-sm:min-w-0 max-sm:flex-1">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder={t('Search entries...')}
-                className="pl-8 w-52"
+                className="pl-8 w-52 max-sm:w-full"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -1171,7 +1133,7 @@ export function PersonalLedger() {
           </form>
 
           <Select value={filterType} onValueChange={(v) => { setFilterType(v); setCurrentPage(1); }}>
-            <SelectTrigger className="w-36">
+            <SelectTrigger className="w-36 max-sm:min-w-0 max-sm:flex-1">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1197,8 +1159,8 @@ export function PersonalLedger() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 xl:justify-end">
-          <Button variant="outline" size="sm" onClick={exportToExcel}>
+        <div className="flex flex-wrap gap-2 xl:justify-end max-sm:grid max-sm:grid-cols-2">
+          <Button variant="outline" size="sm" onClick={exportToExcel} className="max-sm:h-9">
             <Download className="w-4 h-4 mr-2" />
             {t('Export')}
           </Button>
@@ -1507,5 +1469,52 @@ export function PersonalLedger() {
         </SheetContent>
       </Sheet>
     </div>
+  );
+}
+
+/**
+ * One wallet summary tile. From sm up it is the original card; on phones (2-up, ~140px wide)
+ * the doubled card padding goes, the icon shrinks beside the title instead of covering it, and
+ * the amount shrinks to fit the tile.
+ */
+function WalletStat({
+  title,
+  value,
+  valueClassName,
+  note,
+  icon,
+  iconWrapClassName,
+}: {
+  title: string;
+  value: string;
+  valueClassName: string;
+  note?: string;
+  icon: React.ReactNode;
+  iconWrapClassName?: string;
+}) {
+  return (
+    <Card className="min-w-0 max-sm:py-0">
+      <CardContent className="pt-5 pb-5 min-h-[110px] max-sm:min-h-0 max-sm:p-3">
+        <div className="flex items-center justify-between max-sm:items-start max-sm:gap-2">
+          <div className="min-w-0 max-sm:@container max-sm:flex-1">
+            <p className="text-sm text-muted-foreground max-sm:text-xs max-sm:leading-snug">{title}</p>
+            <p
+              className={`font-bold tabular-nums max-sm:mt-1 max-sm:whitespace-nowrap max-sm:text-[length:var(--stat-fit)] ${valueClassName}`}
+              style={{ '--stat-fit': fitValueSize(value, 1.25, 0.8) } as React.CSSProperties}
+            >
+              {value}
+            </p>
+            {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
+          </div>
+          {iconWrapClassName ? (
+            <div className={`h-10 w-10 rounded-full flex items-center justify-center max-sm:h-7 max-sm:w-7 max-sm:shrink-0 ${iconWrapClassName}`}>
+              {icon}
+            </div>
+          ) : (
+            <span className="inline-flex max-sm:shrink-0">{icon}</span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

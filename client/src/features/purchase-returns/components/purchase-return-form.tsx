@@ -45,6 +45,7 @@ import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchAllSuppliers } from '@/stores/supplier.slice'
 import type { AppDispatch, RootState } from '@/stores/store'
 import { useFormatMoney } from '@/lib/format-money'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 type FormMode = 'fromSalesReturn' | 'fromPurchase' | 'freeForm'
@@ -218,6 +219,12 @@ export default function PurchaseReturnForm({
   const [purchaseSearch, setPurchaseSearch] = useState('')
   const [debouncedPurchaseSearch, setDebouncedPurchaseSearch] = useState('')
   const [selectedPurchase, setSelectedPurchase] = useState<any>(null)
+  // Multi-warehouse: which warehouse the goods leave from (starts on the purchase's warehouse).
+  const [warehouseId, setWarehouseId] = useState('')
+  const warehousePicker = useWarehousePicker('any')
+  useEffect(() => {
+    setWarehouseId('')
+  }, [selectedPurchase])
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedPurchaseSearch(purchaseSearch), 400)
@@ -399,6 +406,7 @@ export default function PurchaseReturnForm({
       refundMethod,
       reason,
       damageDescription,
+      ...(warehousePicker.visible && warehouseId ? { warehouseId } : {}),
     }
 
     try {
@@ -854,6 +862,14 @@ export default function PurchaseReturnForm({
                 />
               </div>
             </div>
+            <WarehouseField
+              kind='any'
+              id='purchase-return-warehouse'
+              label='Send back from warehouse'
+              value={warehouseId}
+              onValueChange={setWarehouseId}
+              preferredId={selectedPurchase?.warehouseId || null}
+            />
             <div className='space-y-2'>
               <Label>Damage Description (optional)</Label>
               <Textarea

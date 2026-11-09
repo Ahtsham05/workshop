@@ -381,7 +381,10 @@ export default function CountSheetPage({ countId }: { countId: string }) {
             )}
             {isFetching && <Loader2 className='size-3.5 animate-spin text-muted-foreground' />}
           </div>
-          <p className='mt-0.5 truncate text-sm text-muted-foreground'>{count.title}</p>
+          <p className='mt-0.5 truncate text-sm text-muted-foreground'>
+            {count.title}
+            {count.warehouseId && typeof count.warehouseId === 'object' ? ` · ${t('Warehouse')}: ${count.warehouseId.name}` : ''}
+          </p>
           {count.notes && <p className='mt-0.5 text-xs text-muted-foreground'>{count.notes}</p>}
         </div>
 

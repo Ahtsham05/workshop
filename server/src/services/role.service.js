@@ -224,10 +224,13 @@ const createDefaultRoles = async () => {
         viewSalesReturns: true, createSalesReturns: true, editSalesReturns: true,
         viewPurchaseReturns: true, createPurchaseReturns: true, editPurchaseReturns: true,
         viewCustomers: true, createCustomers: true, editCustomers: true, deleteCustomers: true,
+        manageCreditLimits: true, overrideCreditLimit: true, viewCustomerProfit: true,
         viewSuppliers: true, createSuppliers: true, editSuppliers: true, deleteSuppliers: true,
         viewCategories: true, createCategories: true, editCategories: true, deleteCategories: true,
         viewBrands: true, createBrands: true, editBrands: true, deleteBrands: true,
         viewAccounting: true, manageExpenses: true, manageLedgers: true, managePersonalWallet: true,
+        giveLedgerDiscount: true, approveLedgerDiscount: true,
+        viewLedgerFromVouchers: true,
         viewCashBook: true, manageCashBook: true, viewCashRegister: true, manageCashRegister: true,
         viewAccountsSystem: true, manageAccountsSystem: true,
         viewWallet: true, manageWallet: true,
@@ -389,6 +392,15 @@ const SPLIT_PERMISSIONS = [
   ['viewTeamReports', ['viewReports']],
   ['viewBillPaymentReports', ['viewReports']],
   ['viewMobilePhoneReports', ['viewReports']],
+  // Whoever could edit a customer could already type its credit limit (2026-11).
+  ['manageCreditLimits', ['editCustomers']],
+  // Ledger discounts (2026-11) were recorded as plain ledger adjustments before — whoever
+  // could post ledger entries keeps that ability. Approving over-limit is NOT backfilled.
+  ['giveLedgerDiscount', ['manageLedgers', 'viewAccounting']],
+  // Whoever could already open customer/supplier ledgers sees them from vouchers too.
+  ['viewLedgerFromVouchers', ['viewAccounting', 'manageLedgers', 'viewPayments']],
+  // Customer profit shows cost — only roles that could already see Profit & Loss get it.
+  ['viewCustomerProfit', ['viewProfitLossReports']],
   // Open to every signed-in user before they became permissions.
   ['useNotes', null],
   ['useTeamChat', null],

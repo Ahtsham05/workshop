@@ -9,6 +9,7 @@ const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const accountsSystemService = require('./accountsSystem.service');
 const logger = require('../config/logger');
+const { runSerial } = require('../utils/serialQueue');
 const { addTokenSearch } = require('../utils/searchQuery');
 
 /**
@@ -19,10 +20,25 @@ const { addTokenSearch } = require('../utils/searchQuery');
 const postCustomerLedgerToAccounts = (entry) => {
   if (!entry) return;
   const scope = { organizationId: entry.organizationId, branchId: entry.branchId, createdBy: entry.createdBy };
+  // Postings for one organization run one after another (utils/serialQueue.js): a payment
+  // and the discount given with it are written back to back, and posting them at the same
+  // time could race on creating the same account and silently lose one journal entry.
+  if (entry.transactionType === 'discount_allowed') {
+    runSerial(entry.organizationId, () =>
+      accountsSystemService.postCustomerDiscount(scope, {
+        amount: entry.credit,
+        ledgerId: entry._id,
+        customerId: entry.customer,
+        description: entry.description || 'Discount allowed',
+        date: entry.transactionDate,
+      })
+    ).catch(() => {});
+    return;
+  }
   const isManualPayment = entry.transactionType === 'payment_received' && !entry.referenceId;
   if (!isManualPayment) return;
-  accountsSystemService
-    .postCustomerPayment(scope, {
+  runSerial(entry.organizationId, () =>
+    accountsSystemService.postCustomerPayment(scope, {
       amount: entry.credit,
       paymentMethod: entry.paymentMethod,
       ledgerId: entry._id,
@@ -30,7 +46,7 @@ const postCustomerLedgerToAccounts = (entry) => {
       description: entry.description || 'Customer payment received',
       date: entry.transactionDate,
     })
-    .catch(() => {});
+  ).catch(() => {});
 };
 
 const isWalletLedgerMethod = (paymentMethod) => {
@@ -122,6 +138,10 @@ const syncCashBookFromCustomerLedger = async (entry) => {
   await cashBookService.deleteEntriesByReference(entry._id, 'CustomerLedger');
 
   const transactionType = String(entry.transactionType || '').toLowerCase();
+  // A discount moves no money — never a Cash Book line, whatever paymentMethod says.
+  if (transactionType === 'discount_allowed') {
+    return null;
+  }
   const debitAmt = Number(entry.debit) || 0;
   const creditAmt = Number(entry.credit) || 0;
 
@@ -351,7 +371,55 @@ const getOpeningBalanceBeforeDate = async (baseFilter, startDate) => {
  * @param {Object} ledgerBody
  * @returns {Promise<CustomerLedger>}
  */
-const createLedgerEntry = async (ledgerBody, options = {}) => {
+const createLedgerEntry = async (rawLedgerBody, options = {}) => {
+  // eslint-disable-next-line global-require
+  const ledgerDiscountService = require('./ledgerDiscount.service');
+  const { settlementDiscount, ...ledgerBody } = rawLedgerBody;
+
+  // A discount given on its own (rebate, write-off): check the rules before writing.
+  if (ledgerBody.transactionType === 'discount_allowed' && !options.discountEvaluated) {
+    const plan = await ledgerDiscountService.evaluateDiscount({
+      side: 'customer',
+      organizationId: ledgerBody.organizationId,
+      partyId: ledgerBody.customer,
+      discount: { ...(ledgerBody.discount || {}), amount: ledgerBody.credit || ledgerBody.debit },
+      notes: ledgerBody.notes,
+      canApprove: options.canApproveDiscount,
+    });
+    Object.assign(
+      ledgerBody,
+      ledgerDiscountService.buildDiscountRow({
+        side: 'customer',
+        partyId: ledgerBody.customer,
+        plan,
+        base: ledgerBody,
+        description: ledgerBody.description,
+        notes: ledgerBody.notes,
+        reference: ledgerBody.reference,
+      })
+    );
+    delete ledgerBody.paymentMethod;
+    delete ledgerBody.referenceId;
+  }
+
+  // "Received 9,950 + 50 discount": validate the discount BEFORE the payment is written, so a
+  // refused discount never leaves the payment half-posted on its own.
+  let discountPlan = null;
+  const hasSettlementDiscount =
+    settlementDiscount && Number(settlementDiscount.amount) > 0 &&
+    ledgerBody.transactionType === 'payment_received' && !ledgerBody.referenceId;
+  if (hasSettlementDiscount) {
+    discountPlan = await ledgerDiscountService.evaluateDiscount({
+      side: 'customer',
+      organizationId: ledgerBody.organizationId,
+      partyId: ledgerBody.customer,
+      discount: settlementDiscount,
+      paymentAmount: Number(ledgerBody.credit) || 0,
+      notes: settlementDiscount.note || ledgerBody.notes,
+      canApprove: options.canApproveDiscount,
+    });
+  }
+
   // Create the entry first
   const entry = await CustomerLedger.create({
     ...ledgerBody,
@@ -398,6 +466,19 @@ const createLedgerEntry = async (ledgerBody, options = {}) => {
       // The ledger entry itself is already correct; a failed allocation must not undo it.
       logger.error(`Failed to allocate customer ledger payment ${updatedEntry._id}: ${error.message}`);
     }
+  }
+
+  if (discountPlan) {
+    const discountEntry = await ledgerDiscountService.createLinkedDiscount({
+      side: 'customer',
+      paymentEntry: updatedEntry,
+      plan: discountPlan,
+      input: settlementDiscount,
+      user: options.user,
+    });
+    updatedEntry.$locals.discountEntry = discountEntry.toJSON();
+    const discountAllocation = discountEntry.$locals?.invoiceAllocation;
+    if (discountAllocation) updatedEntry.$locals.discountAllocation = discountAllocation;
   }
 
   return updatedEntry;
@@ -577,15 +658,29 @@ const updateLedgerEntry = async (id, updateBody) => {
   }
 
   const previousSnapshot = resolvePaymentSnapshot(entry);
+  const previousDate = entry.transactionDate ? new Date(entry.transactionDate).getTime() : null;
 
   // Don't allow changing customer or amounts after creation for audit trail
   delete updateBody.customer;
   delete updateBody.debit;
   delete updateBody.credit;
   delete updateBody.balance;
+  delete updateBody.transactionType;
 
-  Object.assign(entry, updateBody);
+  const { discountReason, ...rest } = updateBody;
+  if (entry.transactionType === 'discount_allowed') {
+    // A discount has no payment rail.
+    delete rest.paymentMethod;
+    if (discountReason) {
+      entry.discount = { ...(entry.discount?.toObject?.() || entry.discount || {}), reason: discountReason };
+    }
+  }
+
+  Object.assign(entry, rest);
   await entry.save();
+  if (previousDate !== null && rest.transactionDate && new Date(entry.transactionDate).getTime() !== previousDate) {
+    await recalculateBalances(entry.customer);
+  }
   await syncWalletFromCustomerLedger(entry, previousSnapshot);
   await syncCashBookFromCustomerLedger(entry);
   postCustomerLedgerToAccounts(entry);
@@ -598,6 +693,13 @@ const updateLedgerEntry = async (id, updateBody) => {
   await customerPaymentService.syncAllocationForLedgerEntry(entry).catch((error) => {
     logger.error(`Failed to resync customer payment allocation for ${entry._id}: ${error.message}`);
   });
+
+  if (entry.transactionType === 'payment_received') {
+    // eslint-disable-next-line global-require
+    await require('./ledgerDiscount.service').syncLinkedDiscountDates('customer', entry).catch((error) => {
+      logger.error(`Failed to keep linked discount in step with ${entry._id}: ${error.message}`);
+    });
+  }
 
   return entry;
 };
@@ -647,6 +749,13 @@ const deleteLedgerEntry = async (id) => {
   const transactionDate = entry.transactionDate;
   const previousSnapshot = resolvePaymentSnapshot(entry);
 
+  // A discount given with this payment goes with it — leaving it would forgive a balance
+  // that is owed again now the payment is gone.
+  if (entry.transactionType === 'payment_received') {
+    // eslint-disable-next-line global-require
+    await require('./ledgerDiscount.service').deleteLinkedDiscounts('customer', entry._id);
+  }
+
   // Whatever this payment had settled goes back to being outstanding. Handled by a
   // dedicated release (not voidPayment) because voidPayment deletes the ledger entry —
   // the two would call each other in a loop.
@@ -690,9 +799,17 @@ const deleteLedgerEntry = async (id) => {
  */
 const getAllCustomersWithBalances = async (filter = {}) => {
   const customers = await Customer.find({ isEmployeeAccount: { $ne: true }, isSupplierAccount: { $ne: true }, ...filter }).select(
-    'name nameUrdu phone whatsapp email balance picture idCardFront idCardBack',
+    'name nameUrdu phone whatsapp email balance picture idCardFront idCardBack creditLimit tempCreditLimit creditHold',
   );
-  
+  // Credit limit / used / available per row (one pending-invoice query for the whole list).
+  // eslint-disable-next-line global-require
+  const creditControlService = require('./creditControl.service');
+  const creditById = filter.organizationId
+    ? new Map(
+        (await creditControlService.summarizeCustomers(filter.organizationId, customers)).map((row) => [row.customerId, row])
+      )
+    : new Map();
+
   const customersWithBalances = await Promise.all(
     customers.map(async (customer) => {
       const lastTransaction = await CustomerLedger.findOne({ customer: customer._id })
@@ -712,6 +829,7 @@ const getAllCustomersWithBalances = async (filter = {}) => {
         idCardFront: customer.idCardFront,
         idCardBack: customer.idCardBack,
         lastTransactionDate: lastTransaction ? lastTransaction.transactionDate : null,
+        credit: creditById.get(String(customer._id)) || null,
       };
     })
   );
@@ -814,14 +932,20 @@ const deleteLedgerEntriesByReference = async (referenceId) => {
  * @param {Date} [params.transactionDate]
  * @returns {Promise<void>}
  */
-const syncOpeningBalanceEntry = async ({ customerId, amount, organizationId, branchId, transactionDate }) => {
+const syncOpeningBalanceEntry = async ({ customerId, amount, organizationId, branchId, transactionDate, defaultDate }) => {
   const numericAmount = Number(amount || 0);
-  const openingDate = transactionDate ? new Date(transactionDate) : new Date();
 
   const existing = await CustomerLedger.findOne({
     customer: customerId,
     transactionType: 'opening_balance',
   }).sort({ transactionDate: 1, createdAt: 1 });
+
+  // An explicit date wins (the import's "Opening balance date"). Otherwise an existing
+  // entry keeps the date it already has — editing the amount must not drag a backdated
+  // opening balance forward — and a brand-new one falls back to defaultDate / now.
+  const openingDate = transactionDate
+    ? new Date(transactionDate)
+    : (existing && existing.transactionDate) || (defaultDate ? new Date(defaultDate) : new Date());
 
   let recalcFrom = openingDate;
 
@@ -838,6 +962,9 @@ const syncOpeningBalanceEntry = async ({ customerId, amount, organizationId, bra
   const credit = numericAmount < 0 ? Math.abs(numericAmount) : 0;
 
   if (existing) {
+    // Running balances must be rebuilt from the EARLIER of the old and new dates, or a
+    // forward move would leave the rows in between carrying the opening amount twice.
+    const previousDate = existing.transactionDate;
     existing.organizationId = existing.organizationId || organizationId;
     existing.branchId = existing.branchId || branchId;
     existing.transactionDate = openingDate;
@@ -845,7 +972,7 @@ const syncOpeningBalanceEntry = async ({ customerId, amount, organizationId, bra
     existing.debit = debit;
     existing.credit = credit;
     existing.reference = 'OPENING-BALANCE';
-    recalcFrom = existing.transactionDate;
+    recalcFrom = previousDate && previousDate < openingDate ? previousDate : openingDate;
     await existing.save();
   } else {
     const entry = await CustomerLedger.create({

@@ -163,6 +163,10 @@ export function resolveCustomerLedgerCategory(entry: LedgerStatementEntry): Cust
     return { key: 'payment_made', labelKey: 'Payment Made', sortOrder: 19 };
   }
 
+  if (type === 'discount_allowed') {
+    return { key: 'discount_allowed', labelKey: 'Discount Allowed', sortOrder: 20 };
+  }
+
   if (type === 'credit_note') {
     return { key: 'credit_note', labelKey: 'Credit Note', sortOrder: 21 };
   }

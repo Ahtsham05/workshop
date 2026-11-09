@@ -46,15 +46,16 @@ export function ExpenseCategorySection({
 
   return (
     <div ref={sectionRef}>
-    <Card>
-      <CardHeader>
+    <Card className="max-sm:gap-4 max-sm:py-4">
+      <CardHeader className="max-sm:px-3">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <CardTitle>{t('expense_by_category')}</CardTitle>
             <CardDescription>{t('Click a category to view its details')}</CardDescription>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          {/* Phones: start | end side by side, "Last 30 days" full width below. */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end max-sm:grid max-sm:grid-cols-2 max-sm:gap-2">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-muted-foreground">{t('start_date')}</label>
               <Popover>
@@ -63,7 +64,7 @@ export function ExpenseCategorySection({
                     variant="outline"
                     size="sm"
                     className={cn(
-                      'w-[200px] justify-start text-left font-normal',
+                      'w-[200px] justify-start text-left font-normal max-sm:w-full max-sm:px-2',
                       !range.startDate && 'text-muted-foreground',
                     )}
                   >
@@ -96,7 +97,7 @@ export function ExpenseCategorySection({
                     variant="outline"
                     size="sm"
                     className={cn(
-                      'w-[200px] justify-start text-left font-normal',
+                      'w-[200px] justify-start text-left font-normal max-sm:w-full max-sm:px-2',
                       !range.endDate && 'text-muted-foreground',
                     )}
                   >
@@ -121,13 +122,13 @@ export function ExpenseCategorySection({
               </Popover>
             </div>
 
-            <Button variant="outline" size="sm" onClick={applyLast30Days}>
+            <Button variant="outline" size="sm" onClick={applyLast30Days} className="max-sm:col-span-2">
               {t('last_30_days')}
             </Button>
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="max-sm:px-3">
         <ExpenseReport
           mode="categories"
           startDate={queryStartDate}

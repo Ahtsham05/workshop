@@ -135,6 +135,29 @@ browser does. `client/src/features/school/students/student-import.tsx` previews 
 shared client engine, and the two field lists (there and in
 `student.controller.js#STUDENT_IMPORT_FIELDS`) have to stay in step.
 
+## Expenses (money moves, so rows are saved one by one)
+
+`features/accounting/components/expense-import-dialog.tsx` → `POST /v1/expenses/bulk` →
+`expense.service.js#bulkImportExpenses`. Unlike customers/products there is no
+`insertMany`: each row goes through `createExpense`, the same path as the Add Expense
+form, so a paid row posts its Cash Book / bank-account entry and its journal entry exactly
+like a manual one (hence `batchSize={100}`).
+
+- **Paid From**: `Cash`, a method (`Bank Transfer`, `Card`, `Cheque`), or the exact name of
+  one of the branch's bank/wallet accounts (case-insensitive). Anything else is a row error.
+- **Payment**: `paid` (default) moves the money; `unpaid` records pending bills that move
+  nothing until paid — for history already reflected in opening balances.
+- **Type (Direct/Indirect)** only sets the type of a category the import creates. An
+  existing category keeps its own type (the row imports with a warning when they differ) —
+  the category, never the row, decides the classification.
+- **Duplicates**: by Reference when present, else date (Pakistan day) + category + amount +
+  description; `skip` / `error` / `allow`.
+- Dates go up as `YYYY-MM-DD` and are stamped on that business day via
+  `atBusinessTimeOfDay`.
+- Export Excel on the expense list writes the same columns, so an export re-imports.
+
+Tests: `server/tests/integration/expenseNatureAndImport.test.js`.
+
 ## Adding an import to a new entity
 
 1. Write the field list (`ImportFieldSpec[]`) — `key`, `label`, `aliases` in every spelling

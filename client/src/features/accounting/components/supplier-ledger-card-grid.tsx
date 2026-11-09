@@ -143,7 +143,7 @@ export function SupplierLedgerCardGrid({ suppliers, loading, onSelectSupplier, p
             <p className='text-muted-foreground'>{t('no_results')}</p>
           </div>
         ) : (
-          <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+          <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
             {suppliers.map((supplier) => {
               const whatsapp = supplier.whatsapp || supplier.phone
               const balanceDisplay = formatSupplierBalanceDisplay(Number(supplier.balance ?? 0), t, currencyMeta)

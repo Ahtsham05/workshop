@@ -50,6 +50,7 @@ import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedManufacturingRouteImport } from './routes/_authenticated/manufacturing/route'
 import { Route as AuthenticatedWhatsappIndexImport } from './routes/_authenticated/whatsapp/index'
 import { Route as AuthenticatedWarrantyClaimsIndexImport } from './routes/_authenticated/warranty-claims/index'
+import { Route as AuthenticatedWarehousesIndexImport } from './routes/_authenticated/warehouses/index'
 import { Route as AuthenticatedUsersIndexImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedUsersManagementIndexImport } from './routes/_authenticated/users-management/index'
 import { Route as AuthenticatedTasksIndexImport } from './routes/_authenticated/tasks/index'
@@ -88,12 +89,14 @@ import { Route as AuthenticatedAdminIndexImport } from './routes/_authenticated/
 import { Route as AuthenticatedAccountingIndexImport } from './routes/_authenticated/accounting/index'
 import { Route as AuthenticatedWhatsappMessagesImport } from './routes/_authenticated/whatsapp/messages'
 import { Route as AuthenticatedWhatsappAnalyticsImport } from './routes/_authenticated/whatsapp/analytics'
+import { Route as AuthenticatedWarehousesWarehouseIdImport } from './routes/_authenticated/warehouses/$warehouseId'
 import { Route as AuthenticatedSubscriptionPricingImport } from './routes/_authenticated/subscription/pricing'
 import { Route as AuthenticatedSubscriptionPaymentImport } from './routes/_authenticated/subscription/payment'
 import { Route as AuthenticatedStockCountsCountIdImport } from './routes/_authenticated/stock-counts/$countId'
 import { Route as AuthenticatedSmsLogImport } from './routes/_authenticated/sms/log'
 import { Route as AuthenticatedSettingsWhatsappImport } from './routes/_authenticated/settings/whatsapp'
 import { Route as AuthenticatedSettingsWebsiteConnectionsImport } from './routes/_authenticated/settings/website-connections'
+import { Route as AuthenticatedSettingsWarehousesImport } from './routes/_authenticated/settings/warehouses'
 import { Route as AuthenticatedSettingsTransactionLayoutImport } from './routes/_authenticated/settings/transaction-layout'
 import { Route as AuthenticatedSettingsTaxRatesImport } from './routes/_authenticated/settings/tax-rates'
 import { Route as AuthenticatedSettingsTaxJurisdictionsImport } from './routes/_authenticated/settings/tax-jurisdictions'
@@ -107,11 +110,14 @@ import { Route as AuthenticatedSettingsOfflineImport } from './routes/_authentic
 import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_authenticated/settings/notifications'
 import { Route as AuthenticatedSettingsLocalizationImport } from './routes/_authenticated/settings/localization'
 import { Route as AuthenticatedSettingsLocalDatabaseImport } from './routes/_authenticated/settings/local-database'
+import { Route as AuthenticatedSettingsLedgerDiscountsImport } from './routes/_authenticated/settings/ledger-discounts'
+import { Route as AuthenticatedSettingsLedgerAlertsImport } from './routes/_authenticated/settings/ledger-alerts'
 import { Route as AuthenticatedSettingsExchangeRatesImport } from './routes/_authenticated/settings/exchange-rates'
 import { Route as AuthenticatedSettingsDocumentNumberingImport } from './routes/_authenticated/settings/document-numbering'
 import { Route as AuthenticatedSettingsDisplayImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsDemoDataImport } from './routes/_authenticated/settings/demo-data'
 import { Route as AuthenticatedSettingsCurrencyImport } from './routes/_authenticated/settings/currency'
+import { Route as AuthenticatedSettingsCreditControlImport } from './routes/_authenticated/settings/credit-control'
 import { Route as AuthenticatedSettingsCacheImport } from './routes/_authenticated/settings/cache'
 import { Route as AuthenticatedSettingsBusinessProfileImport } from './routes/_authenticated/settings/business-profile'
 import { Route as AuthenticatedSettingsBillingImport } from './routes/_authenticated/settings/billing'
@@ -472,6 +478,13 @@ const AuthenticatedWarrantyClaimsIndexRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
+const AuthenticatedWarehousesIndexRoute =
+  AuthenticatedWarehousesIndexImport.update({
+    id: '/warehouses/',
+    path: '/warehouses/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
 const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexImport.update({
   id: '/users/',
   path: '/users/',
@@ -730,6 +743,13 @@ const AuthenticatedWhatsappAnalyticsRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
+const AuthenticatedWarehousesWarehouseIdRoute =
+  AuthenticatedWarehousesWarehouseIdImport.update({
+    id: '/warehouses/$warehouseId',
+    path: '/warehouses/$warehouseId',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
 const AuthenticatedSubscriptionPricingRoute =
   AuthenticatedSubscriptionPricingImport.update({
     id: '/subscription/pricing',
@@ -768,6 +788,13 @@ const AuthenticatedSettingsWebsiteConnectionsRoute =
   AuthenticatedSettingsWebsiteConnectionsImport.update({
     id: '/website-connections',
     path: '/website-connections',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsWarehousesRoute =
+  AuthenticatedSettingsWarehousesImport.update({
+    id: '/warehouses',
+    path: '/warehouses',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
@@ -861,6 +888,20 @@ const AuthenticatedSettingsLocalDatabaseRoute =
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
+const AuthenticatedSettingsLedgerDiscountsRoute =
+  AuthenticatedSettingsLedgerDiscountsImport.update({
+    id: '/ledger-discounts',
+    path: '/ledger-discounts',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsLedgerAlertsRoute =
+  AuthenticatedSettingsLedgerAlertsImport.update({
+    id: '/ledger-alerts',
+    path: '/ledger-alerts',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
 const AuthenticatedSettingsExchangeRatesRoute =
   AuthenticatedSettingsExchangeRatesImport.update({
     id: '/exchange-rates',
@@ -893,6 +934,13 @@ const AuthenticatedSettingsCurrencyRoute =
   AuthenticatedSettingsCurrencyImport.update({
     id: '/currency',
     path: '/currency',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsCreditControlRoute =
+  AuthenticatedSettingsCreditControlImport.update({
+    id: '/credit-control',
+    path: '/credit-control',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
@@ -2191,6 +2239,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsCacheImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/credit-control': {
+      id: '/_authenticated/settings/credit-control'
+      path: '/credit-control'
+      fullPath: '/settings/credit-control'
+      preLoaderRoute: typeof AuthenticatedSettingsCreditControlImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/currency': {
       id: '/_authenticated/settings/currency'
       path: '/currency'
@@ -2224,6 +2279,20 @@ declare module '@tanstack/react-router' {
       path: '/exchange-rates'
       fullPath: '/settings/exchange-rates'
       preLoaderRoute: typeof AuthenticatedSettingsExchangeRatesImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
+    '/_authenticated/settings/ledger-alerts': {
+      id: '/_authenticated/settings/ledger-alerts'
+      path: '/ledger-alerts'
+      fullPath: '/settings/ledger-alerts'
+      preLoaderRoute: typeof AuthenticatedSettingsLedgerAlertsImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
+    '/_authenticated/settings/ledger-discounts': {
+      id: '/_authenticated/settings/ledger-discounts'
+      path: '/ledger-discounts'
+      fullPath: '/settings/ledger-discounts'
+      preLoaderRoute: typeof AuthenticatedSettingsLedgerDiscountsImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
     '/_authenticated/settings/local-database': {
@@ -2317,6 +2386,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsTransactionLayoutImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/warehouses': {
+      id: '/_authenticated/settings/warehouses'
+      path: '/warehouses'
+      fullPath: '/settings/warehouses'
+      preLoaderRoute: typeof AuthenticatedSettingsWarehousesImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/website-connections': {
       id: '/_authenticated/settings/website-connections'
       path: '/website-connections'
@@ -2357,6 +2433,13 @@ declare module '@tanstack/react-router' {
       path: '/subscription/pricing'
       fullPath: '/subscription/pricing'
       preLoaderRoute: typeof AuthenticatedSubscriptionPricingImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/warehouses/$warehouseId': {
+      id: '/_authenticated/warehouses/$warehouseId'
+      path: '/warehouses/$warehouseId'
+      fullPath: '/warehouses/$warehouseId'
+      preLoaderRoute: typeof AuthenticatedWarehousesWarehouseIdImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/whatsapp/analytics': {
@@ -2623,6 +2706,13 @@ declare module '@tanstack/react-router' {
       path: '/users'
       fullPath: '/users'
       preLoaderRoute: typeof AuthenticatedUsersIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/warehouses/': {
+      id: '/_authenticated/warehouses/'
+      path: '/warehouses'
+      fullPath: '/warehouses'
+      preLoaderRoute: typeof AuthenticatedWarehousesIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/warranty-claims/': {
@@ -3226,11 +3316,14 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsBillingRoute: typeof AuthenticatedSettingsBillingRoute
   AuthenticatedSettingsBusinessProfileRoute: typeof AuthenticatedSettingsBusinessProfileRoute
   AuthenticatedSettingsCacheRoute: typeof AuthenticatedSettingsCacheRoute
+  AuthenticatedSettingsCreditControlRoute: typeof AuthenticatedSettingsCreditControlRoute
   AuthenticatedSettingsCurrencyRoute: typeof AuthenticatedSettingsCurrencyRoute
   AuthenticatedSettingsDemoDataRoute: typeof AuthenticatedSettingsDemoDataRoute
   AuthenticatedSettingsDisplayRoute: typeof AuthenticatedSettingsDisplayRoute
   AuthenticatedSettingsDocumentNumberingRoute: typeof AuthenticatedSettingsDocumentNumberingRoute
   AuthenticatedSettingsExchangeRatesRoute: typeof AuthenticatedSettingsExchangeRatesRoute
+  AuthenticatedSettingsLedgerAlertsRoute: typeof AuthenticatedSettingsLedgerAlertsRoute
+  AuthenticatedSettingsLedgerDiscountsRoute: typeof AuthenticatedSettingsLedgerDiscountsRoute
   AuthenticatedSettingsLocalDatabaseRoute: typeof AuthenticatedSettingsLocalDatabaseRoute
   AuthenticatedSettingsLocalizationRoute: typeof AuthenticatedSettingsLocalizationRoute
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
@@ -3244,6 +3337,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsTaxJurisdictionsRoute: typeof AuthenticatedSettingsTaxJurisdictionsRoute
   AuthenticatedSettingsTaxRatesRoute: typeof AuthenticatedSettingsTaxRatesRoute
   AuthenticatedSettingsTransactionLayoutRoute: typeof AuthenticatedSettingsTransactionLayoutRoute
+  AuthenticatedSettingsWarehousesRoute: typeof AuthenticatedSettingsWarehousesRoute
   AuthenticatedSettingsWebsiteConnectionsRoute: typeof AuthenticatedSettingsWebsiteConnectionsRoute
   AuthenticatedSettingsWhatsappRoute: typeof AuthenticatedSettingsWhatsappRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
@@ -3258,6 +3352,8 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsBusinessProfileRoute:
       AuthenticatedSettingsBusinessProfileRoute,
     AuthenticatedSettingsCacheRoute: AuthenticatedSettingsCacheRoute,
+    AuthenticatedSettingsCreditControlRoute:
+      AuthenticatedSettingsCreditControlRoute,
     AuthenticatedSettingsCurrencyRoute: AuthenticatedSettingsCurrencyRoute,
     AuthenticatedSettingsDemoDataRoute: AuthenticatedSettingsDemoDataRoute,
     AuthenticatedSettingsDisplayRoute: AuthenticatedSettingsDisplayRoute,
@@ -3265,6 +3361,10 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
       AuthenticatedSettingsDocumentNumberingRoute,
     AuthenticatedSettingsExchangeRatesRoute:
       AuthenticatedSettingsExchangeRatesRoute,
+    AuthenticatedSettingsLedgerAlertsRoute:
+      AuthenticatedSettingsLedgerAlertsRoute,
+    AuthenticatedSettingsLedgerDiscountsRoute:
+      AuthenticatedSettingsLedgerDiscountsRoute,
     AuthenticatedSettingsLocalDatabaseRoute:
       AuthenticatedSettingsLocalDatabaseRoute,
     AuthenticatedSettingsLocalizationRoute:
@@ -3286,6 +3386,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsTaxRatesRoute: AuthenticatedSettingsTaxRatesRoute,
     AuthenticatedSettingsTransactionLayoutRoute:
       AuthenticatedSettingsTransactionLayoutRoute,
+    AuthenticatedSettingsWarehousesRoute: AuthenticatedSettingsWarehousesRoute,
     AuthenticatedSettingsWebsiteConnectionsRoute:
       AuthenticatedSettingsWebsiteConnectionsRoute,
     AuthenticatedSettingsWhatsappRoute: AuthenticatedSettingsWhatsappRoute,
@@ -3513,6 +3614,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedStockCountsCountIdRoute: typeof AuthenticatedStockCountsCountIdRoute
   AuthenticatedSubscriptionPaymentRoute: typeof AuthenticatedSubscriptionPaymentRoute
   AuthenticatedSubscriptionPricingRoute: typeof AuthenticatedSubscriptionPricingRoute
+  AuthenticatedWarehousesWarehouseIdRoute: typeof AuthenticatedWarehousesWarehouseIdRoute
   AuthenticatedWhatsappAnalyticsRoute: typeof AuthenticatedWhatsappAnalyticsRoute
   AuthenticatedWhatsappMessagesRoute: typeof AuthenticatedWhatsappMessagesRoute
   AuthenticatedAccountingIndexRoute: typeof AuthenticatedAccountingIndexRoute
@@ -3548,6 +3650,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
   AuthenticatedUsersManagementIndexRoute: typeof AuthenticatedUsersManagementIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
+  AuthenticatedWarehousesIndexRoute: typeof AuthenticatedWarehousesIndexRoute
   AuthenticatedWarrantyClaimsIndexRoute: typeof AuthenticatedWarrantyClaimsIndexRoute
   AuthenticatedWhatsappIndexRoute: typeof AuthenticatedWhatsappIndexRoute
   AuthenticatedHrEmployeesIdRoute: typeof AuthenticatedHrEmployeesIdRouteWithChildren
@@ -3618,6 +3721,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedStockCountsCountIdRoute: AuthenticatedStockCountsCountIdRoute,
   AuthenticatedSubscriptionPaymentRoute: AuthenticatedSubscriptionPaymentRoute,
   AuthenticatedSubscriptionPricingRoute: AuthenticatedSubscriptionPricingRoute,
+  AuthenticatedWarehousesWarehouseIdRoute:
+    AuthenticatedWarehousesWarehouseIdRoute,
   AuthenticatedWhatsappAnalyticsRoute: AuthenticatedWhatsappAnalyticsRoute,
   AuthenticatedWhatsappMessagesRoute: AuthenticatedWhatsappMessagesRoute,
   AuthenticatedAccountingIndexRoute: AuthenticatedAccountingIndexRoute,
@@ -3656,6 +3761,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedUsersManagementIndexRoute:
     AuthenticatedUsersManagementIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
+  AuthenticatedWarehousesIndexRoute: AuthenticatedWarehousesIndexRoute,
   AuthenticatedWarrantyClaimsIndexRoute: AuthenticatedWarrantyClaimsIndexRoute,
   AuthenticatedWhatsappIndexRoute: AuthenticatedWhatsappIndexRoute,
   AuthenticatedHrEmployeesIdRoute: AuthenticatedHrEmployeesIdRouteWithChildren,
@@ -3752,11 +3858,14 @@ export interface FileRoutesByFullPath {
   '/settings/billing': typeof AuthenticatedSettingsBillingRoute
   '/settings/business-profile': typeof AuthenticatedSettingsBusinessProfileRoute
   '/settings/cache': typeof AuthenticatedSettingsCacheRoute
+  '/settings/credit-control': typeof AuthenticatedSettingsCreditControlRoute
   '/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
   '/settings/demo-data': typeof AuthenticatedSettingsDemoDataRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/document-numbering': typeof AuthenticatedSettingsDocumentNumberingRoute
   '/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
+  '/settings/ledger-alerts': typeof AuthenticatedSettingsLedgerAlertsRoute
+  '/settings/ledger-discounts': typeof AuthenticatedSettingsLedgerDiscountsRoute
   '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/settings/localization': typeof AuthenticatedSettingsLocalizationRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
@@ -3770,12 +3879,14 @@ export interface FileRoutesByFullPath {
   '/settings/tax-jurisdictions': typeof AuthenticatedSettingsTaxJurisdictionsRoute
   '/settings/tax-rates': typeof AuthenticatedSettingsTaxRatesRoute
   '/settings/transaction-layout': typeof AuthenticatedSettingsTransactionLayoutRoute
+  '/settings/warehouses': typeof AuthenticatedSettingsWarehousesRoute
   '/settings/website-connections': typeof AuthenticatedSettingsWebsiteConnectionsRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/sms/log': typeof AuthenticatedSmsLogRoute
   '/stock-counts/$countId': typeof AuthenticatedStockCountsCountIdRoute
   '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
+  '/warehouses/$warehouseId': typeof AuthenticatedWarehousesWarehouseIdRoute
   '/whatsapp/analytics': typeof AuthenticatedWhatsappAnalyticsRoute
   '/whatsapp/messages': typeof AuthenticatedWhatsappMessagesRoute
   '/accounting': typeof AuthenticatedAccountingIndexRoute
@@ -3814,6 +3925,7 @@ export interface FileRoutesByFullPath {
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users-management': typeof AuthenticatedUsersManagementIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/warehouses': typeof AuthenticatedWarehousesIndexRoute
   '/warranty-claims': typeof AuthenticatedWarrantyClaimsIndexRoute
   '/whatsapp': typeof AuthenticatedWhatsappIndexRoute
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
@@ -3959,11 +4071,14 @@ export interface FileRoutesByTo {
   '/settings/billing': typeof AuthenticatedSettingsBillingRoute
   '/settings/business-profile': typeof AuthenticatedSettingsBusinessProfileRoute
   '/settings/cache': typeof AuthenticatedSettingsCacheRoute
+  '/settings/credit-control': typeof AuthenticatedSettingsCreditControlRoute
   '/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
   '/settings/demo-data': typeof AuthenticatedSettingsDemoDataRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/document-numbering': typeof AuthenticatedSettingsDocumentNumberingRoute
   '/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
+  '/settings/ledger-alerts': typeof AuthenticatedSettingsLedgerAlertsRoute
+  '/settings/ledger-discounts': typeof AuthenticatedSettingsLedgerDiscountsRoute
   '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/settings/localization': typeof AuthenticatedSettingsLocalizationRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
@@ -3977,12 +4092,14 @@ export interface FileRoutesByTo {
   '/settings/tax-jurisdictions': typeof AuthenticatedSettingsTaxJurisdictionsRoute
   '/settings/tax-rates': typeof AuthenticatedSettingsTaxRatesRoute
   '/settings/transaction-layout': typeof AuthenticatedSettingsTransactionLayoutRoute
+  '/settings/warehouses': typeof AuthenticatedSettingsWarehousesRoute
   '/settings/website-connections': typeof AuthenticatedSettingsWebsiteConnectionsRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/sms/log': typeof AuthenticatedSmsLogRoute
   '/stock-counts/$countId': typeof AuthenticatedStockCountsCountIdRoute
   '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
+  '/warehouses/$warehouseId': typeof AuthenticatedWarehousesWarehouseIdRoute
   '/whatsapp/analytics': typeof AuthenticatedWhatsappAnalyticsRoute
   '/whatsapp/messages': typeof AuthenticatedWhatsappMessagesRoute
   '/accounting': typeof AuthenticatedAccountingIndexRoute
@@ -4021,6 +4138,7 @@ export interface FileRoutesByTo {
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users-management': typeof AuthenticatedUsersManagementIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/warehouses': typeof AuthenticatedWarehousesIndexRoute
   '/warranty-claims': typeof AuthenticatedWarrantyClaimsIndexRoute
   '/whatsapp': typeof AuthenticatedWhatsappIndexRoute
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
@@ -4171,11 +4289,14 @@ export interface FileRoutesById {
   '/_authenticated/settings/billing': typeof AuthenticatedSettingsBillingRoute
   '/_authenticated/settings/business-profile': typeof AuthenticatedSettingsBusinessProfileRoute
   '/_authenticated/settings/cache': typeof AuthenticatedSettingsCacheRoute
+  '/_authenticated/settings/credit-control': typeof AuthenticatedSettingsCreditControlRoute
   '/_authenticated/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
   '/_authenticated/settings/demo-data': typeof AuthenticatedSettingsDemoDataRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/_authenticated/settings/document-numbering': typeof AuthenticatedSettingsDocumentNumberingRoute
   '/_authenticated/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
+  '/_authenticated/settings/ledger-alerts': typeof AuthenticatedSettingsLedgerAlertsRoute
+  '/_authenticated/settings/ledger-discounts': typeof AuthenticatedSettingsLedgerDiscountsRoute
   '/_authenticated/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/_authenticated/settings/localization': typeof AuthenticatedSettingsLocalizationRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
@@ -4189,12 +4310,14 @@ export interface FileRoutesById {
   '/_authenticated/settings/tax-jurisdictions': typeof AuthenticatedSettingsTaxJurisdictionsRoute
   '/_authenticated/settings/tax-rates': typeof AuthenticatedSettingsTaxRatesRoute
   '/_authenticated/settings/transaction-layout': typeof AuthenticatedSettingsTransactionLayoutRoute
+  '/_authenticated/settings/warehouses': typeof AuthenticatedSettingsWarehousesRoute
   '/_authenticated/settings/website-connections': typeof AuthenticatedSettingsWebsiteConnectionsRoute
   '/_authenticated/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/_authenticated/sms/log': typeof AuthenticatedSmsLogRoute
   '/_authenticated/stock-counts/$countId': typeof AuthenticatedStockCountsCountIdRoute
   '/_authenticated/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/_authenticated/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
+  '/_authenticated/warehouses/$warehouseId': typeof AuthenticatedWarehousesWarehouseIdRoute
   '/_authenticated/whatsapp/analytics': typeof AuthenticatedWhatsappAnalyticsRoute
   '/_authenticated/whatsapp/messages': typeof AuthenticatedWhatsappMessagesRoute
   '/_authenticated/accounting/': typeof AuthenticatedAccountingIndexRoute
@@ -4233,6 +4356,7 @@ export interface FileRoutesById {
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users-management/': typeof AuthenticatedUsersManagementIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
+  '/_authenticated/warehouses/': typeof AuthenticatedWarehousesIndexRoute
   '/_authenticated/warranty-claims/': typeof AuthenticatedWarrantyClaimsIndexRoute
   '/_authenticated/whatsapp/': typeof AuthenticatedWhatsappIndexRoute
   '/_authenticated/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
@@ -4385,11 +4509,14 @@ export interface FileRouteTypes {
     | '/settings/billing'
     | '/settings/business-profile'
     | '/settings/cache'
+    | '/settings/credit-control'
     | '/settings/currency'
     | '/settings/demo-data'
     | '/settings/display'
     | '/settings/document-numbering'
     | '/settings/exchange-rates'
+    | '/settings/ledger-alerts'
+    | '/settings/ledger-discounts'
     | '/settings/local-database'
     | '/settings/localization'
     | '/settings/notifications'
@@ -4403,12 +4530,14 @@ export interface FileRouteTypes {
     | '/settings/tax-jurisdictions'
     | '/settings/tax-rates'
     | '/settings/transaction-layout'
+    | '/settings/warehouses'
     | '/settings/website-connections'
     | '/settings/whatsapp'
     | '/sms/log'
     | '/stock-counts/$countId'
     | '/subscription/payment'
     | '/subscription/pricing'
+    | '/warehouses/$warehouseId'
     | '/whatsapp/analytics'
     | '/whatsapp/messages'
     | '/accounting'
@@ -4447,6 +4576,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/users-management'
     | '/users'
+    | '/warehouses'
     | '/warranty-claims'
     | '/whatsapp'
     | '/hr/employees/$id'
@@ -4591,11 +4721,14 @@ export interface FileRouteTypes {
     | '/settings/billing'
     | '/settings/business-profile'
     | '/settings/cache'
+    | '/settings/credit-control'
     | '/settings/currency'
     | '/settings/demo-data'
     | '/settings/display'
     | '/settings/document-numbering'
     | '/settings/exchange-rates'
+    | '/settings/ledger-alerts'
+    | '/settings/ledger-discounts'
     | '/settings/local-database'
     | '/settings/localization'
     | '/settings/notifications'
@@ -4609,12 +4742,14 @@ export interface FileRouteTypes {
     | '/settings/tax-jurisdictions'
     | '/settings/tax-rates'
     | '/settings/transaction-layout'
+    | '/settings/warehouses'
     | '/settings/website-connections'
     | '/settings/whatsapp'
     | '/sms/log'
     | '/stock-counts/$countId'
     | '/subscription/payment'
     | '/subscription/pricing'
+    | '/warehouses/$warehouseId'
     | '/whatsapp/analytics'
     | '/whatsapp/messages'
     | '/accounting'
@@ -4653,6 +4788,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/users-management'
     | '/users'
+    | '/warehouses'
     | '/warranty-claims'
     | '/whatsapp'
     | '/hr/employees/$id'
@@ -4801,11 +4937,14 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/billing'
     | '/_authenticated/settings/business-profile'
     | '/_authenticated/settings/cache'
+    | '/_authenticated/settings/credit-control'
     | '/_authenticated/settings/currency'
     | '/_authenticated/settings/demo-data'
     | '/_authenticated/settings/display'
     | '/_authenticated/settings/document-numbering'
     | '/_authenticated/settings/exchange-rates'
+    | '/_authenticated/settings/ledger-alerts'
+    | '/_authenticated/settings/ledger-discounts'
     | '/_authenticated/settings/local-database'
     | '/_authenticated/settings/localization'
     | '/_authenticated/settings/notifications'
@@ -4819,12 +4958,14 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/tax-jurisdictions'
     | '/_authenticated/settings/tax-rates'
     | '/_authenticated/settings/transaction-layout'
+    | '/_authenticated/settings/warehouses'
     | '/_authenticated/settings/website-connections'
     | '/_authenticated/settings/whatsapp'
     | '/_authenticated/sms/log'
     | '/_authenticated/stock-counts/$countId'
     | '/_authenticated/subscription/payment'
     | '/_authenticated/subscription/pricing'
+    | '/_authenticated/warehouses/$warehouseId'
     | '/_authenticated/whatsapp/analytics'
     | '/_authenticated/whatsapp/messages'
     | '/_authenticated/accounting/'
@@ -4863,6 +5004,7 @@ export interface FileRouteTypes {
     | '/_authenticated/tasks/'
     | '/_authenticated/users-management/'
     | '/_authenticated/users/'
+    | '/_authenticated/warehouses/'
     | '/_authenticated/warranty-claims/'
     | '/_authenticated/whatsapp/'
     | '/_authenticated/hr/employees/$id'
@@ -5044,6 +5186,7 @@ export const routeTree = rootRoute
         "/_authenticated/stock-counts/$countId",
         "/_authenticated/subscription/payment",
         "/_authenticated/subscription/pricing",
+        "/_authenticated/warehouses/$warehouseId",
         "/_authenticated/whatsapp/analytics",
         "/_authenticated/whatsapp/messages",
         "/_authenticated/accounting/",
@@ -5079,6 +5222,7 @@ export const routeTree = rootRoute
         "/_authenticated/tasks/",
         "/_authenticated/users-management/",
         "/_authenticated/users/",
+        "/_authenticated/warehouses/",
         "/_authenticated/warranty-claims/",
         "/_authenticated/whatsapp/",
         "/_authenticated/hr/employees/$id",
@@ -5137,11 +5281,14 @@ export const routeTree = rootRoute
         "/_authenticated/settings/billing",
         "/_authenticated/settings/business-profile",
         "/_authenticated/settings/cache",
+        "/_authenticated/settings/credit-control",
         "/_authenticated/settings/currency",
         "/_authenticated/settings/demo-data",
         "/_authenticated/settings/display",
         "/_authenticated/settings/document-numbering",
         "/_authenticated/settings/exchange-rates",
+        "/_authenticated/settings/ledger-alerts",
+        "/_authenticated/settings/ledger-discounts",
         "/_authenticated/settings/local-database",
         "/_authenticated/settings/localization",
         "/_authenticated/settings/notifications",
@@ -5155,6 +5302,7 @@ export const routeTree = rootRoute
         "/_authenticated/settings/tax-jurisdictions",
         "/_authenticated/settings/tax-rates",
         "/_authenticated/settings/transaction-layout",
+        "/_authenticated/settings/warehouses",
         "/_authenticated/settings/website-connections",
         "/_authenticated/settings/whatsapp",
         "/_authenticated/settings/"
@@ -5489,6 +5637,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/settings/cache.tsx",
       "parent": "/_authenticated/settings"
     },
+    "/_authenticated/settings/credit-control": {
+      "filePath": "_authenticated/settings/credit-control.tsx",
+      "parent": "/_authenticated/settings"
+    },
     "/_authenticated/settings/currency": {
       "filePath": "_authenticated/settings/currency.tsx",
       "parent": "/_authenticated/settings"
@@ -5507,6 +5659,14 @@ export const routeTree = rootRoute
     },
     "/_authenticated/settings/exchange-rates": {
       "filePath": "_authenticated/settings/exchange-rates.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/ledger-alerts": {
+      "filePath": "_authenticated/settings/ledger-alerts.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/ledger-discounts": {
+      "filePath": "_authenticated/settings/ledger-discounts.tsx",
       "parent": "/_authenticated/settings"
     },
     "/_authenticated/settings/local-database": {
@@ -5561,6 +5721,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/settings/transaction-layout.tsx",
       "parent": "/_authenticated/settings"
     },
+    "/_authenticated/settings/warehouses": {
+      "filePath": "_authenticated/settings/warehouses.tsx",
+      "parent": "/_authenticated/settings"
+    },
     "/_authenticated/settings/website-connections": {
       "filePath": "_authenticated/settings/website-connections.tsx",
       "parent": "/_authenticated/settings"
@@ -5583,6 +5747,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/subscription/pricing": {
       "filePath": "_authenticated/subscription/pricing.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/warehouses/$warehouseId": {
+      "filePath": "_authenticated/warehouses/$warehouseId.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/whatsapp/analytics": {
@@ -5735,6 +5903,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/users/": {
       "filePath": "_authenticated/users/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/warehouses/": {
+      "filePath": "_authenticated/warehouses/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/warranty-claims/": {

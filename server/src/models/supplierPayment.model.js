@@ -89,7 +89,7 @@ const supplierPaymentSchema = new mongoose.Schema(
      *                   the credit lands on the ORIGINAL invoice instead of floating on the
      *                   account, and so it can be released if the return is undone.
      */
-    direction: { type: String, enum: ['payment', 'refund', 'return_credit'], default: 'payment', index: true },
+    direction: { type: String, enum: ['payment', 'refund', 'return_credit', 'discount'], default: 'payment', index: true },
     paymentDate: { type: Date, default: Date.now, index: true },
     amount: { type: Number, required: true, min: 0.01 },
     // Which account the money moved through. 'wallet' pairs with walletType (a Bank Account

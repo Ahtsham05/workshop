@@ -14,13 +14,17 @@ export default function SuppliersDialogs({ setFetch }: any) {
 
   const handleImport = async (
     suppliers: any[],
-    options?: { duplicateStrategy?: 'skip' | 'update' | 'error' }
+    options?: { duplicateStrategy?: 'skip' | 'update' | 'error'; openingBalanceDate?: string }
   ) => {
     // No toast and no dialog close here: the import dialog owns the reporting, and it
     // needs the per-row breakdown in the response to say which rows didn't make it.
     // Closing on success would also hide that summary before it could be read.
     const result = await dispatch(
-      bulkAddSuppliers({ suppliers, duplicateStrategy: options?.duplicateStrategy })
+      bulkAddSuppliers({
+        suppliers,
+        duplicateStrategy: options?.duplicateStrategy,
+        openingBalanceDate: options?.openingBalanceDate,
+      })
     ).unwrap()
     setFetch((prev: boolean) => !prev)
     return result

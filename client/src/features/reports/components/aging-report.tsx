@@ -21,6 +21,9 @@ import { cn } from '@/lib/utils'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { buildAgingBuckets, AGING_BUCKET_SIZES, DEFAULT_AGING_BUCKET_SIZE, AgingBucketSize } from '../utils/aging-buckets'
 import { formatAppDate } from '@/lib/date-format'
+import { useLedgerStatus } from '@/features/ledger-alerts/hooks/use-ledger-alerts'
+import { AgingChip, TonePill } from '@/features/ledger-alerts/components/aging-chip'
+import { bandIndexFor, toneForState } from '@/features/ledger-alerts/lib/ledger-colors'
 
 export const AgingReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref) => {
   const { t, language } = useLanguage()
@@ -31,6 +34,8 @@ export const AgingReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref
   const queryAsOfDate = format(asOfDate, 'yyyy-MM-dd')
   const { data, isFetching: isLoading } = useGetCustomerAgingReportQuery({ asOfDate: queryAsOfDate, bucketSize })
   const BUCKETS = useMemo(() => buildAgingBuckets(bucketSize), [bucketSize])
+  // Overdue colours (Settings → Due Dates & Ledger Colours → show in reports).
+  const { rowStyleFor, agingFor, settings: ledgerSettings, colorsOn } = useLedgerStatus({ context: 'report' })
 
   useImperativeHandle(ref, () => ({
     exportToExcel: () => {
@@ -194,6 +199,7 @@ export const AgingReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref
                       <Fragment key={row._id}>
                         <TableRow
                           className='cursor-pointer hover:bg-muted/40 transition-colors'
+                          style={rowStyleFor(row.customerId || String(row._id).replace(/^id:/, ''))}
                           onClick={() => toggleRow(row._id)}
                         >
                           <TableCell className='pl-4'>
@@ -203,6 +209,7 @@ export const AgingReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref
                           </TableCell>
                           <TableCell className={cn('font-medium', reportEntityNameClass(language, label))}>
                             {label}
+                            {colorsOn ? <AgingChip aging={agingFor(row.customerId || String(row._id).replace(/^id:/, ''))} settings={ledgerSettings} size='xs' className='ml-2 align-middle' /> : null}
                           </TableCell>
                           <TableCell className='text-sm text-muted-foreground'>{row.phone || 'N/A'}</TableCell>
                           <TableCell className='text-right'>{row.current ? formatCurrency(row.current) : '—'}</TableCell>
@@ -257,7 +264,13 @@ export const AgingReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref
                                           <TableCell className='text-sm text-muted-foreground'>
                                             {formatAppDate(new Date(inv.dueDate))}
                                           </TableCell>
-                                          <TableCell className='text-right'>{inv.daysOverdue > 0 ? inv.daysOverdue : 0}</TableCell>
+                                          <TableCell className='text-right'>
+                                            {(() => {
+                                              const days = inv.daysOverdue > 0 ? inv.daysOverdue : 0
+                                              const tone = colorsOn && days > 0 ? toneForState('overdue', bandIndexFor(days, ledgerSettings.bands), ledgerSettings) : null
+                                              return tone ? <TonePill tone={tone} size='xs'>{days}</TonePill> : days
+                                            })()}
+                                          </TableCell>
                                           <TableCell className='text-right'>{formatCurrency(inv.total)}</TableCell>
                                           <TableCell className='text-right'>{formatCurrency(inv.paidAmount)}</TableCell>
                                           <TableCell className='text-right font-semibold'>{formatCurrency(inv.balance)}</TableCell>

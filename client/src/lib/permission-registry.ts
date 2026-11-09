@@ -7,13 +7,13 @@ export type PermissionKey =
   | 'viewPurchaseOrders' | 'createPurchaseOrders' | 'editPurchaseOrders' | 'deletePurchaseOrders' | 'receivePurchaseOrders'
   | 'viewSalesReturns' | 'createSalesReturns' | 'editSalesReturns' | 'deleteSalesReturns'
   | 'viewPurchaseReturns' | 'createPurchaseReturns' | 'editPurchaseReturns' | 'deletePurchaseReturns'
-  | 'viewCustomers' | 'createCustomers' | 'editCustomers' | 'deleteCustomers'
+  | 'viewCustomers' | 'createCustomers' | 'editCustomers' | 'deleteCustomers' | 'manageCreditLimits' | 'overrideCreditLimit' | 'viewCustomerProfit'
   | 'viewSuppliers' | 'createSuppliers' | 'editSuppliers' | 'deleteSuppliers'
   | 'viewCategories' | 'createCategories' | 'editCategories' | 'deleteCategories'
   | 'viewBrands' | 'createBrands' | 'editBrands' | 'deleteBrands'
-  | 'viewAccounting' | 'manageExpenses' | 'manageLedgers' | 'managePersonalWallet'
+  | 'viewAccounting' | 'manageExpenses' | 'manageLedgers' | 'managePersonalWallet' | 'giveLedgerDiscount' | 'approveLedgerDiscount'
   | 'viewCashBook' | 'manageCashBook' | 'viewCashRegister' | 'manageCashRegister'
-  | 'viewPaymentVouchers' | 'managePaymentVouchers'
+  | 'viewPaymentVouchers' | 'managePaymentVouchers' | 'viewLedgerFromVouchers'
   | 'viewBankReconciliation' | 'manageBankReconciliation'
   | 'viewAccountsSystem' | 'manageAccountsSystem'
   | 'viewWallet' | 'manageWallet'
@@ -71,6 +71,7 @@ export type PermissionKey =
   | 'viewSmsLog'
   | 'manageWebsiteConnections'
   | 'countStock' | 'approveStockCounts'
+  | 'viewWarehouses' | 'manageWarehouses' | 'manageWarehouseTransfers'
   | 'viewAiAssistant'
   | 'useNotes' | 'useTeamChat' | 'useVoiceAssistant'
   | 'viewInsights'
@@ -92,6 +93,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'stock_transfers', label: 'Stock Transfers', permissions: ['viewStockTransfers', 'manageStockTransfers'] },
   { id: 'stock_adjustments', label: 'Stock Adjustments', permissions: ['viewStockAdjustments', 'manageStockAdjustments'] },
   { id: 'stock_counts', label: 'Stock Counts', permissions: ['countStock', 'approveStockCounts'] },
+  { id: 'warehouses', label: 'Warehouses', permissions: ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers'] },
   { id: 'imei_tracking', label: 'IMEI / Serial Tracking', permissions: ['viewImeiTracking', 'manageImeiTracking'] },
   { id: 'warranty_claims', label: 'Warranty Claims', permissions: ['viewWarrantyClaims', 'manageWarrantyClaims'] },
   { id: 'price_checker', label: 'Price Checker', permissions: ['viewPriceChecker', 'managePriceCheckerSources'] },
@@ -101,13 +103,13 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'purchase_orders', label: 'Purchase Orders', permissions: ['viewPurchaseOrders', 'createPurchaseOrders', 'editPurchaseOrders', 'deletePurchaseOrders', 'receivePurchaseOrders'] },
   { id: 'sales_returns', label: 'Sales Returns', permissions: ['viewSalesReturns', 'createSalesReturns', 'editSalesReturns', 'deleteSalesReturns'] },
   { id: 'purchase_returns', label: 'Purchase Returns', permissions: ['viewPurchaseReturns', 'createPurchaseReturns', 'editPurchaseReturns', 'deletePurchaseReturns'] },
-  { id: 'customers', label: 'Customers', permissions: ['viewCustomers', 'createCustomers', 'editCustomers', 'deleteCustomers'] },
+  { id: 'customers', label: 'Customers', permissions: ['viewCustomers', 'createCustomers', 'editCustomers', 'deleteCustomers', 'manageCreditLimits', 'overrideCreditLimit', 'viewCustomerProfit'] },
   { id: 'suppliers', label: 'Suppliers', permissions: ['viewSuppliers', 'createSuppliers', 'editSuppliers', 'deleteSuppliers'] },
   { id: 'categories', label: 'Categories', permissions: ['viewCategories', 'createCategories', 'editCategories', 'deleteCategories'] },
   { id: 'brands', label: 'Brands', permissions: ['viewBrands', 'createBrands', 'editBrands', 'deleteBrands'] },
-  { id: 'accounting', label: 'Accounts & Expenses', permissions: ['viewAccounting', 'manageExpenses', 'manageLedgers', 'managePersonalWallet'] },
+  { id: 'accounting', label: 'Accounts & Expenses', permissions: ['viewAccounting', 'manageExpenses', 'manageLedgers', 'managePersonalWallet', 'giveLedgerDiscount', 'approveLedgerDiscount'] },
   { id: 'cash', label: 'Cash Book & Register', permissions: ['viewCashBook', 'manageCashBook', 'viewCashRegister', 'manageCashRegister'] },
-  { id: 'payment_vouchers', label: 'Payments & Receipts', permissions: ['viewPaymentVouchers', 'managePaymentVouchers'] },
+  { id: 'payment_vouchers', label: 'Payments & Receipts', permissions: ['viewPaymentVouchers', 'managePaymentVouchers', 'viewLedgerFromVouchers'] },
   { id: 'bank_reconciliation', label: 'Bank Reconciliation', permissions: ['viewBankReconciliation', 'manageBankReconciliation'] },
   { id: 'accounts_system', label: 'Accounts System', permissions: ['viewAccountsSystem', 'manageAccountsSystem'] },
   { id: 'communication_log', label: 'Communication Log', permissions: ['viewCommunicationLog', 'createCommunicationLog', 'editCommunicationLog', 'deleteCommunicationLog'] },
@@ -216,6 +218,7 @@ export const PERMISSION_GROUP_AVAILABILITY: Record<string, { businessTypes?: str
   stock_transfers: NOT_SCHOOL_OR_RESTAURANT,
   stock_adjustments: NOT_SCHOOL_OR_RESTAURANT,
   stock_counts: NOT_SCHOOL_OR_RESTAURANT,
+  warehouses: NOT_SCHOOL_OR_RESTAURANT,
   imei_tracking: NOT_SCHOOL_OR_RESTAURANT,
   warranty_claims: NOT_SCHOOL_OR_RESTAURANT,
   price_checker: NOT_SCHOOL_OR_RESTAURANT,
@@ -297,7 +300,7 @@ export interface PermissionCategoryDef {
 export const PERMISSION_CATEGORIES: PermissionCategoryDef[] = [
   { id: 'sales', label: 'Sales & Customers', description: 'Invoices, returns, customers and follow-ups', groups: ['invoices', 'sales_returns', 'customers', 'leads', 'communication_log', 'reminders'] },
   { id: 'purchasing', label: 'Purchasing', description: 'Purchases, orders, returns and suppliers', groups: ['purchases', 'purchase_orders', 'purchase_returns', 'suppliers', 'price_updates', 'purchase_suggestions'] },
-  { id: 'inventory', label: 'Inventory', description: 'Products, stock, serials and warranty', groups: ['products', 'categories', 'brands', 'stock_transfers', 'stock_adjustments', 'stock_counts', 'imei_tracking', 'warranty_claims', 'price_checker', 'barcode'] },
+  { id: 'inventory', label: 'Inventory', description: 'Products, stock, serials and warranty', groups: ['products', 'categories', 'brands', 'stock_transfers', 'stock_adjustments', 'stock_counts', 'warehouses', 'imei_tracking', 'warranty_claims', 'price_checker', 'barcode'] },
   { id: 'finance', label: 'Finance & Accounts', description: 'Expenses, cash, banks and ledgers', groups: ['accounting', 'cash', 'wallet', 'payment_vouchers', 'payments', 'bank_reconciliation', 'accounts_system'] },
   { id: 'mobile_shop', label: 'Mobile Shop', description: 'Load, SIMs, repairs, phones and installments', groups: ['load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments', 'used_phones', 'new_phones'] },
   { id: 'manufacturing', label: 'Manufacturing', description: 'BOMs, production orders and quality', groups: ['manufacturing'] },
@@ -429,6 +432,12 @@ export const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
   viewBranchPerformance: 'View branch performance',
   viewCreatedBy: 'See who created records',
   managePersonalWallet: 'Manage my personal account',
+  manageCreditLimits: 'Manage credit limits',
+  overrideCreditLimit: 'Approve sales over credit limit',
+  viewCustomerProfit: 'See customer profit & margins',
+  giveLedgerDiscount: 'Give ledger discounts',
+  viewLedgerFromVouchers: 'See balances & quick ledger on vouchers',
+  approveLedgerDiscount: 'Approve discounts over the limit',
 };
 
 /** One line under the checkbox saying what the permission actually allows. */
@@ -447,6 +456,9 @@ export const PERMISSION_HINTS: Partial<Record<PermissionKey, string>> = {
   manageManufacturingSettings: 'Warehouses, QC rules and numbering',
   viewManufacturingCosts: 'Material cost, WIP and finished-goods value, prices',
   viewCostPrices: 'Purchase cost, stock value, margin and profit',
+  viewWarehouses: 'See warehouses, stock per warehouse and bin, transfers and moves',
+  manageWarehouses: 'Add, edit, archive warehouses and bins; change the default warehouse',
+  manageWarehouseTransfers: 'Create, post and cancel transfers between warehouses and bins',
   viewReports: 'Every report, including ones without their own permission',
   exportReports: 'Download reports to Excel',
   printInvoices: 'Save & print invoices and receipts',
@@ -454,6 +466,12 @@ export const PERMISSION_HINTS: Partial<Record<PermissionKey, string>> = {
   viewCreatedBy: 'The "Created by" column and filter',
   viewBranchPerformance: 'Sales, cash and stock of every branch side by side',
   useVoiceAssistant: 'The floating voice / quick-actions button (bottom right)',
+  manageCreditLimits: 'Set or raise a customer\'s credit limit, temporary limits, credit hold, credit settings',
+  viewCustomerProfit: 'Profit, cost and margin per customer (Reports → Customer Profit and the ledger Profitability card). Reveals cost — give only to trusted roles',
+  overrideCreditLimit: 'Save a sale that goes over a customer\'s credit limit (a reason is required and logged)',
+  viewLedgerFromVouchers: 'On Receipt / Payment Vouchers: show each customer/supplier balance, what is left after the voucher, and a read-only quick view of their ledger',
+  giveLedgerDiscount: 'Record Discount Allowed (customers) and Discount Received (suppliers) on ledgers, with a payment or on its own',
+  approveLedgerDiscount: 'Save a ledger discount above the % / amount limit set in Settings → Ledger Discounts (a note is logged)',
 };
 
 export function formatPermissionLabel(key: PermissionKey, t: (key: string) => string): string {

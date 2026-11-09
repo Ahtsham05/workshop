@@ -40,6 +40,9 @@ const StockCountSchema = new mongoose.Schema(
     },
     // Initial count: what posting did with lines nobody counted ('skip' leaves stock as is, 'zero' sets it to 0).
     uncountedPolicy: { type: String, enum: ['skip', 'zero'], default: 'skip' },
+    // Multi-warehouse: count one warehouse (its quantities expected, differences posted into
+    // it). Unset = the whole branch.
+    warehouseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', default: null },
 
     totals: {
       itemCount: { type: Number, default: 0 },

@@ -147,7 +147,12 @@ const processInvoiceCreate = async (payload, req) => {
   delete invoiceBody.offlineCreatedAt;
   delete invoiceBody.offlinePending;
 
-  const invoice = await invoiceService.createInvoice(invoiceBody, req.user.id);
+  // An offline sale already happened at the counter — never refuse it on sync for credit;
+  // it is logged against the customer's credit history instead (creditControl.service).
+  const invoice = await invoiceService.createInvoice(invoiceBody, req.user.id, {
+    creditMode: 'record',
+    actor: { id: req.user.id, name: req.user.name },
+  });
   return invoice.id || String(invoice._id);
 };
 

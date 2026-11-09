@@ -19,6 +19,14 @@ router
   .get(auth('viewPayments', 'viewAccounting', 'manageExpenses'), validate(expenseValidation.getExpenses), expenseController.getExpenses);
 
 router
+  .route('/bulk')
+  .post(auth('createPayments', 'viewAccounting', 'manageExpenses'), validate(expenseValidation.bulkImportExpenses), expenseController.bulkImportExpenses);
+
+router
+  .route('/voucher')
+  .post(auth('createPayments', 'viewAccounting', 'manageExpenses'), validate(expenseValidation.createExpenseVoucher), expenseController.createExpenseVoucher);
+
+router
   .route('/summary')
   .get(auth('viewPayments', 'viewAccounting', 'manageExpenses'), validate(expenseValidation.getExpenseSummary), expenseController.getExpenseSummary);
 

@@ -15,7 +15,16 @@ router.use(auth(), branchScope());
 router
   .route('/')
   .post(auth('editPayments', 'viewAccounting', 'manageLedgers'), validate(supplierLedgerValidation.createLedgerEntry), supplierLedgerController.createLedgerEntry)
-  .get(auth('viewPayments', 'viewAccounting', 'manageLedgers', 'viewSuppliers'), validate(supplierLedgerValidation.getLedgerEntries), supplierLedgerController.getLedgerEntries);
+  .get(auth('viewPayments', 'viewAccounting', 'manageLedgers', 'viewSuppliers', 'viewLedgerFromVouchers'), validate(supplierLedgerValidation.getLedgerEntries), supplierLedgerController.getLedgerEntries);
+
+// Many balances in ONE request (voucher screens) — one query, no per-id round trips.
+router
+  .route('/balances')
+  .get(
+    auth('viewPayments', 'viewAccounting', 'manageLedgers', 'viewSuppliers', 'viewLedgerFromVouchers'),
+    validate(supplierLedgerValidation.getSupplierBalances),
+    supplierLedgerController.getSupplierBalances
+  );
 
 router
   .route('/suppliers-with-balances')
@@ -23,7 +32,7 @@ router
 
 router
   .route('/supplier/:supplierId/balance')
-  .get(auth('viewPayments', 'viewAccounting', 'manageLedgers', 'viewSuppliers'), validate(supplierLedgerValidation.getSupplierBalance), supplierLedgerController.getSupplierBalance);
+  .get(auth('viewPayments', 'viewAccounting', 'manageLedgers', 'viewSuppliers', 'viewLedgerFromVouchers'), validate(supplierLedgerValidation.getSupplierBalance), supplierLedgerController.getSupplierBalance);
 
 router
   .route('/supplier/:supplierId/balance-before/:referenceId')

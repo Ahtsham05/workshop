@@ -22,6 +22,11 @@ export type SearchableSelectOption = {
   badge?: string
   /** Optional avatar (customer/supplier photo, initials fallback) shown before the label */
   picture?: ContactPicture
+  /** Optional element shown before the label (e.g. a coloured category icon), in the list
+   *  and on the trigger once picked. */
+  leading?: React.ReactNode
+  /** Optional element replacing the plain `badge` tag (e.g. a coloured type badge). */
+  badgeNode?: React.ReactNode
 }
 
 type SearchableSelectProps = {
@@ -120,8 +125,10 @@ export function SearchableSelect({
             {selected && 'picture' in selected && (
               <ContactPhotoCell picture={selected.picture} name={selected.label} className='h-5 w-5' />
             )}
+            {selected?.leading}
             <span className='truncate'>{selected ? selected.label : placeholder}</span>
-            {selected?.badge && (
+            {selected?.badgeNode}
+            {!selected?.badgeNode && selected?.badge && (
               <Badge variant='outline' className='shrink-0 px-1.5 py-0 text-[10px] font-normal'>
                 {selected.badge}
               </Badge>
@@ -174,6 +181,7 @@ export function SearchableSelect({
                     {hasPicture && (
                       <ContactPhotoCell picture={option.picture} name={option.label} className='mr-3 h-8 w-8 shrink-0' />
                     )}
+                    {option.leading && <span className='mr-2 flex shrink-0 items-center'>{option.leading}</span>}
                     {hasPicture ? (
                       <div className='min-w-0 flex-1'>
                         <div className='truncate font-medium'>{option.label}</div>
@@ -188,10 +196,14 @@ export function SearchableSelect({
                         )}
                       </>
                     )}
-                    {option.badge && (
-                      <Badge variant='outline' className='ml-2 shrink-0 px-1.5 py-0 text-[10px] font-normal'>
-                        {option.badge}
-                      </Badge>
+                    {option.badgeNode ? (
+                      <span className='ml-2 shrink-0'>{option.badgeNode}</span>
+                    ) : (
+                      option.badge && (
+                        <Badge variant='outline' className='ml-2 shrink-0 px-1.5 py-0 text-[10px] font-normal'>
+                          {option.badge}
+                        </Badge>
+                      )
                     )}
                   </CommandItem>
                 )

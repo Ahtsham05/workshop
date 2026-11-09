@@ -1288,15 +1288,82 @@ const queryTransfers = async (
   };
 };
 
+// ── Multi-warehouse (services/warehouse.service.js) ─────────────────────────────────────
+// A branch transfer can name the sending warehouse (this branch) and the receiving one
+// (destination branch — also choosable when it is received). Mirrors never throw.
+const warehouseService = require('./warehouse.service');
+
+const setTransferWarehouses = async (ids, { organizationId, fromBranchId, toBranchId, fromWarehouseId, toWarehouseId }) => {
+  const set = {};
+  if (fromWarehouseId) {
+    await warehouseService.assertDocWarehouse({ organizationId, branchId: fromBranchId, warehouseId: fromWarehouseId });
+    set.fromWarehouseId = fromWarehouseId;
+  }
+  if (toWarehouseId) {
+    await warehouseService.assertDocWarehouse({ organizationId, branchId: toBranchId, warehouseId: toWarehouseId, kind: 'receipt' });
+    set.toWarehouseId = toWarehouseId;
+  }
+  if (Object.keys(set).length && ids.length) await InventoryTransfer.updateMany({ _id: { $in: ids } }, { $set: set });
+};
+
+const createTransferWithWarehouse = async (params) => {
+  const { fromWarehouseId, toWarehouseId, organizationId, fromBranchId, toBranchId } = params;
+  if (fromWarehouseId) await warehouseService.assertDocWarehouse({ organizationId, branchId: fromBranchId, warehouseId: fromWarehouseId });
+  if (toWarehouseId) await warehouseService.assertDocWarehouse({ organizationId, branchId: toBranchId, warehouseId: toWarehouseId, kind: 'receipt' });
+  const transfer = await createTransfer(params);
+  await setTransferWarehouses([transfer._id], params);
+  await warehouseService.syncBranchTransfer(transfer._id);
+  return transfer;
+};
+
+const createBulkTransferWithWarehouse = async (params) => {
+  const { fromWarehouseId, toWarehouseId, organizationId, fromBranchId, toBranchId } = params;
+  if (fromWarehouseId) await warehouseService.assertDocWarehouse({ organizationId, branchId: fromBranchId, warehouseId: fromWarehouseId });
+  if (toWarehouseId) await warehouseService.assertDocWarehouse({ organizationId, branchId: toBranchId, warehouseId: toWarehouseId, kind: 'receipt' });
+  const result = await createBulkTransfer(params);
+  const ids = (result?.items || []).map((t) => t._id);
+  await setTransferWarehouses(ids, params);
+  for (const id of ids) await warehouseService.syncBranchTransfer(id);
+  return result;
+};
+
+const approveTransferWithWarehouse = async (params) => {
+  const transfer = await approveTransfer(params);
+  await warehouseService.syncBranchTransfer(params.transferId);
+  return transfer;
+};
+
+const completeTransferWithWarehouse = async (params) => {
+  if (params.toWarehouseId) {
+    const current = await InventoryTransfer.findOne({ _id: params.transferId, organizationId: params.organizationId }).select('toBranchId').lean();
+    if (current) {
+      await warehouseService.assertDocWarehouse({ organizationId: params.organizationId, branchId: current.toBranchId, warehouseId: params.toWarehouseId, kind: 'receipt' });
+    }
+  }
+  const transfer = await completeTransfer(params);
+  if (params.toWarehouseId) {
+    await InventoryTransfer.updateOne({ _id: params.transferId }, { $set: { toWarehouseId: params.toWarehouseId } });
+    if (transfer) transfer.toWarehouseId = params.toWarehouseId;
+  }
+  await warehouseService.syncBranchTransfer(params.transferId);
+  return transfer;
+};
+
+const cancelTransferWithWarehouse = async (params) => {
+  const transfer = await cancelTransfer(params);
+  await warehouseService.syncBranchTransfer(params.transferId);
+  return transfer;
+};
+
 module.exports = {
   TRANSFER_DATE_EXPR,
   buildTransferDateMatch,
   resolveTransferDate,
-  createTransfer,
-  createBulkTransfer,
-  approveTransfer,
-  completeTransfer,
-  cancelTransfer,
+  createTransfer: createTransferWithWarehouse,
+  createBulkTransfer: createBulkTransferWithWarehouse,
+  approveTransfer: approveTransferWithWarehouse,
+  completeTransfer: completeTransferWithWarehouse,
+  cancelTransfer: cancelTransferWithWarehouse,
   getTransferById,
   getTransferGroup,
   queryTransfers,

@@ -211,6 +211,8 @@ export function CustomerPaymentList({ initialFilters }: Props) {
                 <SelectItem value={ALL}>All types</SelectItem>
                 <SelectItem value='payment'>Payment</SelectItem>
                 <SelectItem value='refund'>Refund</SelectItem>
+                <SelectItem value='return_credit'>Return credit</SelectItem>
+                <SelectItem value='discount'>Discount</SelectItem>
               </SelectContent>
             </Select>
             <Select

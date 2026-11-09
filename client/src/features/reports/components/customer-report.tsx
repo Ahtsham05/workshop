@@ -11,6 +11,8 @@ import { kpiCardClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { cn } from '@/lib/utils'
 import { useFormatMoney } from '@/lib/format-money'
+import { useLedgerStatus } from '@/features/ledger-alerts/hooks/use-ledger-alerts'
+import { AgingChip } from '@/features/ledger-alerts/components/aging-chip'
 
 interface CustomerReportProps {
   startDate: string
@@ -37,6 +39,9 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
             [t('total_spent')]: customer.totalSpent,
             'Avg Sale': customer.avgPurchaseValue,
             'Last Sale': format(new Date(customer.lastPurchase), 'yyyy-MM-dd'),
+            'Bill discount': customer.billDiscount || 0,
+            'Ledger discount allowed': customer.ledgerDiscount || 0,
+            'Total discount': (customer.billDiscount || 0) + (customer.ledgerDiscount || 0),
           }))
 
           const ws = XLSX.utils.json_to_sheet(excelData)
@@ -52,12 +57,14 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
     }))
 
   const formatCurrency = useFormatMoney()
+  // Overdue colours (Settings → Due Dates & Ledger Colours → show in reports).
+  const { rowStyleFor, agingFor, settings: ledgerSettings, colorsOn } = useLedgerStatus({ context: 'report' })
 
   if (isLoading) return <Skeleton className='h-[400px] w-full' />
 
   return (
     <div className='space-y-6'>
-      <div className='grid gap-4 md:grid-cols-3'>
+      <div className='grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4'>
         <Card className={kpiCardClass('indigo')}>
           <CardHeader>
             <CardTitle className='text-sm'>{t('unique_customers')}</CardTitle>
@@ -82,6 +89,20 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
             <div className='text-2xl font-bold'>{formatCurrency(data?.summary?.avgTransactionValue || 0)}</div>
           </CardContent>
         </Card>
+        <Card className={kpiCardClass('amber')}>
+          <CardHeader>
+            <CardTitle className='text-sm'>{t('Discounts given')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className='text-2xl font-bold'>
+              {formatCurrency((data?.summary?.totalBillDiscount || 0) + (data?.summary?.totalLedgerDiscount || 0))}
+            </div>
+            <p className='text-xs text-muted-foreground mt-1'>
+              {t('On bills')} {formatCurrency(data?.summary?.totalBillDiscount || 0)} · {t('Ledger')}{' '}
+              {formatCurrency(data?.summary?.totalLedgerDiscount || 0)} ({data?.summary?.ledgerDiscountCount || 0})
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -97,6 +118,8 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
                 <TableHead className='text-right'>Sales</TableHead>
                 <TableHead className='text-right'>{t('total_spent')}</TableHead>
                 <TableHead className='text-right'>Avg Sale</TableHead>
+                <TableHead className='text-right'>{t('Bill discount')}</TableHead>
+                <TableHead className='text-right'>{t('Ledger discount')}</TableHead>
                 <TableHead className='text-right'>Last Sale</TableHead>
               </TableRow>
             </TableHeader>
@@ -104,12 +127,28 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
               {data?.data?.map((customer) => {
                 const label = reportEntityName(language, customer.customerName, customer.customerNameUrdu)
                 return (
-                <TableRow key={customer._id}>
-                  <TableCell className={cn('font-medium', reportEntityNameClass(language, label))}>{label}</TableCell>
+                <TableRow key={customer._id} style={rowStyleFor(String(customer._id).replace(/^id:/, ''))}>
+                  <TableCell className={cn('font-medium', reportEntityNameClass(language, label))}>
+                    {label}
+                    {colorsOn ? <AgingChip aging={agingFor(String(customer._id).replace(/^id:/, ''))} settings={ledgerSettings} size='xs' className='ml-2 align-middle' /> : null}
+                  </TableCell>
                   <TableCell>{customer.phone || 'N/A'}</TableCell>
                   <TableCell className='text-right'>{customer.totalPurchases}</TableCell>
                   <TableCell className='text-right'>{formatCurrency(customer.totalSpent)}</TableCell>
                   <TableCell className='text-right'>{formatCurrency(customer.avgPurchaseValue)}</TableCell>
+                  <TableCell className='text-right text-sm tabular-nums'>
+                    {customer.billDiscount ? formatCurrency(customer.billDiscount) : '—'}
+                  </TableCell>
+                  <TableCell className='text-right text-sm tabular-nums'>
+                    {customer.ledgerDiscount ? (
+                      <span className='font-medium text-amber-700 dark:text-amber-400'>
+                        {formatCurrency(customer.ledgerDiscount)}
+                        <span className='ml-1 text-xs text-muted-foreground'>({customer.ledgerDiscountCount})</span>
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </TableCell>
                   <TableCell className='text-right text-sm text-muted-foreground'>
                     {formatDistanceToNow(new Date(customer.lastPurchase), { addSuffix: true })}
                   </TableCell>

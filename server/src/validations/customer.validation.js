@@ -23,7 +23,8 @@ const createCustomer = {
     idCardFront: cloudinaryImage,
     idCardBack: cloudinaryImage,
     customerType,
-    creditLimit: Joi.number().optional(),
+    // null/absent on create = the org's default limit (Settings → Credit Control).
+    creditLimit: Joi.number().min(0).allow(null).optional(),
     paymentTerms,
     taxNumber: Joi.string().allow(''),
     taxExempt: Joi.boolean().optional(),
@@ -75,7 +76,8 @@ const updateCustomer = {
     idCardFront: nullableCloudinaryImage,
     idCardBack: nullableCloudinaryImage,
     customerType,
-    creditLimit: Joi.number().optional(),
+    // null/absent on create = the org's default limit (Settings → Credit Control).
+    creditLimit: Joi.number().min(0).allow(null).optional(),
     paymentTerms,
     taxNumber: Joi.string().allow(''),
     taxExempt: Joi.boolean().optional(),
@@ -117,6 +119,7 @@ const bulkDeleteCustomers = {
 const bulkAddCustomers = {
   body: Joi.object().keys({
     duplicateStrategy: Joi.string().valid('skip', 'update', 'error').optional(),
+    openingBalanceDate: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow('', null).optional(),
     customers: Joi.array().items(
       Joi.object().keys({
         name: Joi.any(),
@@ -127,6 +130,9 @@ const bulkAddCustomers = {
         address: Joi.any(),
         balance: Joi.any(),
         creditLimit: Joi.any(),
+        paymentTerms: Joi.any(),
+        creditHold: Joi.any(),
+        creditHoldReason: Joi.any(),
         customerType: Joi.any(),
         taxNumber: Joi.any(),
         notes: Joi.any(),

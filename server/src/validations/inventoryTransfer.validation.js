@@ -18,6 +18,9 @@ const createTransfer = {
     fromVariantId: Joi.string().custom(objectId),
     fromBatchId: Joi.string().custom(objectId),
     toBranchId: Joi.string().custom(objectId).required(),
+    // Multi-warehouse: which warehouse sends (this branch) / receives (destination branch).
+    fromWarehouseId: Joi.string().custom(objectId).allow('', null),
+    toWarehouseId: Joi.string().custom(objectId).allow('', null),
     quantity: Joi.number().integer().min(1),
     imeis: Joi.array().items(Joi.string().trim()).min(1),
     reason: Joi.string().allow('').trim(),
@@ -29,6 +32,9 @@ const createTransfer = {
 const createBulkTransfer = {
   body: Joi.object().keys({
     toBranchId: Joi.string().custom(objectId).required(),
+    // Multi-warehouse: which warehouse sends (this branch) / receives (destination branch).
+    fromWarehouseId: Joi.string().custom(objectId).allow('', null),
+    toWarehouseId: Joi.string().custom(objectId).allow('', null),
     items: Joi.array()
       .min(1)
       .max(200)
@@ -88,6 +94,10 @@ module.exports = {
   getTransfer,
   getTransferGroup,
   approveTransfer: transferIdParam,
-  completeTransfer: transferIdParam,
+  completeTransfer: {
+    ...transferIdParam,
+    // Receiving branch picks which of its warehouses the goods go into.
+    body: Joi.object().keys({ toWarehouseId: Joi.string().custom(objectId).allow('', null) }),
+  },
   cancelTransfer: transferIdParam,
 };

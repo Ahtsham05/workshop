@@ -17,12 +17,17 @@ const inventoryRoute = require('./inventory.route');
 const inventoryTransferRoute = require('./inventoryTransfer.route');
 const stockAdjustmentRoute = require('./stockAdjustment.route');
 const stockCountRoute = require('./stockCount.route');
+const warehouseRoute = require('./warehouse.route');
 const productListRoute = require('./productList.route');
 const warrantyClaimRoute = require('./warrantyClaim.route');
 const batchRoute = require('./batch.route');
 const docsRoute = require('./docs.route');
 const config = require('../../config/config');
 const customerRoute = require('./customer.route');
+const creditControlRoute = require('./creditControl.route');
+const ledgerAlertsRoute = require('./ledgerAlerts.route');
+const ledgerDiscountRoute = require('./ledgerDiscount.route');
+const customerProfitRoute = require('./customerProfit.route');
 const supplierRoute = require('./supplier.route');
 const salesmanProfileRoute = require('./salesmanProfile.route');
 const commissionRuleRoute = require('./commissionRule.route');
@@ -231,6 +236,10 @@ const defaultRoutes = [
     route: stockCountRoute,
   },
   {
+    path: '/warehouses',
+    route: warehouseRoute,
+  },
+  {
     path: '/product-lists',
     route: productListRoute,
   },
@@ -257,6 +266,22 @@ const defaultRoutes = [
   {
     path: '/customers',
     route: customerRoute,
+  },
+  {
+    path: '/credit-control',
+    route: creditControlRoute,
+  },
+  {
+    path: '/ledger-alerts',
+    route: ledgerAlertsRoute,
+  },
+  {
+    path: '/ledger-discounts',
+    route: ledgerDiscountRoute,
+  },
+  {
+    path: '/customer-profit',
+    route: customerProfitRoute,
   },
   {
     path: '/suppliers',

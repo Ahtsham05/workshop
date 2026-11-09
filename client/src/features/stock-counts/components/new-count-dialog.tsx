@@ -22,6 +22,10 @@ import { apiError, COUNT_TYPE_META } from '../lib/labels'
 import { CategoryPicker } from './category-picker'
 import { ClassBadge } from './count-badges'
 import { useCanViewCostPrices } from '@/lib/cost-visibility'
+import { useWarehousePicker } from '@/components/warehouse-field'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+
+const WHOLE_BRANCH = '__branch__'
 
 interface NewCountDialogProps {
   type: StockCountType | null
@@ -45,6 +49,9 @@ export function NewCountDialog({ type, onOpenChange, policy }: NewCountDialogPro
   const [categoryIds, setCategoryIds] = useState<string[]>([])
   const [sampleSize, setSampleSize] = useState('20')
   const [includeZeroStock, setIncludeZeroStock] = useState(false)
+  // Multi-warehouse: count one warehouse (its quantities expected, differences posted into it).
+  const warehousePicker = useWarehousePicker('any')
+  const [countWarehouseId, setCountWarehouseId] = useState(WHOLE_BRANCH)
 
   useEffect(() => {
     if (!type) return
@@ -74,6 +81,7 @@ export function NewCountDialog({ type, onOpenChange, policy }: NewCountDialogPro
     if (type === 'surprise') body.sampleSize = Math.max(1, Math.min(500, Number(sampleSize) || 20))
     if (type === 'custom') body.classes = classes.length ? classes : undefined
     if (type !== 'initial') body.includeZeroStock = includeZeroStock
+    if (warehousePicker.visible && countWarehouseId !== WHOLE_BRANCH) body.warehouseId = countWarehouseId
     try {
       const count = await createCount(body).unwrap()
       if (count.skippedOpen > 0) {
@@ -187,6 +195,31 @@ export function NewCountDialog({ type, onOpenChange, policy }: NewCountDialogPro
               )}
             </p>
           )}
+
+          {warehousePicker.visible ? (
+            <div className='space-y-1.5'>
+              <Label>{t('What to count')}</Label>
+              <Select value={countWarehouseId} onValueChange={setCountWarehouseId}>
+                <SelectTrigger className='w-full'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={WHOLE_BRANCH}>{t('Whole branch (all warehouses)')}</SelectItem>
+                  {warehousePicker.warehouses.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name}
+                      {w.isDefault ? ` · ${t('Default')}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {countWarehouseId !== WHOLE_BRANCH ? (
+                <p className='text-xs text-muted-foreground'>
+                  {t('Expected quantities are this warehouse’s; differences are posted into it. Serial/IMEI items are counted on whole-branch counts only.')}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className='space-y-1.5'>
             <Label htmlFor='sc-title'>{t('Title (optional)')}</Label>

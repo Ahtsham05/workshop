@@ -910,6 +910,11 @@ const getCustomerReport = catchAsync(async (req, res) => {
         totalProfit: { $sum: { $ifNull: ['$totalProfit', 0] } },
         totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } },
         totalBalance: { $sum: { $ifNull: ['$balance', 0] } },
+        // Discount given at the counter on the bill itself (bill discount + line discounts).
+        billDiscount: { $sum: { $add: [
+          { $ifNull: ['$discount', 0] },
+          { $sum: { $map: { input: { $ifNull: ['$items', []] }, as: 'it', in: { $ifNull: ['$$it.discountAmount', 0] } } } },
+        ] } },
         avgPurchaseValue: { $avg: '$total' },
         lastPurchase: { $max: '$invoiceDate' },
         firstPurchase: { $min: '$invoiceDate' },
@@ -925,12 +930,34 @@ const getCustomerReport = catchAsync(async (req, res) => {
         totalTransactions: { $sum: 1 },
         totalRevenue: { $sum: '$total' },
         totalBalance: { $sum: { $ifNull: ['$balance', 0] } },
+        totalBillDiscount: { $sum: { $add: [
+          { $ifNull: ['$discount', 0] },
+          { $sum: { $map: { input: { $ifNull: ['$items', []] }, as: 'it', in: { $ifNull: ['$$it.discountAmount', 0] } } } },
+        ] } },
       } },
-      { $project: { uniqueCustomers: { $size: '$uniqueCustomers' }, totalTransactions: 1, totalRevenue: 1, totalBalance: 1, avgTransactionValue: { $cond: [{ $gt: ['$totalTransactions', 0] }, { $divide: ['$totalRevenue', '$totalTransactions'] }, 0] } } },
+      { $project: { uniqueCustomers: { $size: '$uniqueCustomers' }, totalTransactions: 1, totalRevenue: 1, totalBalance: 1, totalBillDiscount: 1, avgTransactionValue: { $cond: [{ $gt: ['$totalTransactions', 0] }, { $divide: ['$totalRevenue', '$totalTransactions'] }, 0] } } },
     ]),
   ]);
 
-  res.status(httpStatus.OK).send({ data: customerData, summary: summary[0] || {}, period: { startDate: start, endDate: end } });
+  // Ledger discounts allowed in the period (settlement / cash discount on payments, rebates)
+  // — the other half of "how much did we give away", next to the bill discounts above.
+  const ledgerDiscounts = await CustomerLedger.aggregate([
+    { $match: { ...scope, transactionType: 'discount_allowed', transactionDate: { $gte: start, $lte: end } } },
+    { $group: { _id: '$customer', amount: { $sum: '$credit' }, count: { $sum: 1 } } },
+  ]);
+  const ledgerDiscountById = new Map(ledgerDiscounts.map((d) => [String(d._id), d]));
+  const rows = customerData.map((row) => {
+    const id = String(row._id || '').startsWith('id:') ? String(row._id).slice(3) : null;
+    const d = id ? ledgerDiscountById.get(id) : null;
+    return { ...row, ledgerDiscount: d?.amount || 0, ledgerDiscountCount: d?.count || 0 };
+  });
+  const summaryOut = {
+    ...(summary[0] || {}),
+    totalLedgerDiscount: ledgerDiscounts.reduce((sum, d) => sum + (d.amount || 0), 0),
+    ledgerDiscountCount: ledgerDiscounts.reduce((sum, d) => sum + (d.count || 0), 0),
+  };
+
+  res.status(httpStatus.OK).send({ data: rows, summary: summaryOut, period: { startDate: start, endDate: end } });
 });
 
 /* ── Aging bucket helpers (shared by customer + supplier aging reports) ──────
@@ -1105,6 +1132,10 @@ const getSupplierReport = catchAsync(async (req, res) => {
         totalPaid: { $sum: supEffPaid },
         totalCashPaid: { $sum: { $cond: [{ $eq: ['$paymentType', 'Cash'] }, '$totalAmount', 0] } },
         totalBalance: { $sum: supEffBal },
+        billDiscount: { $sum: { $add: [
+          { $ifNull: ['$discount', 0] },
+          { $sum: { $map: { input: { $ifNull: ['$items', []] }, as: 'it', in: { $ifNull: ['$$it.discountAmount', 0] } } } },
+        ] } },
         avgPurchaseValue: { $avg: '$totalAmount' },
         lastPurchase: { $max: '$purchaseDate' },
       } },
@@ -1119,6 +1150,10 @@ const getSupplierReport = catchAsync(async (req, res) => {
         totalPaid: { $sum: supEffPaid },
         totalCashPaid: { $sum: { $cond: [{ $eq: ['$paymentType', 'Cash'] }, '$totalAmount', 0] } },
         totalBalance: { $sum: supEffBal },
+        totalBillDiscount: { $sum: { $add: [
+          { $ifNull: ['$discount', 0] },
+          { $sum: { $map: { input: { $ifNull: ['$items', []] }, as: 'it', in: { $ifNull: ['$$it.discountAmount', 0] } } } },
+        ] } },
         purchaseCount: { $sum: 1 },
       } },
       { $project: {
@@ -1127,13 +1162,30 @@ const getSupplierReport = catchAsync(async (req, res) => {
         totalPaid: 1,
         totalCashPaid: 1,
         totalBalance: 1,
+        totalBillDiscount: 1,
         purchaseCount: 1,
         avgTransactionValue: { $cond: [{ $gt: ['$purchaseCount', 0] }, { $divide: ['$totalPurchases', '$purchaseCount'] }, 0] },
       } },
     ]),
   ]);
 
-  res.status(httpStatus.OK).send({ data: supplierData, summary: summary[0] || {}, period: { startDate: start, endDate: end } });
+  // Ledger discounts received from suppliers in the period (settlement discount on our payments).
+  const ledgerDiscounts = await SupplierLedger.aggregate([
+    { $match: { ...scope, transactionType: 'discount_received', transactionDate: { $gte: start, $lte: end } } },
+    { $group: { _id: '$supplier', amount: { $sum: '$debit' }, count: { $sum: 1 } } },
+  ]);
+  const ledgerDiscountById = new Map(ledgerDiscounts.map((d) => [String(d._id), d]));
+  const rows = supplierData.map((row) => {
+    const d = ledgerDiscountById.get(String(row._id));
+    return { ...row, ledgerDiscount: d?.amount || 0, ledgerDiscountCount: d?.count || 0 };
+  });
+  const summaryOut = {
+    ...(summary[0] || {}),
+    totalLedgerDiscount: ledgerDiscounts.reduce((sum, d) => sum + (d.amount || 0), 0),
+    ledgerDiscountCount: ledgerDiscounts.reduce((sum, d) => sum + (d.count || 0), 0),
+  };
+
+  res.status(httpStatus.OK).send({ data: rows, summary: summaryOut, period: { startDate: start, endDate: end } });
 });
 
 /* ── Supplier Aging (Accounts Payable) ────────────────────────────────────────
@@ -1227,12 +1279,23 @@ const getSupplierAgingReport = catchAsync(async (req, res) => {
 });
 
 /* ── Expenses ──────────────────────────────────────────────────────────────── */
+// Direct (trading) vs indirect (operating) expense amounts. Rows saved before the
+// expenseNature field existed have none and count as indirect — what they always were.
+const IS_DIRECT_EXPENSE = { $eq: [{ $ifNull: ['$expenseNature', 'indirect'] }, 'direct'] };
+const directExpenseSum = { $sum: { $cond: [IS_DIRECT_EXPENSE, '$amount', 0] } };
+const indirectExpenseSum = { $sum: { $cond: [IS_DIRECT_EXPENSE, 0, '$amount'] } };
+const natureMatch = (nature) => {
+  if (nature === 'direct') return { expenseNature: 'direct' };
+  if (nature === 'indirect') return { expenseNature: { $ne: 'direct' } };
+  return {};
+};
+
 const getExpenseReport = catchAsync(async (req, res) => {
   const scope = buildScope(req);
   const { start, end } = parseRange(req.query);
-  const { category, groupRecurring } = req.query;
+  const { category, groupRecurring, expenseNature } = req.query;
 
-  const baseMatch = { ...scope, date: { $gte: start, $lte: end } };
+  const baseMatch = { ...scope, date: { $gte: start, $lte: end }, ...natureMatch(expenseNature) };
   if (category) baseMatch.category = category;
 
   // Auto-generated recurring expenses are tagged with a reference like "AUTO-XXXXXX"
@@ -1248,8 +1311,8 @@ const getExpenseReport = catchAsync(async (req, res) => {
       { $sort: { '_id.date': -1 } },
     ]),
     Expense.aggregate([
-      { $match: splitRecurring ? { ...scope, date: { $gte: start, $lte: end }, reference: { $not: /^AUTO-/ } } : { ...scope, date: { $gte: start, $lte: end } } },
-      { $group: { _id: '$category', totalAmount: { $sum: '$amount' }, expenseCount: { $sum: 1 }, avgAmount: { $avg: '$amount' } } },
+      { $match: splitRecurring ? { ...scope, date: { $gte: start, $lte: end }, ...natureMatch(expenseNature), reference: { $not: /^AUTO-/ } } : { ...scope, date: { $gte: start, $lte: end }, ...natureMatch(expenseNature) } },
+      { $group: { _id: '$category', totalAmount: { $sum: '$amount' }, expenseCount: { $sum: 1 }, avgAmount: { $avg: '$amount' }, directAmount: directExpenseSum, indirectAmount: indirectExpenseSum } },
       { $sort: { totalAmount: -1 } },
     ]),
     splitRecurring
@@ -1261,7 +1324,7 @@ const getExpenseReport = catchAsync(async (req, res) => {
       : Promise.resolve([]),
     Expense.aggregate([
       { $match: baseMatch },
-      { $group: { _id: null, totalExpenses: { $sum: '$amount' }, expenseCount: { $sum: 1 }, avgExpense: { $avg: '$amount' }, maxExpense: { $max: '$amount' }, minExpense: { $min: '$amount' } } },
+      { $group: { _id: null, totalExpenses: { $sum: '$amount' }, expenseCount: { $sum: 1 }, avgExpense: { $avg: '$amount' }, maxExpense: { $max: '$amount' }, minExpense: { $min: '$amount' }, directExpenses: directExpenseSum, indirectExpenses: indirectExpenseSum } },
     ]),
     // When a specific category is requested, return individual expense rows for the detail sheet
     category
@@ -1291,7 +1354,7 @@ const getProfitLossReport = catchAsync(async (req, res) => {
     ]),
     Expense.aggregate([
       { $match: { ...scope, date: { $gte: start, $lte: end } } },
-      { $group: { _id: null, totalExpenses: { $sum: '$amount' } } },
+      { $group: { _id: null, totalExpenses: { $sum: '$amount' }, directExpenses: directExpenseSum, indirectExpenses: indirectExpenseSum } },
     ]),
     SalesReturn.aggregate([
       { $match: { ...scope, date: { $gte: start, $lte: end }, status: { $ne: 'rejected' } } },
@@ -1312,15 +1375,23 @@ const getProfitLossReport = catchAsync(async (req, res) => {
   ]);
 
   const rev = revenueData[0] || { totalRevenue: 0, totalCost: 0, grossProfit: 0 };
-  const exp = expenseData[0] || { totalExpenses: 0 };
+  const exp = expenseData[0] || { totalExpenses: 0, directExpenses: 0, indirectExpenses: 0 };
   const sr = salesReturnsData[0] || { totalSalesReturns: 0, count: 0 };
   const pr = purchaseReturnsData[0] || { totalPurchaseReturns: 0, count: 0 };
   const svc = serviceData[0] || { totalServiceAmount: 0, count: 0 };
   const sim = simSaleData[0] || { totalSimSaleAmount: 0, simSaleProfit: 0, count: 0 };
 
   const netRevenue = rev.totalRevenue - sr.totalSalesReturns;
-  const grossProfit = (rev.grossProfit || (rev.totalRevenue - rev.totalCost)) - sr.totalSalesReturns + svc.totalServiceAmount + sim.simSaleProfit;
-  const netProfit = grossProfit - exp.totalExpenses;
+  // Trading account: direct expenses (freight inward, direct labour…) are part of the cost
+  // of what was sold, so they come off GROSS profit; indirect ones come off net profit
+  // below. Net profit is the same either way — only where the cost shows changes.
+  const salesProfit = (rev.grossProfit || (rev.totalRevenue - rev.totalCost)) - sr.totalSalesReturns + svc.totalServiceAmount + sim.simSaleProfit;
+  const grossProfit = salesProfit - exp.directExpenses;
+  // Ledger discounts (services/ledgerDiscount.service.js): allowed to customers is a cost,
+  // received from suppliers is income — neither is in the Expense collection or the invoices.
+  // eslint-disable-next-line global-require
+  const ledgerDiscounts = await require('../services/ledgerDiscount.service').getTotalsForPeriod(scope, start, end);
+  const netProfit = grossProfit - exp.indirectExpenses - ledgerDiscounts.discountAllowed + ledgerDiscounts.discountReceived;
 
   res.status(httpStatus.OK).send({
     revenue: {
@@ -1329,6 +1400,8 @@ const getProfitLossReport = catchAsync(async (req, res) => {
       salesReturnsCount: sr.count,
       netRevenue,
       costOfGoodsSold: rev.totalCost,
+      salesProfit,
+      directExpenses: exp.directExpenses,
       grossProfit,
       grossProfitMargin: netRevenue > 0 ? (grossProfit / netRevenue) * 100 : 0,
     },
@@ -1346,7 +1419,8 @@ const getProfitLossReport = catchAsync(async (req, res) => {
       totalSimSaleProfit: sim.simSaleProfit,
       totalSimSales: sim.count,
     },
-    expenses: { totalExpenses: exp.totalExpenses },
+    expenses: { totalExpenses: exp.totalExpenses, directExpenses: exp.directExpenses, indirectExpenses: exp.indirectExpenses },
+    ledgerDiscounts,
     netProfit: { amount: netProfit, margin: netRevenue > 0 ? (netProfit / netRevenue) * 100 : 0 },
     period: { startDate: start, endDate: end },
   });
@@ -2256,7 +2330,7 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
     // (see expense.model.js), so they shouldn't drag profit down before that.
     Expense.aggregate([
       { $match: { ...scope, date: { $gte: from, $lte: to }, isPaid: { $ne: false } } },
-      { $group: { _id: null, total: { $sum: '$amount' } } },
+      { $group: { _id: null, total: { $sum: '$amount' }, direct: directExpenseSum, indirect: indirectExpenseSum } },
     ]),
     // Pending recurring expenses due this period but not yet marked paid —
     // informational only, so the user can see what's coming without it
@@ -2294,7 +2368,7 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
   const billLoss = billLatePaymentLossAgg[0] || { total: 0 };
   const cwW     = cashWithdrawalProfitAgg[0] || { total: 0 };
   const cwD     = cashDepositProfitAgg[0] || { total: 0 };
-  const exp     = expenseAgg[0]        || { total: 0 };
+  const exp     = expenseAgg[0]        || { total: 0, direct: 0, indirect: 0 };
   const unpaidExp = unpaidExpenseAgg[0] || { total: 0, count: 0 };
   const pur     = purchaseAgg[0]       || { total: 0 };
   const currentInventoryValue = stockAgg[0]?.total  || 0;
@@ -2304,7 +2378,12 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
   const salesReturns      = sr.total;
   const netRevenue        = totalRevenue - salesReturns;
   const costOfGoodsSold   = inv.totalCost;
-  const grossProfit       = netRevenue - costOfGoodsSold;
+  // Sales profit = what the goods sold for minus what they cost. Gross profit (trading
+  // account) also takes off DIRECT expenses; indirect ones are taken off further down.
+  const salesProfit       = netRevenue - costOfGoodsSold;
+  const directExpenses    = exp.direct || 0;
+  const indirectExpenses  = exp.indirect || 0;
+  const grossProfit       = salesProfit - directExpenses;
 
   const loadProfit        = ld.total + ldp.total;
   const repairProfit      = rep.charges - rep.cost;
@@ -2317,8 +2396,14 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
   const depositProfit     = cwD.total;
   const purchaseReturns   = pr.total;
   const expenses          = exp.total;
+  // Ledger discounts (services/ledgerDiscount.service.js): allowed to customers is a cost,
+  // received from suppliers is income. Neither lives in invoices or the Expense collection.
+  // eslint-disable-next-line global-require
+  const ledgerDiscounts = await require('../services/ledgerDiscount.service').getTotalsForPeriod(scope, from, to);
+  const discountAllowed  = ledgerDiscounts.discountAllowed;
+  const discountReceived = ledgerDiscounts.discountReceived;
 
-  const netProfit = grossProfit + loadProfit + repairProfit + serviceProfit + simSaleProfit + billNetProfit + withdrawalProfit + depositProfit - expenses;
+  const netProfit = grossProfit + loadProfit + repairProfit + serviceProfit + simSaleProfit + billNetProfit + withdrawalProfit + depositProfit - indirectExpenses - discountAllowed + discountReceived;
 
   // investment = real-time inventory value + current wallet balances + period expenses
   const investment = currentInventoryValue + currentWalletBalance + expenses;
@@ -2334,6 +2419,8 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
       salesReturnsCount:  sr.count,
       netRevenue:         parseFloat(netRevenue.toFixed(2)),
       costOfGoodsSold:    parseFloat(costOfGoodsSold.toFixed(2)),
+      salesProfit:        parseFloat(salesProfit.toFixed(2)),
+      directExpenses:     parseFloat(directExpenses.toFixed(2)),
       grossProfit:        parseFloat(grossProfit.toFixed(2)),
       grossProfitMargin,
     },
@@ -2351,8 +2438,14 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
       purchaseReturns:       parseFloat(purchaseReturns.toFixed(2)),
       purchaseReturnsCount:  pr.count,
       billLatePaymentLoss:   parseFloat(billLatePaymentLoss.toFixed(2)),
+      discountAllowed:       parseFloat(discountAllowed.toFixed(2)),
+      discountAllowedCount:  ledgerDiscounts.discountAllowedCount,
+      discountReceived:      parseFloat(discountReceived.toFixed(2)),
+      discountReceivedCount: ledgerDiscounts.discountReceivedCount,
     },
     expenses:   parseFloat(expenses.toFixed(2)),
+    directExpenses:   parseFloat(directExpenses.toFixed(2)),
+    indirectExpenses: parseFloat(indirectExpenses.toFixed(2)),
     unpaidExpenses:      parseFloat(unpaidExp.total.toFixed(2)),
     unpaidExpensesCount: unpaidExp.count,
     netProfit:  parseFloat(netProfit.toFixed(2)),
@@ -3819,6 +3912,53 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
     });
   });
 
+  // Ledger discounts (features/ledger-discounts): a business event worth seeing next to the
+  // payment it came with, but no cash moves — direction 'neutral' keeps it out of cash in/out.
+  const [discountsAllowed, discountsReceived] = await Promise.all([
+    CustomerLedger.find({ ...scope, ...dateMatch('transactionDate'), transactionType: 'discount_allowed' })
+      .select('transactionDate reference description credit customer discount notes')
+      .populate('customer', 'name phone')
+      .lean(),
+    SupplierLedger.find({ ...scope, ...dateMatch('transactionDate'), transactionType: 'discount_received' })
+      .select('transactionDate reference description debit supplier discount notes')
+      .populate('supplier', 'name phone')
+      .lean(),
+  ]);
+  // eslint-disable-next-line global-require
+  const { REASON_LABELS } = require('../services/ledgerDiscount.service');
+  const pushDiscount = (entry, side) => {
+    const party = side === 'customer' ? entry.customer : entry.supplier;
+    const amount = side === 'customer' ? entry.credit || 0 : entry.debit || 0;
+    const reason = REASON_LABELS[entry.discount?.reason] || 'Discount';
+    entries.push({
+      id: String(entry._id),
+      date: entry.transactionDate,
+      module: 'Discounts',
+      subType: side === 'customer' ? 'Discount Allowed' : 'Discount Received',
+      reference: entry.reference || '',
+      party: (party && typeof party === 'object' && party.name) || (side === 'customer' ? 'Customer' : 'Supplier'),
+      partyPhone: (party && typeof party === 'object' && party.phone) || '',
+      paymentType: 'No cash',
+      direction: 'neutral',
+      totalAmount: amount,
+      paidAmount: 0,
+      balance: 0,
+      description: entry.description || reason,
+      details: [
+        reason,
+        entry.discount?.percent ? `${entry.discount.percent}%` : null,
+        entry.discount?.linkedAmount ? `with payment ${entry.discount.linkedAmount}` : null,
+        entry.discount?.overLimit ? `approved over limit${entry.discount.approvalNote ? `: ${entry.discount.approvalNote}` : ''}` : null,
+        entry.notes || null,
+      ]
+        .filter(Boolean)
+        .join(' | '),
+      status: 'completed',
+    });
+  };
+  discountsAllowed.forEach((entry) => pushDiscount(entry, 'customer'));
+  discountsReceived.forEach((entry) => pushDiscount(entry, 'supplier'));
+
   walletExpenses.forEach((entry) => {
     const amount = entry.debit || 0;
     entries.push({
@@ -3880,6 +4020,12 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
       .reduce((sum, e) => sum + (e.totalAmount || 0), 0),
     creditPurchases: filteredEntries
       .filter((e) => e.module === 'Purchases' && e.paymentType !== 'Cash')
+      .reduce((sum, e) => sum + (e.totalAmount || 0), 0),
+    discountAllowed: filteredEntries
+      .filter((e) => e.module === 'Discounts' && e.subType === 'Discount Allowed')
+      .reduce((sum, e) => sum + (e.totalAmount || 0), 0),
+    discountReceived: filteredEntries
+      .filter((e) => e.module === 'Discounts' && e.subType === 'Discount Received')
       .reduce((sum, e) => sum + (e.totalAmount || 0), 0),
   };
 

@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useState, useEffect, useRef, useMemo } from 'react'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 import { createPortal } from 'react-dom'
 import { useLanguage } from '@/context/language-context'
 import { useUrduDisplay } from '@/context/urdu-display-context'
@@ -632,6 +633,12 @@ export default function PurchasePanel({
   const paymentMethodTriggerRef = useRef<HTMLButtonElement>(null)
   const purchaseDateRef = useRef<HTMLInputElement>(null)
   const vendorBillNumberRef = useRef<HTMLInputElement>(null)
+  // Multi-warehouse: which warehouse the goods are received into (components/warehouse-field.tsx).
+  const warehousePicker = useWarehousePicker('receipt')
+  const setPurchaseWarehouse = useCallback(
+    (value: string) => setPurchase((prev) => (prev.warehouseId === value ? prev : { ...prev, warehouseId: value })),
+    [setPurchase]
+  )
   const itemsScrollRef = useRef<HTMLDivElement>(null)
   // The items table (colgroup: 48 + auto + 116 + 120 + 124 + 100 + 124 + 40px) needs ~740px+ to
   // render its fixed-width columns without table-fixed proportionally squeezing all of them
@@ -1243,6 +1250,8 @@ export default function PurchasePanel({
         // Only credit purchases carry a due date; switching back to cash clears it.
         dueDate: purchaseType === 'credit' ? purchase.dueDate || null : null,
         vendorBillNumber: purchase.vendorBillNumber?.trim() || undefined,
+        // Only sent while the picker is shown — otherwise the server keeps what the purchase had.
+        ...(warehousePicker.visible ? { warehouseId: purchase.warehouseId || null } : {}),
         notes: purchase.notes?.trim() || undefined,
         attachments: purchase.attachments || [],
         // Manual override only applies on create — saved purchases keep their number.
@@ -2463,6 +2472,8 @@ export default function PurchasePanel({
                 />
               </div>
             )}
+
+            <WarehouseField kind='receipt' value={purchase.warehouseId} onValueChange={setPurchaseWarehouse} />
 
             {/* Vendor Bill No — the supplier's own invoice/bill number as printed on their
                 paper bill, kept separate from our auto-generated Purchase Number above so

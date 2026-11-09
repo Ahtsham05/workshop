@@ -29,6 +29,7 @@ const investorRuleEntry = Joi.object().keys({
 const createPurchase = {
   body: Joi.object().keys({
     supplier: Joi.string().required(),
+    warehouseId: Joi.string().custom(objectId).allow('', null).optional(),
     invoiceNumber: Joi.string(),
     vendorBillNumber: Joi.string().trim().allow('').optional(),
     items: Joi.array().items(
@@ -169,6 +170,7 @@ const updatePurchase = {
   body: Joi.object().keys({
     supplier: Joi.string(),
     invoiceNumber: Joi.string(),
+    warehouseId: Joi.string().custom(objectId).allow('', null).optional(),
     vendorBillNumber: Joi.string().trim().allow('').optional(),
     items: Joi.array().items(
       Joi.object().keys({

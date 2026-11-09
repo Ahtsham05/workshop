@@ -40,6 +40,7 @@ interface UserRef {
 
 export interface StockCount {
   id: string
+  warehouseId?: { id: string; name: string; code?: string } | string | null
   number: string
   type: StockCountType
   title: string
@@ -210,6 +211,8 @@ export interface CreateStockCountRequest {
   productIds?: string[]
   sampleSize?: number
   includeZeroStock?: boolean
+  /** Multi-warehouse: count one warehouse; unset = the whole branch. */
+  warehouseId?: string
 }
 
 export interface CountEntry {

@@ -79,6 +79,12 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
             { Section: '', Category: `Sales Returns (${data.revenue.salesReturnsCount})`, Amount: -data.revenue.salesReturns },
             { Section: '', Category: 'Net Revenue', Amount: data.revenue.netRevenue },
             { Section: '', Category: t('cost_of_goods_sold'), Amount: -data.revenue.costOfGoodsSold },
+            ...((data.revenue.directExpenses ?? 0) > 0
+              ? [
+                  { Section: '', Category: 'Sales Profit', Amount: data.revenue.salesProfit ?? data.revenue.grossProfit },
+                  { Section: '', Category: 'Direct Expenses', Amount: -(data.revenue.directExpenses ?? 0) },
+                ]
+              : []),
             { Section: '', Category: t('gross_profit'), Amount: data.revenue.grossProfit },
             { Section: 'Additional Profits', Category: 'Load Profit', Amount: data.additionalProfits.loadProfit },
             { Section: '', Category: 'Repair Profit', Amount: data.additionalProfits.repairProfit },
@@ -110,7 +116,10 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
               data.additionalProfits.withdrawalProfit +
               data.additionalProfits.depositProfit
             ) },
-            { Section: 'Expenses', Category: t('total_expenses'), Amount: -data.expenses },
+            { Section: 'Expenses', Category: 'Indirect (Operating) Expenses', Amount: -(data.indirectExpenses ?? data.expenses) },
+            { Section: '', Category: `${t('total_expenses')} (direct + indirect)`, Amount: data.expenses },
+            { Section: '', Category: `Discount Allowed (${data.adjustments?.discountAllowedCount ?? 0})`, Amount: -(data.adjustments?.discountAllowed ?? 0) },
+            { Section: '', Category: `Discount Received (${data.adjustments?.discountReceivedCount ?? 0})`, Amount: data.adjustments?.discountReceived ?? 0 },
             { Section: 'Summary', Category: t('net_profit'), Amount: data.netProfit },
             { Section: '', Category: 'Net Profit Margin', Amount: `${data.netProfitMargin}%` },
             { Section: '', Category: 'ROI', Amount: `${data.roi}%` },
@@ -145,6 +154,8 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
       (add?.withdrawalProfit ?? 0) +
       (add?.depositProfit ?? 0)
     const totalProfit = (rev?.grossProfit ?? 0) + totalAdditional
+    const directExpenses = rev?.directExpenses ?? data?.directExpenses ?? 0
+    const indirectExpenses = data?.indirectExpenses ?? (data?.expenses ?? 0)
 
     return (
       <div className='space-y-6'>
@@ -241,7 +252,9 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
                 {fmt(data?.expenses ?? 0)}
               </div>
               <p className={reportKpiSubClass}>
-                Total expenses for selected period
+                {directExpenses > 0
+                  ? `${t('Direct')} ${fmt(directExpenses)} · ${t('Indirect')} ${fmt(indirectExpenses)}`
+                  : 'Total expenses for selected period'}
               </p>
             </CardContent>
           </Card>
@@ -269,6 +282,21 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
               value={`− ${fmt(rev?.costOfGoodsSold ?? 0)}`}
               valueClass='text-orange-600'
             />
+            {directExpenses > 0 && (
+              <>
+                <ReportBreakdownRow
+                  label={t('Sales Profit')}
+                  value={fmt(rev?.salesProfit ?? (rev?.grossProfit ?? 0) + directExpenses)}
+                  border
+                />
+                <ReportBreakdownRow
+                  label={t('Direct Expenses')}
+                  value={`− ${fmt(directExpenses)}`}
+                  valueClass='text-amber-700'
+                  sub={t('Freight inward, direct labour, factory costs…')}
+                />
+              </>
+            )}
             <ReportBreakdownRow
               label={t('gross_profit')}
               value={fmt(rev?.grossProfit ?? 0)}
@@ -324,11 +352,33 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
           </CardHeader>
           <CardContent className='space-y-4'>
             <ReportBreakdownRow
-              label={t('total_expenses')}
-              value={`− ${fmt(data?.expenses ?? 0)}`}
+              label={directExpenses > 0 ? t('Indirect (Operating) Expenses') : t('total_expenses')}
+              value={`− ${fmt(indirectExpenses)}`}
               valueClass='text-red-600'
               bold
             />
+            {directExpenses > 0 && (
+              <p className='text-muted-foreground text-xs'>
+                {t('Direct expenses of {{amount}} are already taken off Gross Profit above. All expenses: {{total}}.', {
+                  amount: fmt(directExpenses),
+                  total: fmt(data?.expenses ?? 0),
+                })}
+              </p>
+            )}
+            {(adj?.discountAllowed ?? 0) > 0 && (
+              <ReportBreakdownRow
+                label={`${t('Discount Allowed')} (${adj?.discountAllowedCount ?? 0})`}
+                value={`− ${fmt(adj?.discountAllowed ?? 0)}`}
+                valueClass='text-red-600'
+              />
+            )}
+            {(adj?.discountReceived ?? 0) > 0 && (
+              <ReportBreakdownRow
+                label={`${t('Discount Received')} (${adj?.discountReceivedCount ?? 0})`}
+                value={`+ ${fmt(adj?.discountReceived ?? 0)}`}
+                valueClass='text-green-600'
+              />
+            )}
           </CardContent>
         </Card>
 

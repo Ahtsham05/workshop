@@ -1,7 +1,5 @@
 import { useState } from 'react'
-import { useDispatch } from 'react-redux'
-import type { AppDispatch } from '@/stores/store'
-import { mobileShopApi } from '@/stores/mobile-shop.api'
+import { useCreateExpenseMutation, useUpdateExpenseMutation } from '@/stores/expense.api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,16 +13,16 @@ import { CalendarIcon, Loader2, Save, X, Plus, Check, ChevronsUpDown, Pencil, Tr
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { toast } from 'sonner'
-import Axios from '@/utils/Axios'
-import summery from '@/utils/summery'
 import { cn } from '@/lib/utils'
 import {
+  expenseNatureOf,
   useGetExpenseCategoriesQuery,
-  useCreateExpenseCategoryMutation,
-  useUpdateExpenseCategoryMutation,
-  useDeleteExpenseCategoryMutation,
   type ExpenseCategory,
 } from '@/stores/expenseCategory.api'
+import { ExpenseCategoryEditorDialog } from './expense-category-editor-dialog'
+import { DeleteExpenseCategoryDialog } from './delete-expense-category-dialog'
+import { ExpenseCategoryIcon } from './expense-category-icon'
+import { ExpenseNatureBadge, EXPENSE_NATURE_HELP } from './expense-nature'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 import { useCurrencyMeta } from '@/lib/format-money'
 import {
@@ -33,22 +31,6 @@ import {
   isWalletOptionValue,
   toWalletOptionValue,
 } from '@/lib/wallet-payment-options'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { useStateDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
 import { formatAppDate } from '@/lib/date-format'
@@ -80,12 +62,12 @@ export function ExpenseForm({
   const { t } = useLanguage()
   const { hasExplicitPermission } = usePermissions()
   const canManageExpenses = hasExplicitPermission('manageExpenses')
-  const dispatch = useDispatch<AppDispatch>()
+  const [createExpense] = useCreateExpenseMutation()
+  const [updateExpense] = useUpdateExpenseMutation()
   const currencyMeta = useCurrencyMeta()
   const [loading, setLoading] = useState(false)
   const [catOpen, setCatOpen] = useState(false)
   const [newCatName, setNewCatName] = useState('')
-  const [creatingCat, setCreatingCat] = useState(false)
 
   const { data: categories = [], refetch } = useGetExpenseCategoriesQuery({
     transactionType: 'business_expense',
@@ -99,16 +81,10 @@ export function ExpenseForm({
     true,
     currencyMeta,
   )
-  const [createCategory] = useCreateExpenseCategoryMutation()
-  const [updateCategory] = useUpdateExpenseCategoryMutation()
-  const [deleteCategoryMut] = useDeleteExpenseCategoryMutation()
 
-  const [categoryEditor, setCategoryEditor] = useState<ExpenseCategory | null>(null)
-  const [editCatName, setEditCatName] = useState('')
-  const [editCatColor, setEditCatColor] = useState('#6366f1')
-  const [savingCat, setSavingCat] = useState(false)
+  // null = closed; { category } = edit; { category: null } = create (name from the search box)
+  const [categoryEditor, setCategoryEditor] = useState<{ category: ExpenseCategory | null; name?: string } | null>(null)
   const [categoryToDelete, setCategoryToDelete] = useState<ExpenseCategory | null>(null)
-  const [deletingCat, setDeletingCat] = useState(false)
 
   const [formData, setFormData] = useState({
     category: expense?.category || defaultCategory || '',
@@ -155,82 +131,25 @@ export function ExpenseForm({
       ...cat,
       id: (cat as ExpenseCategory & { _id?: string }).id || (cat as ExpenseCategory & { _id?: string })._id || '',
     }
-    setCategoryEditor(safeCategory)
-    setEditCatName(cat.name)
-    setEditCatColor(cat.color || '#6366f1')
+    setCategoryEditor({ category: safeCategory })
   }
 
-  const handleSaveCategoryEdit = async () => {
-    if (!categoryEditor) return
-    const name = editCatName.trim()
-    if (!name) return
-    setSavingCat(true)
-    try {
-      if (!categoryEditor.id) {
-        toast.error(t('Failed to update category'))
-        return
-      }
-      await updateCategory({ id: categoryEditor.id, name, color: editCatColor }).unwrap()
-      if (formData.category === categoryEditor.name) {
-        handleChange('category', name)
-      }
-      toast.success(t('Category updated'))
-      refetch()
-      onCategoryUpdated?.()
-      setCategoryEditor(null)
-    } catch (err: any) {
-      toast.error(err?.data?.message || t('Failed to update category'))
-    } finally {
-      setSavingCat(false)
-    }
-  }
+  // Inactive (retired) categories aren't offered for new expenses — but an expense being
+  // edited keeps showing the one it already has.
+  const pickerCategories = categories.filter(
+    (c) => c.isActive !== false || c.name.trim().toLowerCase() === String(formData.category || '').trim().toLowerCase(),
+  )
 
-  const handleConfirmDeleteCategory = async () => {
-    if (!categoryToDelete) return
-    setDeletingCat(true)
-    try {
-      const categoryId = categoryToDelete.id || (categoryToDelete as ExpenseCategory & { _id?: string })._id
-      if (!categoryId) {
-        toast.error(t('Failed to delete category'))
-        return
-      }
-      await deleteCategoryMut({
-        id: categoryId,
-        transactionType: 'business_expense',
-      }).unwrap()
-      if (formData.category === categoryToDelete.name) {
-        handleChange('category', '')
-      }
-      toast.success(t('Category deleted'))
-      refetch()
-      setCategoryToDelete(null)
-    } catch (err: any) {
-      toast.error(err?.data?.message || t('Failed to delete category'))
-    } finally {
-      setDeletingCat(false)
-    }
-  }
+  const selectedCategory = categories.find(
+    (c) => c.name.trim().toLowerCase() === String(formData.category || '').trim().toLowerCase(),
+  )
+  const selectedNature = selectedCategory ? expenseNatureOf(selectedCategory) : null
 
-  const handleCreateCategory = async () => {
+  const handleCreateCategory = () => {
     const name = newCatName.trim()
     if (!name) return
-    setCreatingCat(true)
-    try {
-      const created = await createCategory({
-        name,
-        color: '#6366f1',
-        transactionType: 'business_expense',
-      }).unwrap()
-      handleChange('category', created.name)
-      setNewCatName('')
-      setCatOpen(false)
-      toast.success(t('Category created'))
-      refetch()
-    } catch (err: any) {
-      toast.error(err?.data?.message || t('Failed to create category'))
-    } finally {
-      setCreatingCat(false)
-    }
+    setCatOpen(false)
+    setCategoryEditor({ category: null, name })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -249,18 +168,18 @@ export function ExpenseForm({
         reference: formData.reference || undefined,
         notes: formData.notes || undefined,
       }
+      // The mutations refresh the expense list, reports, cash book and bank balances.
       if (isEdit && expense?.id) {
-        await Axios({ ...summery.updateExpense, url: `${summery.updateExpense.url}/${expense.id}`, data: payload })
+        await updateExpense({ id: expense.id, ...payload }).unwrap()
         toast.success(t('Expense updated successfully'))
       } else {
-        await Axios({ ...summery.addExpense, data: payload })
+        await createExpense(payload).unwrap()
         draft.clear()
         toast.success(t('Expense created successfully'))
       }
-      dispatch(mobileShopApi.util.invalidateTags(['CashBook', 'MobileDashboard']))
       onSave()
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || t('Failed to save expense'))
+      toast.error(error?.data?.message || error?.response?.data?.message || t('Failed to save expense'))
     } finally {
       setLoading(false)
     }
@@ -289,7 +208,14 @@ export function ExpenseForm({
                     aria-expanded={catOpen}
                     className={cn('w-full justify-between font-normal', errors.category && 'border-red-500')}
                   >
-                    {formData.category || <span className="text-muted-foreground">{t('Select category')}</span>}
+                    {formData.category ? (
+                      <span className="flex min-w-0 items-center gap-2">
+                        <ExpenseCategoryIcon name={formData.category} color={selectedCategory?.color} size="sm" className="h-6 w-6" />
+                        <span className="truncate">{formData.category}</span>
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">{t('Select category')}</span>
+                    )}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -299,7 +225,7 @@ export function ExpenseForm({
                     <CommandEmpty>{t('No categories found')}</CommandEmpty>
                     <CommandList className="max-h-52 overflow-y-auto">
                     <CommandGroup heading={t('Categories')}>
-                      {categories.map((cat) => (
+                      {pickerCategories.map((cat) => (
                         <CommandItem
                           key={cat.id}
                           value={`${cat.name} ${cat.id}`}
@@ -309,11 +235,9 @@ export function ExpenseForm({
                           }}
                         >
                           <div className="flex w-full min-w-0 items-center gap-2">
-                            <span
-                              className="h-2.5 w-2.5 shrink-0 rounded-full"
-                              style={{ backgroundColor: cat.color }}
-                            />
+                            <ExpenseCategoryIcon name={cat.name} color={cat.color} size="sm" className="h-6 w-6" />
                             <span className="flex-1 truncate">{cat.name}</span>
+                            <ExpenseNatureBadge nature={expenseNatureOf(cat)} compact />
                             {formData.category === cat.name && (
                               <Check className="h-4 w-4 shrink-0 text-primary" />
                             )}
@@ -341,7 +265,6 @@ export function ExpenseForm({
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
-                                {!cat.isDefault && (
                                   <Button
                                     type="button"
                                     variant="ghost"
@@ -352,12 +275,11 @@ export function ExpenseForm({
                                       e.preventDefault()
                                       e.stopPropagation()
                                       setCatOpen(false)
-                                      setCategoryToDelete(cat)
+                                      setCategoryToDelete({ ...cat, id: cat.id || (cat as ExpenseCategory & { _id?: string })._id || '' })
                                     }}
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
-                                )}
                               </div>
                             )}
                           </div>
@@ -383,9 +305,9 @@ export function ExpenseForm({
                               size="sm"
                               className="h-7 px-2 shrink-0"
                               onClick={handleCreateCategory}
-                              disabled={creatingCat || !newCatName.trim()}
+                              disabled={!newCatName.trim()}
                             >
-                              {creatingCat ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                              <Plus className="h-3 w-3" />
                             </Button>
                           </div>
                         </CommandGroup>
@@ -396,6 +318,12 @@ export function ExpenseForm({
                 </PopoverContent>
               </Popover>
               {errors.category && <p className="text-sm text-red-500">{errors.category}</p>}
+              {selectedNature && !errors.category && (
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                  <ExpenseNatureBadge nature={selectedNature} compact />
+                  <span>{t(EXPENSE_NATURE_HELP[selectedNature])}</span>
+                </div>
+              )}
             </div>
 
             {/* Amount */}
@@ -535,80 +463,33 @@ export function ExpenseForm({
           </div>
         </form>
 
-        <Dialog open={!!categoryEditor} onOpenChange={(open) => !open && setCategoryEditor(null)}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>{t('Edit category')}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label htmlFor="edit-cat-name">{t('Name')}</Label>
-                <Input
-                  id="edit-cat-name"
-                  value={editCatName}
-                  onChange={(e) => setEditCatName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      handleSaveCategoryEdit()
-                    }
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-cat-color">{t('Color')}</Label>
-                <Input
-                  id="edit-cat-color"
-                  type="color"
-                  className="h-10 w-full cursor-pointer p-1"
-                  value={editCatColor}
-                  onChange={(e) => setEditCatColor(e.target.value)}
-                />
-              </div>
-            </div>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button type="button" variant="outline" onClick={() => setCategoryEditor(null)}>
-                {t('Cancel')}
-              </Button>
-              <Button type="button" onClick={handleSaveCategoryEdit} disabled={savingCat || !editCatName.trim()}>
-                {savingCat ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {t('Saving...')}
-                  </>
-                ) : (
-                  t('save_changes')
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ExpenseCategoryEditorDialog
+          open={!!categoryEditor}
+          onOpenChange={(open) => !open && setCategoryEditor(null)}
+          category={categoryEditor?.category ?? null}
+          initialName={categoryEditor?.name}
+          onSaved={(saved, { renamedFrom }) => {
+            if (!categoryEditor?.category) {
+              // New category from the picker — select it and clear the search box.
+              handleChange('category', saved.name)
+              setNewCatName('')
+            } else if (renamedFrom && formData.category === renamedFrom) {
+              handleChange('category', saved.name)
+            }
+            refetch()
+            onCategoryUpdated?.()
+          }}
+        />
 
-        <AlertDialog
-          open={!!categoryToDelete}
+        <DeleteExpenseCategoryDialog
+          category={categoryToDelete}
           onOpenChange={(open) => !open && setCategoryToDelete(null)}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t('Delete category?')}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t('This will remove the category from the list. Existing expenses keep their recorded category text.')}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={deletingCat}>{t('Cancel')}</AlertDialogCancel>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={deletingCat}
-                onClick={() => handleConfirmDeleteCategory()}
-              >
-                {deletingCat ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {t('delete')}
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          onDeleted={({ name, movedTo }) => {
+            if (formData.category === name) handleChange('category', movedTo || '')
+            refetch()
+            onCategoryUpdated?.()
+          }}
+        />
       </CardContent>
     </Card>
   )

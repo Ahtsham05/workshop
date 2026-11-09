@@ -72,6 +72,8 @@ const journalEntrySchema = mongoose.Schema(
         'EXPENSE', 'TRANSFER', 'ADJUSTMENT', 'OPENING', 'REFUND',
         'SALE', 'PURCHASE', 'COGS', 'PAYMENT_IN', 'PAYMENT_OUT',
         'SALES_RETURN', 'PURCHASE_RETURN',
+        // Ledger discounts (no cash): customer settlement discount / supplier discount.
+        'DISCOUNT_ALLOWED', 'DISCOUNT_RECEIVED',
       ],
       required: true,
     },

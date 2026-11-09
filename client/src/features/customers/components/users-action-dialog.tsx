@@ -45,7 +45,17 @@ import {
   Wallet,
   MapPin,
   Receipt,
+  CreditCard,
 } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { usePermissions } from '@/context/permission-context'
+import { useGetCreditSettingsQuery } from '@/stores/creditControl.api'
 import { useFormDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
 
@@ -74,7 +84,8 @@ const formSchema = z.object({
   idCardFront: imageRefSchema,
   idCardBack: imageRefSchema,
   customerType: z.enum(customerTypeValues).optional().or(z.literal(NONE)),
-  creditLimit: z.coerce.number().optional(),
+  // Empty = no value sent: a new customer then gets the default limit (Settings → Credit Control).
+  creditLimit: z.coerce.number().min(0, { message: 'Credit limit cannot be negative.' }).optional(),
   paymentTerms: z.enum(paymentTermsValues).optional().or(z.literal(NONE)),
   taxNumber: z.string().optional(),
   taxExempt: z.boolean().optional(),
@@ -95,6 +106,10 @@ interface Props {
 export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch, onCreated, defaultName }: Props) {
   const isEdit = !!currentRow
   const { t, isRTL } = useLanguage()
+  const { hasPermission } = usePermissions()
+  // Only manageCreditLimits may set a limit (the server enforces the same rule).
+  const canManageCredit = hasPermission('manageCreditLimits')
+  const { data: creditSettings } = useGetCreditSettingsQuery(undefined, { skip: !open || !canManageCredit })
   const nativeLanguageName = useNativeLanguageName()
   const { showUrduInput } = useUrduDisplay()
   const form = useForm<customerForm>({
@@ -117,7 +132,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
           idCardFront: undefined,
           idCardBack: undefined,
           customerType: NONE,
-          creditLimit: 0,
+          creditLimit: undefined,
           paymentTerms: NONE,
           taxNumber: '',
           taxExempt: false,
@@ -154,10 +169,12 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
   }, [form])
 
   const onSubmit = async (values: customerForm) => {
-    const { picture, idCardFront, idCardBack, customerType, paymentTerms, ...rest } = values
+    const { picture, idCardFront, idCardBack, customerType, paymentTerms, creditLimit, ...rest } = values
+    const creditPart = canManageCredit && creditLimit !== undefined ? { creditLimit } : {}
     const payload = isEdit
       ? {
           ...rest,
+          ...creditPart,
           picture: picture ?? null,
           idCardFront: idCardFront ?? null,
           idCardBack: idCardBack ?? null,
@@ -166,6 +183,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
         }
       : {
           ...rest,
+          ...creditPart,
           ...(picture ? { picture } : {}),
           ...(idCardFront ? { idCardFront } : {}),
           ...(idCardBack ? { idCardBack } : {}),
@@ -398,6 +416,79 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                   </FormItem>
                 )}
               />
+              </EntityFormSection>
+
+              <EntityFormSection
+                icon={<CreditCard />}
+                tone='violet'
+                className='p-3 sm:p-4'
+                title={t('Credit & Payment Terms')}
+                description={t('How much this customer may owe, and when invoices fall due.')}
+              >
+                <div className='grid gap-4 sm:grid-cols-2'>
+                  <FormField
+                    control={form.control}
+                    name='creditLimit'
+                    render={({ field }) => (
+                      <FormItem className='gap-1.5'>
+                        <FormLabel>{t('Credit Limit')}</FormLabel>
+                        <FormControl>
+                          <Input
+                            type='number'
+                            min={0}
+                            inputMode='decimal'
+                            autoComplete='off'
+                            disabled={!canManageCredit}
+                            placeholder={
+                              !isEdit && creditSettings
+                                ? creditSettings.defaultCreditLimit > 0
+                                  ? t('Default: {{amount}}', { amount: creditSettings.defaultCreditLimit })
+                                  : t('No limit')
+                                : t('0 = no limit')
+                            }
+                            name={field.name}
+                            ref={field.ref}
+                            onBlur={field.onBlur}
+                            value={field.value === undefined || field.value === null ? '' : String(field.value)}
+                            onChange={(e) => field.onChange(e.target.value === '' ? undefined : e.target.value)}
+                          />
+                        </FormControl>
+                        <p className='text-xs text-muted-foreground'>
+                          {canManageCredit
+                            ? t('Credit sales that take the balance past this are stopped. 0 = no limit.')
+                            : t('Only staff allowed to manage credit limits can change this.')}
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='paymentTerms'
+                    render={({ field }) => (
+                      <FormItem className='gap-1.5'>
+                        <FormLabel>{t('Payment Terms')}</FormLabel>
+                        <Select value={field.value || NONE} onValueChange={field.onChange}>
+                          <FormControl>
+                            <SelectTrigger className='w-full'>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value={NONE}>{t('Not set')}</SelectItem>
+                            <SelectItem value='cash'>{t('Cash')}</SelectItem>
+                            <SelectItem value='due_on_receipt'>{t('Due on receipt')}</SelectItem>
+                            <SelectItem value='net_15'>{t('15 days')}</SelectItem>
+                            <SelectItem value='net_30'>{t('30 days')}</SelectItem>
+                            <SelectItem value='net_60'>{t('60 days')}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className='text-xs text-muted-foreground'>{t('Sets when an invoice without its own due date becomes overdue.')}</p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </EntityFormSection>
 
               <EntityFormSection

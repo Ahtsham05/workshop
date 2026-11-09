@@ -134,14 +134,15 @@ export function SupplierLedgerList({ onSelectSupplier }: SupplierLedgerListProps
   };
 
   return (
-    <Card>
-      <CardHeader>
+    // Phones: no card chrome or side padding, so the list uses the full screen width.
+    <Card className="max-sm:gap-4 max-sm:rounded-none max-sm:border-0 max-sm:bg-transparent max-sm:py-0 max-sm:shadow-none">
+      <CardHeader className="max-sm:px-0">
         <div>
           <CardTitle>{t('Supplier Ledger')}</CardTitle>
           <CardDescription>{t('View all supplier balances and transactions')}</CardDescription>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="max-sm:px-0">
         <LedgerListToolbar
           searchInput={searchTerm}
           onSearchChange={setSearchTerm}
@@ -149,15 +150,17 @@ export function SupplierLedgerList({ onSelectSupplier }: SupplierLedgerListProps
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           actions={
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setBulkSmsOpen(true)} className="shrink-0">
-                <MessageSquare className="w-4 h-4 mr-2" />
-                {t('Send SMS')}
+            <div className="flex items-center gap-2 max-sm:grid max-sm:grid-cols-3">
+              <Button variant="outline" onClick={() => setBulkSmsOpen(true)} className="shrink-0 max-sm:w-full max-sm:px-2">
+                <MessageSquare className="w-4 h-4 mr-2 max-sm:mr-1.5" />
+                <span className="max-sm:hidden">{t('Send SMS')}</span>
+                <span className="sm:hidden">{t('SMS')}</span>
               </Button>
               <BalanceSheetPrintButton party="supplier" rows={suppliers} disabled={loading} />
-              <Button variant="outline" onClick={exportToExcel} className="shrink-0">
-                <Download className="w-4 h-4 mr-2" />
-                {t('Export to Excel')}
+              <Button variant="outline" onClick={exportToExcel} className="shrink-0 max-sm:w-full max-sm:px-2">
+                <Download className="w-4 h-4 mr-2 max-sm:mr-1.5" />
+                <span className="max-sm:hidden">{t('Export to Excel')}</span>
+                <span className="sm:hidden">{t('Excel')}</span>
               </Button>
             </div>
           }

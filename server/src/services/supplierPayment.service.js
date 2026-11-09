@@ -377,8 +377,22 @@ const getSupplierReconciliation = async ({ organizationId, supplier }) => {
 
   const invoiceOverpayment = Money.roundMoney(invoiceTotals?.invoiceOverpayment || 0);
 
+  // Discounts received lower the payable; the part that settled a bill lowered the bill too
+  // (no gap), the rest sits on the account (e.g. against an opening balance).
+  const [discountLedger] = await SupplierLedger.aggregate([
+    { $match: { ...match, transactionType: 'discount_received' } },
+    { $group: { _id: null, total: { $sum: '$debit' } } },
+  ]);
+  const [discountAllocated] = await SupplierPayment.aggregate([
+    { $match: { ...match, status: 'posted', direction: 'discount' } },
+    { $group: { _id: null, allocated: { $sum: '$allocatedTotal' } } },
+  ]);
+  const discountsOnAccount = Money.roundMoney(
+    Math.max(0, (discountLedger?.total || 0) - (discountAllocated?.allocated || 0))
+  );
+
   const explained = Money.roundMoney(
-    unallocatedPayments + availableCredit + contraCredits + returnCredits + ledgerDrift + invoiceOverpayment
+    unallocatedPayments + availableCredit + contraCredits + returnCredits + discountsOnAccount + ledgerDrift + invoiceOverpayment
   );
   // Whatever is still unaccounted for after every named component — kept so the identity
   // below holds exactly rather than drifting silently.
@@ -400,6 +414,7 @@ const getSupplierReconciliation = async ({ organizationId, supplier }) => {
     returnCredits,
     returnCount: creditsFromLedger?.returnCount || 0,
     appliedReturnCredits: Money.roundMoney(creditsFromLedger?.appliedReturnCredits || 0),
+    discountsOnAccount,
     invoiceOverpayment,
     overpaidInvoiceCount: invoiceTotals?.overpaidInvoiceCount || 0,
     // Named so the user can go straight to the invoice that needs a human decision.
@@ -444,6 +459,7 @@ const repairSupplierAllocations = async ({ organizationId, branchId, supplier },
     $or: [
       { transactionType: 'payment_made', referenceId: { $in: [null, undefined] } },
       { transactionType: 'purchase_return' },
+      { transactionType: 'discount_received' },
     ],
   }).sort({ transactionDate: 1, createdAt: 1 });
 
@@ -1044,7 +1060,7 @@ const reallocatePayment = async (paymentId, { allocations: manualAllocations = [
 
     payment.allocations = plan.allocations;
     payment.allocatedTotal = plan.allocatedTotal;
-    payment.unappliedAmount = plan.unappliedAmount;
+    payment.unappliedAmount = payment.direction === 'discount' ? 0 : plan.unappliedAmount;
     payment.allocationMode = mode;
     payment.history.push(
       historyEntry('reallocated', user, `Re-applied across ${plan.allocations.length} invoice(s)`, plan.allocatedTotal)
@@ -1151,7 +1167,10 @@ const recordAllocationForLedgerEntry = async (entry, user, { allocationMode = 'f
   if (!entry) return null;
   const isPayment = entry.transactionType === 'payment_made';
   const isReturn = entry.transactionType === 'purchase_return';
-  if (!isPayment && !isReturn) return null;
+  // A discount the supplier gave us settles open purchase bills like a payment (oldest
+  // first) but is never advance credit — see ledgerDiscount.service.js.
+  const isDiscount = entry.transactionType === 'discount_received';
+  if (!isPayment && !isReturn && !isDiscount) return null;
   // A payment tied to a source document (a purchase's own paid-at-entry leg) is already
   // reflected on that purchase — allocating it again would pay the same invoice twice.
   // Returns are the opposite: they are ALWAYS tied to their PurchaseReturn document, which
@@ -1196,6 +1215,7 @@ const recordAllocationForLedgerEntry = async (entry, user, { allocationMode = 'f
       manualAllocations: [{ purchaseId: String(invoice._id), amount: Math.min(amount, invoice.remainingAmount) }],
     });
   } else {
+    if (isDiscount) direction = 'discount';
     const openInvoices = await getOpenInvoicesForSupplier({
       organizationId: entry.organizationId,
       branchId: entry.branchId,
@@ -1227,7 +1247,7 @@ const recordAllocationForLedgerEntry = async (entry, user, { allocationMode = 'f
     allocatedTotal: plan.allocatedTotal,
     // A return credit is never an "advance": whatever it couldn't put on the invoice stays
     // on the account as the ledger already records it, not as spendable payment credit.
-    unappliedAmount: isReturn ? 0 : plan.unappliedAmount,
+    unappliedAmount: isReturn || isDiscount ? 0 : plan.unappliedAmount,
     status: 'posted',
     supplierLedgerEntryId: entry._id,
     history: [
@@ -1236,7 +1256,9 @@ const recordAllocationForLedgerEntry = async (entry, user, { allocationMode = 'f
         user,
         isReturn
           ? `Purchase return ${entry.reference || ''} credited ${formatMoney(plan.allocatedTotal)} to invoice ${plan.allocations[0]?.invoiceNumber || ''}`.trim()
-          : `Recorded from the supplier ledger — ${formatMoney(amount)} applied across ${plan.allocations.length} invoice(s)`,
+          : isDiscount
+            ? `Discount received ${formatMoney(amount)} — settled ${formatMoney(plan.allocatedTotal)} across ${plan.allocations.length} invoice(s)`
+            : `Recorded from the supplier ledger — ${formatMoney(amount)} applied across ${plan.allocations.length} invoice(s)`,
         amount
       ),
     ],
@@ -1297,7 +1319,7 @@ const syncAllocationForLedgerEntry = async (entry, user) => {
   payment.referenceNumber = entry.reference || payment.referenceNumber;
   payment.allocations = plan.allocations;
   payment.allocatedTotal = plan.allocatedTotal;
-  payment.unappliedAmount = plan.unappliedAmount;
+  payment.unappliedAmount = payment.direction === 'discount' ? 0 : plan.unappliedAmount;
   payment.history.push(
     historyEntry('reallocated', user, `Ledger entry edited — re-applied across ${plan.allocations.length} invoice(s)`, amount)
   );

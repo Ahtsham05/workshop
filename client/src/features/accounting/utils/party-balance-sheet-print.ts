@@ -23,6 +23,8 @@ export interface BalanceSheetRow {
   phone?: string | null
   /** Positive = they owe us (customer) / we owe them (supplier); negative = advance. */
   balance: number
+  /** Overdue band colour (features/ledger-alerts) — tints the printed row. */
+  color?: string | null
 }
 
 export interface BalanceSheetData {
@@ -31,6 +33,8 @@ export interface BalanceSheetData {
   language?: BalanceSheetLanguage
   /** Leave out parties whose balance is zero. */
   hideSettled?: boolean
+  /** Colour key printed above the table when rows carry overdue colours. */
+  colorLegend?: { label: string; color: string }[]
   companyName?: string
   companyNameUrdu?: string
   companyAddress?: string
@@ -253,8 +257,10 @@ export function generateBalanceSheetHTML(data: BalanceSheetData): string {
             : balance > 0
               ? `<span class="ltr">${money(balance)}</span>`
               : `<span class="ltr">${money(Math.abs(balance))}</span><span class="tag">${L.advance_tag}</span>`
+          const rowColor = c.color && /^#[0-9a-fA-F]{6}$/.test(c.color) ? c.color : null
+          const rowStyle = rowColor ? ` style="background:${rowColor}22;box-shadow:inset ${rtl ? '-' : ''}4px 0 0 0 ${rowColor}"` : ''
           return `
-        <tr>
+        <tr${rowStyle}>
           <td class="c-num">${i + 1}</td>
           <td class="c-name">${escapeHtml(name)}</td>
           <td class="c-phone"><span class="ltr">${c.phone?.trim() ? escapeHtml(c.phone.trim()) : '—'}</span></td>
@@ -381,6 +387,10 @@ export function generateBalanceSheetHTML(data: BalanceSheetData): string {
     <div class="box"><div class="lbl">${L.total_settled}</div><div class="blank"></div></div>
   </div>
 
+  ${(data.colorLegend || []).length && rows.some((r) => r.color) ? `<div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin:0 0 8px;font-size:11px">${(data.colorLegend || [])
+    .filter((item) => /^#[0-9a-fA-F]{6}$/.test(item.color))
+    .map((item) => `<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:2px;background:${item.color}"></span>${escapeHtml(item.label)}</span>`)
+    .join('')}</div>` : ''}
   <table class="sheet">
     <thead>
       <tr>

@@ -66,6 +66,46 @@ const normalizeTransactionType = (value) => {
   return type;
 };
 
+const EXPENSE_NATURES = ['direct', 'indirect'];
+
+/** "Direct", "DIRECT EXPENSE", "trading" → 'direct'; anything indirect-ish → 'indirect'; else null. */
+const parseExpenseNature = (value) => {
+  const text = String(value == null ? '' : value).trim().toLowerCase();
+  if (!text) return null;
+  if (EXPENSE_NATURES.includes(text)) return text;
+  if (/^(in-?direct|operating|admin|administrative|overhead|office|selling|general)/.test(text)) return 'indirect';
+  if (/^(direct|trading|manufacturing|production|factory|cost of sales|cogs)/.test(text)) return 'direct';
+  return null;
+};
+
+const normalizeExpenseNature = (value) => {
+  const nature = parseExpenseNature(value);
+  if (!nature) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Expense type must be Direct or Indirect');
+  }
+  return nature;
+};
+
+/**
+ * A category may post to one specific chart-of-accounts head. Only a posting (non-group)
+ * EXPENSE account of this org/branch is accepted; '' / null clears the mapping.
+ */
+const normalizeAccountCode = async (value, organizationId, branchId) => {
+  const code = String(value == null ? '' : value).trim();
+  if (!code) return null;
+  // eslint-disable-next-line global-require
+  const AccountHead = require('../models/accountHead.model');
+  const account = await AccountHead.findOne({
+    organizationId,
+    ...(branchId ? { branchId } : {}),
+    code,
+  }).lean();
+  if (!account) throw new ApiError(httpStatus.BAD_REQUEST, `Account ${code} was not found in your chart of accounts`);
+  if (account.rootType !== 'EXPENSE') throw new ApiError(httpStatus.BAD_REQUEST, `Account ${code} is not an expense account`);
+  if (account.isGroup) throw new ApiError(httpStatus.BAD_REQUEST, `Account ${code} is a group — pick an account under it`);
+  return code;
+};
+
 const seedDefaultsForType = async (organizationId, branchId, userId, transactionType) => {
   const defaults =
     transactionType === 'business_expense'
@@ -97,7 +137,13 @@ const seedDefaultsForType = async (organizationId, branchId, userId, transaction
 
 const getCategories = async (organizationId, branchId, userId, transactionType = 'business_expense') => {
   const type = normalizeTransactionType(transactionType);
-  await seedDefaultsForType(organizationId, branchId, userId, type);
+  // Business-expense categories are no longer created automatically — every business
+  // sets up its own (the Categories manager offers common ones in one click). Seeding on
+  // read would also bring back any default a user deleted. Personal-ledger types keep
+  // their starter lists.
+  if (type !== 'business_expense') {
+    await seedDefaultsForType(organizationId, branchId, userId, type);
+  }
   return ExpenseCategory.find({ organizationId, branchId, transactionType: type }).sort({
     isDefault: -1,
     name: 1,
@@ -115,11 +161,20 @@ const createCategory = async (data, organizationId, branchId, userId) => {
     organizationId,
     branchId,
     transactionType,
-    name: { $regex: `^${name}$`, $options: 'i' },
+    name: { $regex: `^${escapeRegex(name)}$`, $options: 'i' },
   });
   if (exists) {
     throw new ApiError(httpStatus.CONFLICT, `Category "${name}" already exists`);
   }
+
+  const extra = {};
+  if (transactionType === 'business_expense') {
+    if (data.expenseNature !== undefined && data.expenseNature !== null && data.expenseNature !== '') {
+      extra.expenseNature = normalizeExpenseNature(data.expenseNature);
+    }
+    if (data.accountCode) extra.accountCode = await normalizeAccountCode(data.accountCode, organizationId, branchId);
+  }
+  if (data.description) extra.description = String(data.description).trim();
 
   try {
     return await ExpenseCategory.create({
@@ -129,6 +184,7 @@ const createCategory = async (data, organizationId, branchId, userId) => {
       organizationId,
       branchId,
       createdBy: userId,
+      ...extra,
     });
   } catch (err) {
     if (err.code === 11000) {
@@ -209,15 +265,93 @@ const propagateCategoryNameChange = async ({
   );
 };
 
+const UPDATABLE_CATEGORY_FIELDS = ['name', 'color', 'transactionType', 'expenseNature', 'accountCode', 'description', 'isActive'];
+
+/**
+ * Re-classify a category's existing expenses after its type or posting account changed:
+ * the stored snapshot is updated in one write, then every PAID expense's journal entry is
+ * re-posted so the Chart of Accounts moves the amounts between Direct Expenses and the
+ * general expense ledger. Unpaid expenses have no journal entry yet — they pick the new
+ * account up when they are paid.
+ */
+const reclassifyCategoryExpenses = async (category) => {
+  const Expense = require('../models/expense.model');
+  const filter = {
+    organizationId: category.organizationId,
+    branchId: category.branchId,
+    category: { $regex: `^${escapeRegex(category.name)}$`, $options: 'i' },
+  };
+  const result = await Expense.updateMany(filter, { $set: { expenseNature: category.expenseNature } });
+  // eslint-disable-next-line global-require
+  const accountsSystemService = require('./accountsSystem.service');
+  const candidates = await Expense.find({ ...filter, isPaid: { $ne: false } })
+    .select('_id organizationId branchId createdBy amount paymentMethod walletType description category date expenseNature')
+    .lean();
+  // Only expenses that already carry their own journal entry are re-posted. Expenses
+  // mirrored from another module (salary, commission, agent bills…) are saved with
+  // skipCashBookSync and their source posts the books — giving them an entry here would
+  // count the cost twice.
+  // eslint-disable-next-line global-require
+  const JournalEntry = require('../models/journalEntry.model');
+  const posted = candidates.length
+    ? await JournalEntry.find({
+      organizationId: category.organizationId,
+      referenceModel: 'Expense',
+      referenceId: { $in: candidates.map((e) => e._id) },
+      entryType: 'EXPENSE',
+      status: 'posted',
+      reversalOf: null,
+    }).distinct('referenceId')
+    : [];
+  const postedIds = new Set(posted.map(String));
+  const paid = candidates.filter((e) => postedIds.has(String(e._id)));
+  for (const expense of paid) {
+    // Bad wallet names etc. on one old row must not stop the rest from moving.
+    // eslint-disable-next-line no-await-in-loop
+    await accountsSystemService
+      .postGeneralExpense(
+        { organizationId: expense.organizationId, branchId: expense.branchId, createdBy: expense.createdBy },
+        {
+          amount: expense.amount,
+          paymentMethod: expense.paymentMethod,
+          walletType: expense.walletType,
+          expenseAccountCode: category.accountCode || undefined,
+          expenseNature: category.expenseNature,
+          expenseId: expense._id,
+          description: expense.description || expense.category || 'Expense',
+          date: expense.date,
+        }
+      )
+      .catch(() => {});
+  }
+  return { updated: result.modifiedCount || 0, reposted: paid.length };
+};
+
 const updateCategory = async (id, data, organizationId) => {
   const cat = await ExpenseCategory.findOne({ _id: id, organizationId });
   if (!cat) throw new ApiError(httpStatus.NOT_FOUND, 'Category not found');
 
   const oldName = cat.name;
-  const patch = { ...data };
+  const oldNature = cat.expenseNature || 'indirect';
+  const oldAccountCode = cat.accountCode || null;
+  // Re-classifying old expenses is the default: a ledger moved from Indirect to Direct
+  // is moved for the whole history in every accounting package. The UI can opt out
+  // ("only new expenses") for a change of policy from a given date.
+  const applyToExisting = data.applyToExisting !== false;
+
+  const patch = {};
+  UPDATABLE_CATEGORY_FIELDS.forEach((key) => {
+    if (data[key] !== undefined) patch[key] = data[key];
+  });
   if (patch.transactionType !== undefined) {
     patch.transactionType = normalizeTransactionType(patch.transactionType);
   }
+  if (patch.expenseNature !== undefined) patch.expenseNature = normalizeExpenseNature(patch.expenseNature);
+  if (patch.accountCode !== undefined) {
+    patch.accountCode = await normalizeAccountCode(patch.accountCode, organizationId, cat.branchId);
+  }
+  if (patch.description !== undefined) patch.description = String(patch.description || '').trim();
+  if (patch.isActive !== undefined) patch.isActive = patch.isActive !== false && patch.isActive !== 'false';
   if (patch.name !== undefined) {
     patch.name = String(patch.name).trim();
     if (!patch.name) {
@@ -228,7 +362,7 @@ const updateCategory = async (id, data, organizationId) => {
         organizationId,
         branchId: cat.branchId,
         transactionType: patch.transactionType || cat.transactionType,
-        name: { $regex: `^${patch.name}$`, $options: 'i' },
+        name: { $regex: `^${escapeRegex(patch.name)}$`, $options: 'i' },
         _id: { $ne: cat._id },
       });
       if (exists) {
@@ -250,14 +384,179 @@ const updateCategory = async (id, data, organizationId) => {
     });
   }
 
-  return cat;
+  const classificationChanged =
+    cat.transactionType === 'business_expense' &&
+    ((cat.expenseNature || 'indirect') !== oldNature || (cat.accountCode || null) !== oldAccountCode);
+  let reclassified = null;
+  if (classificationChanged && applyToExisting) {
+    reclassified = await reclassifyCategoryExpenses(cat);
+  }
+
+  const json = cat.toJSON();
+  if (reclassified) json.reclassified = reclassified;
+  return json;
 };
 
-const deleteCategory = async (id, organizationId) => {
+/**
+ * How an expense in `categoryName` is classified and where it posts. Unknown categories
+ * (e.g. employee-name categories made on the fly) are indirect with no mapped account.
+ */
+const getCategoryClassification = async (organizationId, branchId, categoryName) => {
+  const name = String(categoryName || '').trim();
+  if (!name || !organizationId || !branchId) return { expenseNature: 'indirect', accountCode: null };
+  const cat = await ExpenseCategory.findOne({
+    organizationId,
+    branchId,
+    transactionType: 'business_expense',
+    name: { $regex: `^${escapeRegex(name)}$`, $options: 'i' },
+  })
+    .select('expenseNature accountCode')
+    .lean();
+  return { expenseNature: cat?.expenseNature || 'indirect', accountCode: cat?.accountCode || null };
+};
+
+/**
+ * Categories named in an import that don't exist yet are created (with the file's
+ * Direct/Indirect column) when `createMissing` is on. Returns name(lowercase) → category,
+ * plus the names that were created and the ones that were missing but not created.
+ */
+const ensureCategoriesForImport = async (organizationId, branchId, userId, wanted, { createMissing = true } = {}) => {
+  const existing = await ExpenseCategory.find({ organizationId, branchId, transactionType: 'business_expense' }).lean();
+  const byName = new Map(existing.map((c) => [c.name.trim().toLowerCase(), c]));
+  const created = [];
+  const missing = [];
+  const palette = ['#3b82f6', '#f59e0b', '#10b981', '#6366f1', '#ec4899', '#14b8a6', '#f97316', '#8b5cf6', '#ef4444'];
+
+  for (const { name, expenseNature } of wanted) {
+    const key = String(name || '').trim().toLowerCase();
+    if (!key || byName.has(key)) continue;
+    if (!createMissing) {
+      missing.push(name.trim());
+      byName.set(key, null);
+      continue;
+    }
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const cat = await ExpenseCategory.create({
+        organizationId,
+        branchId,
+        name: name.trim(),
+        transactionType: 'business_expense',
+        expenseNature: expenseNature || 'indirect',
+        color: palette[(existing.length + created.length) % palette.length],
+        createdBy: userId,
+      });
+      byName.set(key, cat.toObject());
+      created.push(cat.name);
+    } catch (err) {
+      if (err.code !== 11000) throw err;
+      // eslint-disable-next-line no-await-in-loop
+      const cat = await ExpenseCategory.findOne({
+        organizationId,
+        branchId,
+        transactionType: 'business_expense',
+        name: { $regex: `^${escapeRegex(name.trim())}$`, $options: 'i' },
+      }).lean();
+      byName.set(key, cat);
+    }
+  }
+  return { byName, created, missing };
+};
+
+const nameMatch = (name) => ({ $regex: `^${escapeRegex(String(name || '').trim())}$`, $options: 'i' });
+
+/**
+ * How many expenses / recurring rules use each business-expense category of a branch,
+ * keyed by lower-cased name. Drives "used by N expenses" and safe deletes.
+ */
+const getCategoryUsage = async (organizationId, branchId) => {
+  const Expense = require('../models/expense.model');
+  // eslint-disable-next-line global-require
+  const RecurringExpense = require('../models/recurringExpense.model');
+  const mongooseLib = require('mongoose');
+  const cast = (v) => (mongooseLib.Types.ObjectId.isValid(String(v)) ? new mongooseLib.Types.ObjectId(String(v)) : v);
+  const match = { organizationId: cast(organizationId), ...(branchId ? { branchId: cast(branchId) } : {}) };
+  const [expenses, rules] = await Promise.all([
+    Expense.aggregate([
+      { $match: match },
+      { $group: { _id: { $toLower: { $trim: { input: '$category' } } }, count: { $sum: 1 }, total: { $sum: '$amount' } } },
+    ]),
+    RecurringExpense.aggregate([
+      { $match: match },
+      { $group: { _id: { $toLower: { $trim: { input: '$category' } } }, count: { $sum: 1 } } },
+    ]),
+  ]);
+  const usage = {};
+  expenses.forEach((r) => {
+    usage[r._id] = { expenses: r.count, total: r.total, recurringRules: 0 };
+  });
+  rules.forEach((r) => {
+    usage[r._id] = { ...(usage[r._id] || { expenses: 0, total: 0 }), recurringRules: r.count };
+  });
+  return usage;
+};
+
+/**
+ * Delete a category — default ones included. Expenses already saved under it are either
+ * moved to another category (`moveToId`: their category, type and books follow the new
+ * one, and recurring rules are re-pointed too), or keep the old name as plain text — what
+ * deleting always did, so an older screen calling DELETE without options behaves as before.
+ */
+const deleteCategory = async (id, organizationId, options = {}) => {
   const cat = await ExpenseCategory.findOne({ _id: id, organizationId });
   if (!cat) throw new ApiError(httpStatus.NOT_FOUND, 'Category not found');
-  if (cat.isDefault) throw new ApiError(httpStatus.BAD_REQUEST, 'Default categories cannot be deleted');
+
+  let moved = null;
+  if (options.moveToId && cat.transactionType === 'business_expense') {
+    if (String(options.moveToId) === String(cat._id)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Pick a different category to move the expenses to');
+    }
+    const target = await ExpenseCategory.findOne({
+      _id: options.moveToId,
+      organizationId,
+      branchId: cat.branchId,
+      transactionType: 'business_expense',
+    });
+    if (!target) throw new ApiError(httpStatus.BAD_REQUEST, 'The category to move the expenses to was not found');
+
+    const Expense = require('../models/expense.model');
+    // eslint-disable-next-line global-require
+    const RecurringExpense = require('../models/recurringExpense.model');
+    const scope = { organizationId, branchId: cat.branchId, category: nameMatch(cat.name) };
+    const [expenseResult, ruleResult] = await Promise.all([
+      Expense.updateMany(scope, { $set: { category: target.name } }),
+      RecurringExpense.updateMany(scope, { $set: { category: target.name } }),
+    ]);
+    // Moved expenses take the target's type and ledger, in reports and in the books.
+    await reclassifyCategoryExpenses(target);
+    moved = {
+      to: target.name,
+      expenses: expenseResult.modifiedCount || 0,
+      recurringRules: ruleResult.modifiedCount || 0,
+    };
+  }
+
   await cat.deleteOne();
+  return { deleted: cat.name, moved };
+};
+
+/**
+ * Remove every business-expense category of the branch that nothing uses (no expense,
+ * no recurring rule). `onlyDefaults` limits it to the starter list the app used to create
+ * on its own — the one-click clean-up for existing businesses.
+ */
+const removeUnusedCategories = async (organizationId, branchId, { onlyDefaults = true, ids } = {}) => {
+  if (!branchId) throw new ApiError(httpStatus.BAD_REQUEST, 'Select a branch first');
+  const filter = { organizationId, branchId, transactionType: 'business_expense' };
+  if (onlyDefaults) filter.isDefault = true;
+  if (Array.isArray(ids) && ids.length) filter._id = { $in: ids };
+  const [candidates, usage] = await Promise.all([ExpenseCategory.find(filter).lean(), getCategoryUsage(organizationId, branchId)]);
+  const unused = candidates.filter((c) => {
+    const u = usage[c.name.trim().toLowerCase()];
+    return !u || (u.expenses === 0 && u.recurringRules === 0);
+  });
+  if (unused.length) await ExpenseCategory.deleteMany({ _id: { $in: unused.map((c) => c._id) } });
+  return { removed: unused.map((c) => c.name), kept: candidates.length - unused.length };
 };
 
 const EMPLOYEE_CATEGORY_COLORS = ['#10b981', '#6366f1', '#f59e0b', '#ec4899', '#14b8a6'];
@@ -347,6 +646,13 @@ const findOrCreateEmployeeCategory = async (organizationId, branchId, userId, ca
 };
 
 module.exports = {
+  EXPENSE_NATURES,
+  parseExpenseNature,
+  getCategoryClassification,
+  ensureCategoriesForImport,
+  reclassifyCategoryExpenses,
+  getCategoryUsage,
+  removeUnusedCategories,
   getCategories,
   createCategory,
   updateCategory,

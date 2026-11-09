@@ -4,6 +4,7 @@ import { usePermissions } from '@/context/permission-context'
 import { useFormatMoney } from '@/lib/format-money'
 import { formatBusinessDate, formatBusinessDateTimeShort } from '@/lib/business-timezone'
 import { cn } from '@/lib/utils'
+import { discountReasonLabel } from '@/features/ledger-discounts/lib/ledger-discounts'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -430,6 +431,7 @@ export function VoucherDetailSheet({
                         <TableHead>{meta.partyLabel}</TableHead>
                         <TableHead>Description</TableHead>
                         <TableHead className='text-right'>Amount</TableHead>
+                        {voucher.totalDiscount > 0 && <TableHead className='text-right'>Discount</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -446,6 +448,18 @@ export function VoucherDetailSheet({
                             {line.description || '—'}
                           </TableCell>
                           <TableCell className='text-right font-medium tabular-nums'>{formatMoney(line.amount)}</TableCell>
+                          {voucher.totalDiscount > 0 && (
+                            <TableCell className='text-right tabular-nums'>
+                              {line.discount > 0 ? (
+                                <>
+                                  <div className='font-medium text-amber-700 dark:text-amber-400'>{formatMoney(line.discount)}</div>
+                                  <div className='text-[11px] text-muted-foreground'>{discountReasonLabel(line.discountReason)}</div>
+                                </>
+                              ) : (
+                                '—'
+                              )}
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
@@ -453,10 +467,20 @@ export function VoucherDetailSheet({
                       <TableRow>
                         <TableCell colSpan={3} className='font-medium'>
                           {meta.totalLabel}
+                          {voucher.totalDiscount > 0 && (
+                            <div className='text-xs font-normal text-muted-foreground'>
+                              Settled on ledgers: {formatMoney(voucher.totalAmount + voucher.totalDiscount)}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className={cn('text-right text-base font-semibold tabular-nums', meta.amountClass)}>
                           {formatMoney(voucher.totalAmount)}
                         </TableCell>
+                        {voucher.totalDiscount > 0 && (
+                          <TableCell className='text-right font-semibold tabular-nums text-amber-700 dark:text-amber-400'>
+                            {formatMoney(voucher.totalDiscount)}
+                          </TableCell>
+                        )}
                       </TableRow>
                     </TableFooter>
                   </Table>

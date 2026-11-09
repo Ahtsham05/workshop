@@ -35,6 +35,9 @@ export interface VoucherSheetLine {
   typeClassName: string
   description?: string
   amount: number
+  /** Ledger discount given/received with this line (no cash). */
+  discount: number
+  discountReason?: string
 }
 
 /** Everything the detail sheet shows, in one kind-agnostic shape (a payment line's `payeeName`
@@ -47,6 +50,7 @@ export interface VoucherSheetData {
   reference?: string
   notes?: string
   totalAmount: number
+  totalDiscount: number
   createdAt: string
   updatedAt?: string
   createdByName?: string
@@ -67,6 +71,7 @@ export const toPaymentSheetData = (voucher: PaymentVoucherRecord): VoucherSheetD
   reference: voucher.reference,
   notes: voucher.notes,
   totalAmount: Number(voucher.totalAmount || 0),
+  totalDiscount: Number(voucher.totalDiscount || 0),
   createdAt: voucher.createdAt,
   updatedAt: voucher.updatedAt,
   createdByName: nameOf(voucher.createdBy),
@@ -79,6 +84,8 @@ export const toPaymentSheetData = (voucher: PaymentVoucherRecord): VoucherSheetD
     typeClassName: PAYEE_TYPE_BADGE_CLASS[line.payeeType] ?? '',
     description: line.description,
     amount: Number(line.amount || 0),
+    discount: Number(line.discountAmount || 0),
+    discountReason: line.discountReason,
   })),
 })
 
@@ -90,6 +97,7 @@ export const toReceiptSheetData = (voucher: ReceiptVoucherRecord): VoucherSheetD
   reference: voucher.reference,
   notes: voucher.notes,
   totalAmount: Number(voucher.totalAmount || 0),
+  totalDiscount: Number(voucher.totalDiscount || 0),
   createdAt: voucher.createdAt,
   updatedAt: voucher.updatedAt,
   createdByName: nameOf(voucher.createdBy),
@@ -102,5 +110,7 @@ export const toReceiptSheetData = (voucher: ReceiptVoucherRecord): VoucherSheetD
     typeClassName: SOURCE_TYPE_BADGE_CLASS[line.sourceType] ?? '',
     description: line.description,
     amount: Number(line.amount || 0),
+    discount: Number(line.discountAmount || 0),
+    discountReason: line.discountReason,
   })),
 })

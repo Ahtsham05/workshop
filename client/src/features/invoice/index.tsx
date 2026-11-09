@@ -177,6 +177,8 @@ export interface Invoice {
   leadId?: string
   /** Salesman credited with this sale for commission purposes — a User id. */
   salesmanId?: string
+  /** Warehouse the goods leave from (multi-warehouse). Empty = the branch's default warehouse. */
+  warehouseId?: string | null
   language?: 'en' | 'ur'
   isUrduOnly?: boolean
   type: 'cash' | 'credit' | 'pending' | 'quotation'
@@ -201,7 +203,8 @@ export interface Invoice {
   paidAmount: number
   balance: number
   invoiceDate?: string
-  dueDate?: string
+  /** 'YYYY-MM-DD'; null = no due date on purpose; undefined = server applies the default. */
+  dueDate?: string | null
   notes?: string
   /** Printed under "Terms & Conditions". Left undefined on a fresh invoice so the panel
    *  can pre-fill the branch default; '' means the user cleared it on purpose. */
@@ -1671,6 +1674,8 @@ export default function InvoicePage() {
       notes: invoiceData.notes || '',
       termsAndConditions: invoiceData.termsAndConditions || '',
       invoiceDate: formattedInvoiceDate,
+      // Stored at UTC midnight of the picked day → its calendar date; none stays null.
+      dueDate: invoiceData.dueDate ? new Date(invoiceData.dueDate).toISOString().slice(0, 10) : null,
       couponCode: invoiceData.couponCode,
       returnPolicy: invoiceData.returnPolicy,
       status: invoiceData.status

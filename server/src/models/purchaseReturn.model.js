@@ -53,6 +53,8 @@ const PurchaseReturnSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // Multi-warehouse: which warehouse this moved stock in/out of (unset = branch default).
+    warehouseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', default: null },
     returnNumber: {
       type: String,
       unique: true,

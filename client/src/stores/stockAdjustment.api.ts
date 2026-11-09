@@ -85,6 +85,8 @@ export interface CreateAdjustmentRequest {
   imeis?: string[]
   reason?: string
   notes?: string
+  /** Multi-warehouse: unset = the branch's default warehouse. */
+  warehouseId?: string
 }
 
 export interface GetAdjustmentsParams {

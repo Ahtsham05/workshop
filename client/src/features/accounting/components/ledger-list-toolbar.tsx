@@ -25,7 +25,8 @@ export function LedgerListToolbar({
   const { t } = useLanguage()
 
   return (
-    <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
+    // Phones: search + view toggle share one row, the action buttons get a full row below.
+    <div className='mb-4 flex flex-wrap items-center justify-between gap-3 max-sm:gap-2'>
       <div className='min-w-0 flex-1 max-w-md'>
         <Input
           placeholder={searchPlaceholder}
@@ -35,14 +36,14 @@ export function LedgerListToolbar({
           aria-label={searchPlaceholder}
         />
       </div>
-      <div className='flex flex-wrap items-center gap-2'>
-        <div className='flex items-center gap-1 rounded-lg border p-1'>
-          <span className='px-2 text-xs text-muted-foreground'>{t('view')}</span>
+      <div className='flex flex-wrap items-center gap-2 max-sm:contents'>
+        <div className='flex items-center gap-1 rounded-lg border p-1 max-sm:shrink-0'>
+          <span className='px-2 text-xs text-muted-foreground max-sm:hidden'>{t('view')}</span>
           <Button
             type='button'
             size='sm'
             variant={viewMode === 'cards' ? 'default' : 'ghost'}
-            className='h-8 px-2.5'
+            className='h-8 px-2.5 max-sm:h-7 max-sm:px-2'
             onClick={() => onViewModeChange('cards')}
             aria-label={t('view')}
             title='Cards'
@@ -53,7 +54,7 @@ export function LedgerListToolbar({
             type='button'
             size='sm'
             variant={viewMode === 'table' ? 'default' : 'ghost'}
-            className='h-8 px-2.5'
+            className='h-8 px-2.5 max-sm:h-7 max-sm:px-2'
             onClick={() => onViewModeChange('table')}
             aria-label={t('view')}
             title='Table'
@@ -61,7 +62,7 @@ export function LedgerListToolbar({
             <List className='h-4 w-4' />
           </Button>
         </div>
-        {actions}
+        {actions ? <div className='max-sm:w-full max-sm:basis-full'>{actions}</div> : null}
       </div>
     </div>
   )

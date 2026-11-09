@@ -63,7 +63,26 @@ const CustomerSchema = new mongoose.Schema({
     type: String,
     enum: ['retail', 'wholesale', 'vip', 'corporate'],
   },
-  creditLimit: { type: Number, default: 0 },
+  // Credit control (services/creditControl.service.js). 0 = no limit — every customer
+  // created before credit control existed carries 0, so nothing changes for them until a
+  // limit is set.
+  creditLimit: { type: Number, default: 0, min: 0 },
+  // Temporary raise on top of creditLimit (a festival order, a one-off big job). Active
+  // only while expiresAt is in the future; after that the base creditLimit applies again
+  // with no clean-up job needed.
+  tempCreditLimit: {
+    amount: { type: Number, min: 0 },
+    expiresAt: { type: Date },
+    reason: { type: String, trim: true },
+    setBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    setAt: { type: Date },
+  },
+  // Credit hold: no new credit at all (fully paid sales still go through), whatever the limit.
+  creditHold: { type: Boolean, default: false },
+  creditHoldReason: { type: String, trim: true },
+  creditHoldAt: { type: Date },
+  creditHoldBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  creditLimitUpdatedAt: { type: Date },
   paymentTerms: {
     type: String,
     enum: ['cash', 'due_on_receipt', 'net_15', 'net_30', 'net_60'],

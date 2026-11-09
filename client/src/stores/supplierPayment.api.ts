@@ -22,7 +22,8 @@ const invalidateMoneyAndPurchases = async (_arg: unknown, { dispatch, queryFulfi
 
 export type AllocationMode = 'fifo' | 'due_date' | 'manual' | 'reference' | 'none'
 /** 'return_credit' carries no cash — goods went back, so the invoice is worth less. */
-export type PaymentDirection = 'payment' | 'refund' | 'return_credit'
+/** 'discount' carries no cash — a ledger discount that settled invoices (features/ledger-discounts). */
+export type PaymentDirection = 'payment' | 'refund' | 'return_credit' | 'discount'
 export type SettlementStatus = 'unpaid' | 'partial' | 'paid' | 'overpaid'
 export type DueStatus = 'overdue' | 'due_today' | 'due_soon' | 'not_due' | 'no_due_date' | 'settled'
 

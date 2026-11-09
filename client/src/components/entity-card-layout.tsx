@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentType, CSSProperties, ReactNode } from 'react'
 import { ChevronRight, Mail, MapPin, MessageCircle, Phone, Receipt } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -49,6 +49,10 @@ type EntityCardLayoutProps = {
   actions?: ReactNode
   ledgerLabel: string
   onOpenLedger: () => void
+  /** Overdue ledger colour (left border + tint) — features/ledger-alerts. */
+  cardStyle?: CSSProperties
+  /** Shown under the balance, e.g. the overdue/due chip. */
+  status?: ReactNode
 }
 
 export function EntityCardLayout({
@@ -63,12 +67,14 @@ export function EntityCardLayout({
   actions,
   ledgerLabel,
   onOpenLedger,
+  cardStyle,
+  status,
 }: EntityCardLayoutProps) {
   const badgeStyle = BALANCE_BADGE_STYLES[balance.className] || BALANCE_BADGE_STYLES['text-foreground']
   const hasContact = Boolean(email || phone || whatsapp || address)
 
   return (
-    <Card className='group flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm transition-all duration-200 hover:border-primary/20 hover:shadow-md'>
+    <Card style={cardStyle} className='group flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm transition-all duration-200 hover:border-primary/20 hover:shadow-md'>
       <CardHeader className='space-y-0 border-b border-border/40 bg-gradient-to-b from-muted/30 to-muted/10 px-3 py-3 [&_.font-medium]:text-sm [&_.font-medium]:font-semibold [&_.font-medium]:leading-snug'>
         <div className='flex items-start gap-1.5'>
           <button
@@ -124,6 +130,7 @@ export function EntityCardLayout({
             {balance.amount}
           </span>
         </button>
+        {status ? <div className='-mt-1 flex justify-end'>{status}</div> : null}
 
         {actions ? <div className='mt-auto pt-0.5'>{actions}</div> : null}
       </CardContent>

@@ -10,6 +10,13 @@ router.route('/')
   .get(auth('viewAccounting', 'manageExpenses', 'viewPayments', 'createPayments', 'managePersonalWallet'), expenseCategoryController.getCategories)
   .post(auth('manageExpenses'), expenseCategoryController.createCategory);
 
+router.route('/usage')
+  .get(auth('viewAccounting', 'manageExpenses', 'viewPayments', 'createPayments'), expenseCategoryController.getCategoryUsage);
+
+// Branch-scoped clean-up; needs a concrete branch, like every other write here.
+router.route('/remove-unused')
+  .post(auth('manageExpenses'), expenseCategoryController.removeUnusedCategories);
+
 router.route('/:id')
   .patch(auth('manageExpenses'), expenseCategoryController.updateCategory)
   .delete(auth('manageExpenses'), expenseCategoryController.deleteCategory);

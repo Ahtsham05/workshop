@@ -59,6 +59,7 @@ const moduleColors: Record<string, string> = {
   'Customer Payments': 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300',
   'Supplier Payments': 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
   'My Wallet': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+  Discounts: 'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-300',
 }
 
 const directionColors: Record<string, string> = {
@@ -87,6 +88,8 @@ const SECTION_ORDER = [
   'Customer Cash Paid',
   'Supplier Cash Paid',
   'Supplier Cash Received',
+  'Discount Allowed',
+  'Discount Received',
 ]
 
 const SECTION_COLORS = [
@@ -105,6 +108,7 @@ const getSectionKey = (entry: ActivitySummaryEntry): string => {
     return entry.subType === 'Cash Paid' ? 'Supplier Cash Paid' : 'Supplier Cash Received'
   }
   if (entry.module === 'My Wallet') return entry.subType
+  if (entry.module === 'Discounts') return entry.subType
   return entry.module
 }
 
@@ -160,6 +164,7 @@ const getSectionModuleColor = (section: string): string => {
   if (section.startsWith('Customer')) return moduleColors['Customer Payments']
   if (section.startsWith('Supplier')) return moduleColors['Supplier Payments']
   if (section.startsWith('Wallet')) return moduleColors['My Wallet']
+  if (section.startsWith('Discount')) return moduleColors.Discounts
   return moduleColors[section] || 'bg-muted text-muted-foreground'
 }
 
@@ -226,7 +231,7 @@ function ActivityTable({ entries, fmt, showModuleColumn = false, embedded = fals
                     variant='outline'
                     className={cn('text-xs w-fit', directionColors[entry.direction])}
                   >
-                    {entry.direction === 'in' ? 'Cash In' : entry.direction === 'out' ? 'Cash Out' : '—'}
+                    {entry.direction === 'in' ? 'Cash In' : entry.direction === 'out' ? 'Cash Out' : entry.module === 'Discounts' ? 'No cash' : '—'}
                   </Badge>
                 </div>
               </TableCell>

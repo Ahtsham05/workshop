@@ -142,6 +142,10 @@ export function resolveSupplierLedgerCategory(entry: LedgerStatementEntry): Supp
     return { key: 'payment_received', labelKey: 'Payment Received', sortOrder: 17 };
   }
 
+  if (type === 'discount_received') {
+    return { key: 'discount_received', labelKey: 'Discount Received', sortOrder: 20 };
+  }
+
   if (type === 'credit_note') {
     return { key: 'credit_note', labelKey: 'Credit Note', sortOrder: 21 };
   }

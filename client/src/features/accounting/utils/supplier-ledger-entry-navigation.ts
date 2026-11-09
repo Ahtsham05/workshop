@@ -93,6 +93,8 @@ export function getSupplierLedgerFormPreset(categoryKey: string): {
       return { transactionType: 'payment_made', paymentMethod: 'Cash' };
     case 'purchase_return':
       return { transactionType: 'purchase_return' };
+    case 'discount_received':
+      return { transactionType: 'discount_received' };
     case 'credit_note':
       return { transactionType: 'credit_note' };
     case 'debit_note':

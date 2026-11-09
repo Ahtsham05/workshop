@@ -65,6 +65,8 @@ PATCH  /api/v1/expenses/:id             // Update expense
 DELETE /api/v1/expenses/:id             // Delete expense
 GET    /api/v1/expenses/summary         // Category summary
 GET    /api/v1/expenses/trends          // Monthly trends
+POST   /api/v1/expenses/bulk            // Excel/CSV import (per-row result, see EXCEL_IMPORT_GUIDE.md)
+GET    /api/v1/expenses?expenseNature=direct|indirect   // filter by type
 ```
 
 ### Customer Ledger
@@ -120,6 +122,23 @@ GET    /api/v1/supplier-ledger/suppliers-with-balances   // All suppliers
   - Date picker
   - Notes/description
   - File attachments
+
+- **Direct vs Indirect expenses** (2026-11-09):
+  - Set per category (`ExpenseCategory.expenseNature`, default `indirect`) in the
+    Categories manager on the Expenses tab; each expense stores a snapshot
+    (`Expense.expenseNature`) taken from its category on save — never from the client.
+  - Direct = cost of what is sold (freight/carriage inward, direct labour, factory power,
+    packing, import duty). Posts to **Direct Expenses** (51xx, under 5100 Cost of Sales,
+    created on first use by `ensureDirectExpenseAccount`) and comes off **gross** profit.
+  - Indirect = running costs. Posts to 5303 Miscellaneous Expense as before and comes off
+    **net** profit only. A category may map to a specific expense ledger (`accountCode`).
+  - Changing a category's type/account re-classifies its saved expenses and re-posts their
+    journal entries (opt-out: "only new expenses"). Expenses mirrored from other modules
+    (salary, commission, agent bills — saved with `skipCashBookSync`) are never given a
+    journal entry by this; their source module owns the posting.
+  - Reports: P&L returns `salesProfit`, `directExpenses`, `grossProfit` (after direct) and
+    `indirectExpenses`; net profit is unchanged by the split. Rows saved before the field
+    existed count as indirect (`$ifNull`).
 
 ### 3. Customer Ledger
 - **Customer List:**

@@ -7,7 +7,8 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Label } from '@/components/ui/label'
-import { nativeFieldLabel } from '@/lib/native-language'
+import { DatePicker } from '@/components/ui/date-picker'
+import { getBusinessToday } from '@/lib/business-timezone'
 import {
   Select,
   SelectContent,
@@ -20,13 +21,15 @@ import {
   type BuiltRow,
   type ImportBatchOutcome,
 } from '@/components/excel-import-dialog'
+import { parseNumeric, parseText, type CellValue } from '@/lib/excel-import'
+import { usePermissions } from '@/context/permission-context'
 import {
-  parseNumeric,
-  parseText,
-  withCommonAliases,
-  type CellValue,
-  type ImportFieldSpec,
-} from '@/lib/excel-import'
+  CUSTOMER_IMPORT_FIELDS,
+  CUSTOMER_SAMPLE_ROWS,
+  PAYMENT_TERM_LABELS,
+  parsePaymentTermsText,
+  parseYesNoText,
+} from '../utils/customer-excel'
 
 export interface BulkCustomerResult {
   insertedCount?: number
@@ -46,7 +49,7 @@ interface CustomerImportDialogProps {
   onOpenChange: (open: boolean) => void
   onImport: (
     customers: ImportCustomer[],
-    options?: { duplicateStrategy?: DuplicateStrategy }
+    options?: { duplicateStrategy?: DuplicateStrategy; openingBalanceDate?: string }
   ) => Promise<BulkCustomerResult | void>
 }
 
@@ -60,70 +63,24 @@ interface ImportCustomer {
   balance?: number
   customerType?: string
   creditLimit?: number
+  paymentTerms?: string
+  creditHold?: boolean
+  creditHoldReason?: string
   taxNumber?: string
   notes?: string
 }
 
-const CUSTOMER_FIELDS: ImportFieldSpec[] = [
-  withCommonAliases({
-    key: 'name',
-    label: 'Customer Name',
-    required: true,
-    width: 28,
-    aliases: ['Customer', 'Client', 'Client Name', 'Buyer', 'گاہک'],
-  }),
-  withCommonAliases({ key: 'nameUrdu', label: nativeFieldLabel('Name'), width: 24 }),
-  withCommonAliases({ key: 'phone', label: 'Phone', type: 'code', width: 18 }),
-  withCommonAliases({ key: 'whatsapp', label: 'WhatsApp', type: 'code', width: 18 }),
-  withCommonAliases({ key: 'email', label: 'Email', width: 28 }),
-  withCommonAliases({ key: 'address', label: 'Address', width: 36 }),
-  withCommonAliases({
-    key: 'balance',
-    label: 'Opening Balance',
-    type: 'number',
-    width: 16,
-    aliases: ['Old Balance', 'Previous Balance', 'Udhaar', 'Udhar', 'Receivable'],
-  }),
-  { key: 'customerType', label: 'Customer Type', width: 16, aliases: ['Type', 'Category'] },
-  { key: 'creditLimit', label: 'Credit Limit', type: 'number', width: 16, aliases: ['Limit', 'Max Credit'] },
-  { key: 'taxNumber', label: 'Tax Number', type: 'code', width: 18, aliases: ['NTN', 'GST No', 'Tax ID', 'Sales Tax No'] },
-  withCommonAliases({ key: 'notes', label: 'Notes', width: 30 }),
-]
-
-const SAMPLE_ROWS = [
-  {
-    name: 'Sample Customer 1',
-    nameUrdu: 'سیمپل گاہک 1',
-    phone: '+923001234567',
-    whatsapp: '+923001234567',
-    email: 'customer1@example.com',
-    address: '123 Main Street, City',
-    balance: 0,
-    customerType: 'retail',
-    creditLimit: 0,
-    taxNumber: '',
-    notes: '',
-  },
-  {
-    name: 'Sample Customer 2',
-    nameUrdu: '',
-    phone: '03007654321',
-    whatsapp: '',
-    email: '',
-    address: '456 Park Avenue, City',
-    balance: 1500,
-    customerType: 'wholesale',
-    creditLimit: 50000,
-    taxNumber: '',
-    notes: 'Pays at month end',
-  },
-]
+const CUSTOMER_FIELDS = CUSTOMER_IMPORT_FIELDS
+const SAMPLE_ROWS = CUSTOMER_SAMPLE_ROWS
 
 const CUSTOMER_TYPES = ['retail', 'wholesale', 'vip', 'corporate']
 
 export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerImportDialogProps) {
   const { t } = useLanguage()
   const [duplicateStrategy, setDuplicateStrategy] = useState<DuplicateStrategy>('skip')
+  const [openingBalanceDate, setOpeningBalanceDate] = useState<string>(() => getBusinessToday())
+  const { hasPermission } = usePermissions()
+  const canManageCredit = hasPermission('manageCreditLimits')
 
   const buildRow = useCallback(
     (values: Record<string, CellValue>): BuiltRow<ImportCustomer> => {
@@ -171,6 +128,25 @@ export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerI
         else warnings.push(t('Credit limit "{{value}}" was ignored', { value: creditLimit.raw }))
       }
 
+      const terms = parsePaymentTermsText(parseText(values.paymentTerms))
+      if (terms.value) customer.paymentTerms = terms.value
+      else if (terms.invalid) {
+        warnings.push(t('Payment terms "{{value}}" not recognised (Cash, Due on receipt, Net 15, Net 30, Net 60) — left out', { value: parseText(values.paymentTerms) }))
+      }
+
+      const hold = parseYesNoText(parseText(values.creditHold))
+      if (hold === null) warnings.push(t('Credit hold "{{value}}" should be Yes or No — left out', { value: parseText(values.creditHold) }))
+      else if (hold !== undefined) customer.creditHold = hold
+      const holdReason = parseText(values.creditHoldReason)
+      if (holdReason) customer.creditHoldReason = holdReason
+
+      if (!canManageCredit && (customer.creditLimit !== undefined || customer.creditHold !== undefined)) {
+        warnings.push(t('Credit limit / hold will be left unchanged — you are not allowed to manage credit limits'))
+        delete customer.creditLimit
+        delete customer.creditHold
+        delete customer.creditHoldReason
+      }
+
       const customerType = parseText(values.customerType).toLowerCase()
       if (customerType) {
         if (CUSTOMER_TYPES.includes(customerType)) customer.customerType = customerType
@@ -179,12 +155,12 @@ export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerI
 
       return { value: customer, warning: warnings.length ? warnings.join('; ') : undefined }
     },
-    [t]
+    [t, canManageCredit]
   )
 
   const importBatch = useCallback(
     async (items: ImportCustomer[]): Promise<ImportBatchOutcome> => {
-      const result = (await onImport(items, { duplicateStrategy })) || {}
+      const result = (await onImport(items, { duplicateStrategy, openingBalanceDate })) || {}
       const notes: string[] = []
       if (result.updatedCount) {
         notes.push(t('{{count}} existing customers were updated', { count: result.updatedCount }))
@@ -197,7 +173,7 @@ export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerI
         notes,
       }
     },
-    [onImport, duplicateStrategy, t]
+    [onImport, duplicateStrategy, openingBalanceDate, t]
   )
 
   const duplicateKeys = useMemo(
@@ -231,13 +207,28 @@ export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerI
             </SelectTrigger>
             <SelectContent>
               <SelectItem value='skip'>{t('Skip them (keep what is already saved)')}</SelectItem>
-              <SelectItem value='update'>{t('Update their contact details (balance is not changed)')}</SelectItem>
+              <SelectItem value='update'>{t('Update their details — contact, credit limit, terms, hold (balance is not changed)')}</SelectItem>
               <SelectItem value='error'>{t('Report them as problem rows')}</SelectItem>
             </SelectContent>
           </Select>
           <p className='text-xs text-muted-foreground'>
             {t('Customers are matched by phone number, then email, then name.')}
           </p>
+          <p className='text-xs text-muted-foreground'>
+            {t('Tip: Export Excel on the Customers page gives a file in this layout — change limits there and import it back with "Update their details".')}
+          </p>
+          <div className='space-y-1.5 pt-2'>
+            <Label className='text-sm'>{t('Opening balance date')}</Label>
+            <DatePicker
+              value={openingBalanceDate}
+              onChange={(value) => setOpeningBalanceDate(value || getBusinessToday())}
+              max={getBusinessToday()}
+              className='h-8 w-full sm:w-[200px]'
+            />
+            <p className='text-xs text-muted-foreground'>
+              {t('Opening balances are dated this day in the ledger (e.g. the 1st of the month your books start).')}
+            </p>
+          </div>
         </div>
       }
       renderPreview={(customer) => (
@@ -254,6 +245,9 @@ export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerI
           <div className='text-muted-foreground'>
             {[customer.phone, customer.email, customer.address].filter(Boolean).join(' · ') || t('No contact details')}
             {customer.balance ? ` · ${t('Balance')}: ${customer.balance}` : ''}
+            {customer.creditLimit !== undefined ? ` · ${t('Limit')}: ${customer.creditLimit || t('none')}` : ''}
+            {customer.paymentTerms ? ` · ${t(PAYMENT_TERM_LABELS[customer.paymentTerms])}` : ''}
+            {customer.creditHold ? ` · ${t('On credit hold')}` : ''}
           </div>
         </>
       )}

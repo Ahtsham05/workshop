@@ -4,6 +4,7 @@ const { objectId } = require('./custom.validation');
 const createSalesReturn = {
   body: Joi.object().keys({
     invoiceId: Joi.string().custom(objectId).required(),
+    warehouseId: Joi.string().custom(objectId).allow('', null).optional(),
     customerId: Joi.string().custom(objectId).allow(null, ''),
     customerName: Joi.string().allow(''),
     items: Joi.array()

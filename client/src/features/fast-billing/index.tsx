@@ -45,6 +45,8 @@ import { catalogItemToCartLine, cartLineKey, normalizePaymentState, type CartLin
 import { parseQuantityPrefix } from './utils/quantity-prefix'
 import { computeDiscountAmount, type DiscountType } from '@/lib/discount'
 import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
+import { useCreditLimitGuard } from '@/features/customers/credit/credit-limit-guard'
+import { invoiceUnpaidAmount } from '@/features/customers/credit/credit-utils'
 
 const MAX_RECENT_ITEMS = 10
 
@@ -67,6 +69,7 @@ export default function FastBillingPage() {
   const saleFilter = useTradeProductFilter('sale')
   const sellableCatalog = useMemo(() => catalog.filter(saleFilter.isAllowed), [catalog, saleFilter])
   const [createInvoice, { isLoading: charging }] = useCreateInvoiceMutation()
+  const { handleError: handleCreditError, element: creditGuardElement } = useCreditLimitGuard()
   const scanInputRef = useRef<BarcodeScanInputHandle>(null)
 
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
@@ -644,7 +647,22 @@ export default function FastBillingPage() {
         discountValue,
         paidAmount,
       })
-      const result = await createInvoice(payload).unwrap()
+      // No pre-check here (keeps the counter fast); a credit refusal from the server opens
+      // the credit dialog, and the sale is retried with whatever was decided.
+      let result: Awaited<ReturnType<ReturnType<typeof createInvoice>['unwrap']>>
+      try {
+        result = await createInvoice(payload).unwrap()
+      } catch (error) {
+        const creditParams = {
+          customerId: (payload as { customerId?: string }).customerId,
+          type: (payload as { type?: string }).type,
+          unpaid: invoiceUnpaidAmount(payload as Parameters<typeof invoiceUnpaidAmount>[0]),
+        }
+        const resolution = await handleCreditError(error, creditParams)
+        if (!resolution) throw error
+        if (!resolution.proceed) return
+        result = await createInvoice({ ...payload, ...resolution.extra }).unwrap()
+      }
       playBeep('success')
       toast.success(`Invoice ${result.invoiceNumber} created`)
 
@@ -704,6 +722,7 @@ export default function FastBillingPage() {
     orgData,
     branchData,
     canCreateInvoices,
+    handleCreditError,
   ])
 
   useEffect(() => {
@@ -754,6 +773,7 @@ export default function FastBillingPage() {
 
   return (
     <div className='flex flex-col'>
+      {creditGuardElement}
       <div className='mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-violet-500/15 via-indigo-500/10 to-transparent px-4 py-3'>
         <div className='flex items-center gap-2.5'>
           <span className='flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-sm shadow-indigo-600/30'>

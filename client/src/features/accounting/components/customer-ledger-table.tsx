@@ -1,6 +1,6 @@
 import { formatDistanceToNow } from 'date-fns'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
-import { Eye } from 'lucide-react'
+import { ChevronRight, Eye } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -13,6 +13,9 @@ import { TableLoadingOverlay } from '@/components/data-table/table-loading-overl
 import { CustomerListPagination } from '@/features/customers/components/customer-list-pagination'
 import { useLanguage } from '@/context/language-context'
 import type { CustomerWithBalance } from './customer-ledger-card-grid'
+import { useLedgerStatus } from '@/features/ledger-alerts/hooks/use-ledger-alerts'
+import { AgingChip } from '@/features/ledger-alerts/components/aging-chip'
+import { CreditCell } from '@/features/customers/credit/credit-cell'
 
 type Props = {
   customers: CustomerWithBalance[]
@@ -30,6 +33,8 @@ type Props = {
 export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagination }: Props) {
   const { t } = useLanguage()
   const branchName = useBranchName()
+  // Overdue colour per customer (Settings → Due Dates & Ledger Colours).
+  const { rowStyleFor, agingFor, settings: ledgerSettings, colorsOn } = useLedgerStatus()
 
   const getBalanceColor = (balance: number) => {
     if (balance > 0) return 'text-red-600'
@@ -49,13 +54,73 @@ export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagi
             {t('No customers available')}
           </div>
         ) : (
-          <div className='border rounded-lg overflow-hidden'>
+          <>
+          {/* Phones: a tappable list — the 7-column table can't fit and was clipped. */}
+          <div className='divide-y overflow-hidden rounded-lg border sm:hidden'>
+            {customers.map((customer) => {
+              const aging = colorsOn ? agingFor(customer._id) : null
+              const credit = customer.credit
+              return (
+                // A div, not a <button>: the name cell holds its own photo-preview buttons.
+                <div
+                  key={customer._id}
+                  role='button'
+                  tabIndex={0}
+                  style={rowStyleFor(customer._id)}
+                  className='flex w-full cursor-pointer items-center gap-3 px-3 py-3 text-left active:bg-muted/60'
+                  onClick={() => onSelectCustomer(customer)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onSelectCustomer(customer)
+                    }
+                  }}
+                >
+                  <div className='min-w-0 flex-1 space-y-1'>
+                    <ContactMediaNameCell
+                      compact
+                      name={customer.name}
+                      nameUrdu={customer.nameUrdu}
+                      picture={customer.picture}
+                      idCardFront={customer.idCardFront}
+                      idCardBack={customer.idCardBack}
+                    />
+                    <div className='flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground'>
+                      {customer.phone ? <span className='tabular-nums'>{customer.phone}</span> : null}
+                      {customer.lastTransactionDate ? (
+                        <span>· {formatDistanceToNow(new Date(customer.lastTransactionDate), { addSuffix: true })}</span>
+                      ) : null}
+                    </div>
+                    {aging || credit?.hasLimit || credit?.onHold ? (
+                      <div className='flex flex-wrap items-center gap-2'>
+                        {aging ? <AgingChip aging={aging} settings={ledgerSettings} size='xs' /> : null}
+                        {credit?.hasLimit || credit?.onHold ? (
+                          <CreditCell credit={credit} className='min-w-0 max-w-[15rem] basis-full' />
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className='shrink-0 text-right'>
+                    <div className={`font-semibold tabular-nums ${getBalanceColor(customer.balance)}`}>
+                      {formatBalance(customer.balance)}
+                    </div>
+                    <div className={`text-[11px] font-medium ${getBalanceColor(customer.balance)}`}>
+                      {customer.balance > 0 ? t('Receivable') : customer.balance < 0 ? t('Payable') : t('Settled')}
+                    </div>
+                  </div>
+                  <ChevronRight className='h-4 w-4 shrink-0 text-muted-foreground' />
+                </div>
+              )
+            })}
+          </div>
+          <div className='border rounded-lg overflow-hidden max-sm:hidden'>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('Customer Name')}</TableHead>
                   <TableHead>{t('Balance')}</TableHead>
                   <TableHead>{t('Status')}</TableHead>
+                  <TableHead>{t('Credit Limit')}</TableHead>
                   <TableHead>{t('Phone')}</TableHead>
                   <TableHead>{t('Last Transaction')}</TableHead>
                   <TableHead className='text-right'>{t('Actions')}</TableHead>
@@ -65,6 +130,7 @@ export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagi
                 {customers.map((customer) => (
                   <TableRow
                     key={customer._id}
+                    style={rowStyleFor(customer._id)}
                     className='cursor-pointer hover:bg-muted/50'
                     onClick={() => onSelectCustomer(customer)}
                   >
@@ -89,6 +155,10 @@ export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagi
                       ) : (
                         <Badge variant='secondary'>{t('Settled')}</Badge>
                       )}
+                      {colorsOn ? <AgingChip aging={agingFor(customer._id)} settings={ledgerSettings} size='xs' className='mt-1 block' /> : null}
+                    </TableCell>
+                    <TableCell>
+                      <CreditCell credit={customer.credit} />
                     </TableCell>
                     <TableCell className='text-gray-600 text-sm'>
                       <div className='flex items-center gap-1'>
@@ -134,6 +204,7 @@ export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagi
               </TableBody>
             </Table>
           </div>
+          </>
         )}
       </TableLoadingOverlay>
 

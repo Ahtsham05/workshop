@@ -7,10 +7,42 @@ const { applyBranchFilter, getBranchContext, resolveWriteBranchId } = require('.
 const ApiError = require('../utils/ApiError');
 const { uploadToCloudinary } = require('../middlewares/upload');
 const customerVisionService = require('../services/customerVision.service');
+const creditControlService = require('../services/creditControl.service');
+const { userHasAnyPermission } = require('../middlewares/permission');
+
+/**
+ * Credit limit on the customer form: only manageCreditLimits may set or change it (it is
+ * what stops credit sales), every change lands in the customer's credit history, and a new
+ * customer without one gets the org's default limit.
+ */
+const resolveFormCreditLimit = async (req, existing) => {
+  const body = req.body;
+  const provided = Object.prototype.hasOwnProperty.call(body, 'creditLimit') && body.creditLimit !== null && body.creditLimit !== '';
+  const canManage = await userHasAnyPermission(req.user, ['manageCreditLimits']);
+  if (!existing) {
+    if (!provided || !canManage) {
+      const settings = await creditControlService.getSettings(req.organizationId);
+      body.creditLimit = settings.defaultCreditLimit;
+    }
+    return;
+  }
+  if (!provided) {
+    delete body.creditLimit;
+    return;
+  }
+  if (Number(body.creditLimit) === Number(existing.creditLimit || 0)) return;
+  if (!canManage) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'You do not have permission to change credit limits.');
+  }
+};
 
 const createCustomer = catchAsync(async (req, res) => {
   await resolveWriteBranchId(req);
+  await resolveFormCreditLimit(req, null);
   const customer = await customerService.createCustomer({ ...req.body, ...getBranchContext(req) });
+  if (customer.creditLimit > 0) {
+    creditControlService.recordFormLimitChange(customer, 0, { id: req.user.id, name: req.user.name });
+  }
   res.status(httpStatus.CREATED).send(customer);
 });
 
@@ -25,6 +57,17 @@ const getCustomers = catchAsync(async (req, res) => {
   }
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
   const result = await customerService.queryCustomers(filter, options);
+  // Credit used / available per row (one pending-invoice query for the page).
+  if (req.organizationId && Array.isArray(result?.results) && result.results.length) {
+    const summaries = await creditControlService.summarizeCustomers(req.organizationId, result.results);
+    const payload = typeof result.toJSON === 'function' ? result.toJSON() : { ...result };
+    payload.results = result.results.map((customer, i) => ({
+      ...(typeof customer.toJSON === 'function' ? customer.toJSON() : customer),
+      credit: summaries[i],
+    }));
+    res.send(payload);
+    return;
+  }
   res.send(result);
 });
 
@@ -37,7 +80,14 @@ const getCustomer = catchAsync(async (req, res) => {
 });
 
 const updateCustomer = catchAsync(async (req, res) => {
+  const existing = await customerService.getCustomerById(req.params.customerId);
+  if (!existing) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Customer not found');
+  }
+  const previousLimit = Number(existing.creditLimit || 0);
+  await resolveFormCreditLimit(req, existing);
   const customer = await customerService.updateCustomerById(req.params.customerId, req.body);
+  await creditControlService.recordFormLimitChange(customer, previousLimit, { id: req.user.id, name: req.user.name });
   res.send(customer);
 });
 
@@ -83,7 +133,7 @@ const getAllCustomers = catchAsync(async (req, res) => {
 })
 
 const bulkAddCustomers = catchAsync(async (req, res) => {
-  const { customers, duplicateStrategy } = req.body;
+  const { customers, duplicateStrategy, openingBalanceDate } = req.body;
 
   if (!customers || !Array.isArray(customers) || customers.length === 0) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Customers array is required');
@@ -95,7 +145,17 @@ const bulkAddCustomers = catchAsync(async (req, res) => {
   // imported" failure product.controller.js had to fix for the same reason.
   await resolveWriteBranchId(req);
 
-  const result = await customerService.bulkAddCustomers(customers, getBranchContext(req), { duplicateStrategy });
+  const [canManageCredit, creditSettings] = await Promise.all([
+    userHasAnyPermission(req.user, ['manageCreditLimits']),
+    creditControlService.getSettings(req.organizationId),
+  ]);
+  const result = await customerService.bulkAddCustomers(customers, getBranchContext(req), {
+    duplicateStrategy,
+    openingBalanceDate,
+    canManageCredit,
+    defaultCreditLimit: creditSettings.defaultCreditLimit,
+    actor: { id: req.user.id, name: req.user.name },
+  });
 
   const failedCount = result.errors?.length || 0;
   const parts = [];

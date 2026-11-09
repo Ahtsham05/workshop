@@ -27,7 +27,18 @@ export function DataTableViewOptions<TData>({
     email: 'email', 
     phone: 'phone',
     whatsapp: 'whatsapp',
-    address: 'address'
+    address: 'address',
+    balance: 'balance',
+    creditLimit: 'Credit Limit',
+    creditUsed: 'Credit Used',
+    creditAvailable: 'Available',
+    creditStatus: 'Credit Status',
+    paymentTerms: 'Payment Terms',
+    overdue: 'Overdue',
+    customerType: 'Customer Type',
+    taxNumber: 'Tax Number',
+    notes: 'Notes',
+    createdAt: 'Added On',
   }
   
   return (
@@ -42,7 +53,7 @@ export function DataTableViewOptions<TData>({
           {t('view')}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align='end' className='w-[150px]'>
+      <DropdownMenuContent align='end' className='max-h-[70vh] w-[200px] overflow-y-auto'>
         <DropdownMenuLabel>{t('toggle_columns')}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {table
@@ -56,7 +67,6 @@ export function DataTableViewOptions<TData>({
             return (
               <DropdownMenuCheckboxItem
                 key={column.id}
-                className='capitalize'
                 checked={column.getIsVisible()}
                 onCheckedChange={(value) => column.toggleVisibility(!!value)}
               >

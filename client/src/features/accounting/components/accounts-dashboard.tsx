@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
 import { useFormatMoney } from '@/lib/format-money';
+import { fitValueSize } from '@/lib/fit-value-size';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
@@ -184,88 +185,57 @@ export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps
   }
 
   return (
-    <div className="space-y-6">
-      {/* Month selector */}
-      <div className="flex items-center gap-3">
-        <Button variant="outline" size="icon" onClick={() => shiftMonth(-1)}>
+    <div className="space-y-6 max-sm:space-y-4">
+      {/* Month selector — spans the width on phones */}
+      <div className="flex items-center gap-3 max-sm:justify-between max-sm:rounded-lg max-sm:border max-sm:p-1">
+        <Button variant="outline" size="icon" onClick={() => shiftMonth(-1)} className="max-sm:border-0 max-sm:shadow-none">
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <span className="min-w-[160px] text-center font-medium">{monthLabel(selectedMonth)}</span>
-        <Button variant="outline" size="icon" onClick={() => shiftMonth(1)} disabled={isCurrentMonth}>
+        <span className="min-w-[160px] text-center font-medium max-sm:min-w-0 max-sm:flex-1">{monthLabel(selectedMonth)}</span>
+        <Button variant="outline" size="icon" onClick={() => shiftMonth(1)} disabled={isCurrentMonth} className="max-sm:border-0 max-sm:shadow-none">
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
 
       {/* Summary Cards — 2-up on phones, unchanged from sm up */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-1 sm:gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Monthly Expenses */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t('Monthly Expenses')}</CardTitle>
-            <Receipt className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatMoney(stats.monthlyExpenses)}</div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-              <TrendingUp className="h-3 w-3 text-red-500" />
-              {monthLabel(selectedMonth)}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Total Receivables */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t('Receivables')}</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{formatMoney(stats.totalReceivables)}</div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-              <ArrowUpRight className="h-3 w-3 text-green-500" />
-              {t('From customers')}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Total Payables */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t('Payables')}</CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{formatMoney(stats.totalPayables)}</div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-              <ArrowDownRight className="h-3 w-3 text-red-500" />
-              {t('To suppliers')}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Net Cash Flow */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t('Net Cash Flow')}</CardTitle>
-            <Wallet className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${netCashFlow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatMoney(netCashFlow)}
-            </div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-              {netCashFlow >= 0 ? (
-                <><TrendingUp className="h-3 w-3 text-green-500" /> {t('Positive')}</>
-              ) : (
-                <><TrendingDown className="h-3 w-3 text-red-500" /> {t('Negative')}</>
-              )}
-            </p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title={t('Monthly Expenses')}
+          icon={Receipt}
+          value={formatMoney(stats.monthlyExpenses)}
+          note={<><TrendingUp className="h-3 w-3 shrink-0 text-red-500" />{monthLabel(selectedMonth)}</>}
+        />
+        <KpiCard
+          title={t('Receivables')}
+          icon={Users}
+          value={formatMoney(stats.totalReceivables)}
+          valueClassName="text-green-600"
+          note={<><ArrowUpRight className="h-3 w-3 shrink-0 text-green-500" />{t('From customers')}</>}
+        />
+        <KpiCard
+          title={t('Payables')}
+          icon={Building2}
+          value={formatMoney(stats.totalPayables)}
+          valueClassName="text-red-600"
+          note={<><ArrowDownRight className="h-3 w-3 shrink-0 text-red-500" />{t('To suppliers')}</>}
+        />
+        <KpiCard
+          title={t('Net Cash Flow')}
+          icon={Wallet}
+          value={formatMoney(netCashFlow)}
+          valueClassName={netCashFlow >= 0 ? 'text-green-600' : 'text-red-600'}
+          note={
+            netCashFlow >= 0 ? (
+              <><TrendingUp className="h-3 w-3 shrink-0 text-green-500" /> {t('Positive')}</>
+            ) : (
+              <><TrendingDown className="h-3 w-3 shrink-0 text-red-500" /> {t('Negative')}</>
+            )
+          }
+        />
       </div>
 
       {/* Charts Row */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* Expenses by Category */}
         <Card>
           <CardHeader>
@@ -338,5 +308,41 @@ export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps
         </Card>
       </div>
     </div>
+  );
+}
+
+/**
+ * One summary tile. From sm up it is the original card; on phones (2-up, ~150px wide) the
+ * padding tightens and the amount shrinks to fit its card instead of running past the edge.
+ */
+function KpiCard({
+  title,
+  icon: Icon,
+  value,
+  valueClassName,
+  note,
+}: {
+  title: string;
+  icon: ComponentType<{ className?: string }>;
+  value: string;
+  valueClassName?: string;
+  note: ReactNode;
+}) {
+  return (
+    <Card className="min-w-0 max-sm:gap-2 max-sm:py-3">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 max-sm:items-start max-sm:gap-2 max-sm:px-3 max-sm:pb-0">
+        <CardTitle className="text-sm font-medium max-sm:text-xs max-sm:leading-snug max-sm:text-muted-foreground">{title}</CardTitle>
+        <Icon className="h-4 w-4 text-muted-foreground max-sm:shrink-0" />
+      </CardHeader>
+      <CardContent className="@container max-sm:px-3">
+        <div
+          className={`text-2xl font-bold tabular-nums max-sm:whitespace-nowrap max-sm:text-[length:var(--kpi-fit)] ${valueClassName ?? ''}`}
+          style={{ '--kpi-fit': fitValueSize(value, 1.25, 0.8) } as CSSProperties}
+        >
+          {value}
+        </div>
+        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">{note}</p>
+      </CardContent>
+    </Card>
   );
 }

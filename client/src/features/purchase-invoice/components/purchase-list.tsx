@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { WarehouseTag } from '@/components/warehouse-tag'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import type { RootState } from '@/stores/store'
@@ -522,6 +523,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate 
                         <TableCell>
                           <div className='flex items-center gap-1.5'>
                             <span className='font-medium'>{purchase.invoiceNumber}</span>
+                            <WarehouseTag warehouseId={purchase.warehouseId} />
                             {purchase.attachments?.length > 0 && (
                               <Paperclip className='h-3 w-3 text-muted-foreground' aria-label={t('Has attachments')} />
                             )}

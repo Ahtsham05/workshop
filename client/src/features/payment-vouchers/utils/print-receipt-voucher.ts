@@ -4,6 +4,7 @@ import { openPrintWindowForFormat, type PrintWindowContact } from '@/features/in
 import { PAPER_FORMATS, withPrintOrientation, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format'
 import type { CurrencyOption } from '@/stores/localization.api'
 import { formatAppDate } from '@/lib/date-format'
+import { discountReasonLabel } from '@/features/ledger-discounts/lib/ledger-discounts'
 
 const FONT_STACK = `system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`
 
@@ -18,6 +19,9 @@ export interface PrintableReceiptVoucherLine {
   customerName?: string
   payerName: string
   amount: number
+  /** Ledger discount given/received with this line (no cash). */
+  discountAmount?: number
+  discountReason?: string
   description?: string
 }
 
@@ -27,6 +31,7 @@ export interface PrintableReceiptVoucher {
   bankAccountName?: string
   lines: PrintableReceiptVoucherLine[]
   totalAmount: number
+  totalDiscount?: number
   reference?: string
   notes?: string
 }
@@ -49,6 +54,8 @@ const formatDate = (dateString: string) => {
 
 const generateVoucherHTML = (voucher: PrintableReceiptVoucher, company: PrintCompany, paperSize: PaperSize, orientation: PrintOrientation) => {
   const formatCurrency = (amount: number) => formatMoneyWithMeta(Math.abs(amount), company.currencyMeta ?? FALLBACK_CURRENCY)
+  const totalDiscount = voucher.lines.reduce((sum, line) => sum + (Number(line.discountAmount) || 0), 0)
+  const hasDiscount = totalDiscount > 0.004
   const resolvedFormat = withPrintOrientation(paperSize, orientation)
   const paperFormat = PAPER_FORMATS[resolvedFormat]
   const cardWidth = (paperFormat.bodyWidthPx ?? 380) + (paperFormat.family === 'thermal' ? 80 : 220)
@@ -289,6 +296,7 @@ const generateVoucherHTML = (voucher: PrintableReceiptVoucher, company: PrintCom
         <th>Type</th>
         <th>Description</th>
         <th class="amount-col">Amount</th>
+        ${hasDiscount ? '<th class="amount-col">Discount Allowed</th>' : ''}
       </tr>
     </thead>
     <tbody>
@@ -300,6 +308,7 @@ const generateVoucherHTML = (voucher: PrintableReceiptVoucher, company: PrintCom
         <td>${escapeHtml(SOURCE_TYPE_LABEL[line.sourceType] || line.sourceType)}</td>
         <td>${escapeHtml(line.description || '-')}</td>
         <td class="amount-col">${formatCurrency(line.amount)}</td>
+        ${hasDiscount ? `<td class="amount-col">${Number(line.discountAmount) > 0 ? `${formatCurrency(Number(line.discountAmount))}<div style="font-size:9px;font-weight:500">${escapeHtml(discountReasonLabel(line.discountReason))}</div>` : '-'}</td>` : ''}
       </tr>`
         )
         .join('')}
@@ -308,7 +317,9 @@ const generateVoucherHTML = (voucher: PrintableReceiptVoucher, company: PrintCom
       <tr>
         <td colspan="3">Total Amount Received</td>
         <td class="amount-col">${formatCurrency(voucher.totalAmount)}</td>
+        ${hasDiscount ? `<td class="amount-col">${formatCurrency(totalDiscount)}</td>` : ''}
       </tr>
+      ${hasDiscount ? `<tr><td colspan="3">Total settled on ledgers (amount + discount)</td><td class="amount-col" colspan="2">${formatCurrency(Number(voucher.totalAmount) + totalDiscount)}</td></tr>` : ''}
     </tfoot>
   </table>
 

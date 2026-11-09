@@ -57,6 +57,8 @@ import {
   type PrintWindowContact,
 } from '@/features/invoice/utils/invoice-print-contact-bridge';
 import { LedgerStatementTable } from './ledger-statement-table';
+import { discountReasonLabel, indexLinkedDiscounts, isDiscountType, sumDiscounts } from '@/features/ledger-discounts/lib/ledger-discounts';
+import { useLedgerDiscountSettings } from '@/features/ledger-discounts/hooks/use-ledger-discount-settings';
 import { LedgerCategoryCards, type LedgerCategoryGroup } from './ledger-category-cards';
 import { CommunicationLogPanel } from './communication-log-panel';
 import { SupplierBalanceReconciliation } from './supplier-balance-reconciliation'
@@ -94,6 +96,15 @@ interface LedgerEntry {
   balance: number;
   paymentMethod?: string;
   invoiceType?: string;
+  /** Only on discount_received rows (features/ledger-discounts). */
+  discount?: {
+    reason?: string;
+    percent?: number;
+    linkedEntryId?: string;
+    linkedAmount?: number;
+    overLimit?: boolean;
+    approvalNote?: string;
+  } | null;
 }
 
 function formatLedgerInvoiceType(entry: LedgerEntry, t: (key: string) => string): string {
@@ -677,6 +688,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
   };
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
+  const discountRules = useLedgerDiscountSettings('supplier');
   const [printingRowId, setPrintingRowId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<LedgerViewMode>(getStoredLedgerViewMode);
   const [categorySheetOpen, setCategorySheetOpen] = useState(false);
@@ -725,7 +737,18 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
         'Invoice Type': formatLedgerInvoiceType(entry, t),
         'Debit': entry.debit > 0 ? entry.debit.toFixed(2) : '-',
         'Credit': entry.credit > 0 ? entry.credit.toFixed(2) : '-',
-        'Balance': entry.balance.toFixed(2)
+        'Balance': entry.balance.toFixed(2),
+        // Discount lines explain themselves in the sheet too.
+        'Discount reason': isDiscountType(entry.transactionType) ? discountReasonLabel(entry.discount?.reason) : '',
+        'Discount details': isDiscountType(entry.transactionType)
+          ? [
+              entry.discount?.percent ? `${entry.discount.percent}%` : '',
+              entry.discount?.linkedAmount ? `with payment ${entry.discount.linkedAmount}` : '',
+              entry.discount?.overLimit ? `approved over limit${entry.discount.approvalNote ? `: ${entry.discount.approvalNote}` : ''}` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ')
+          : '',
       }));
 
       const ws = XLSX.utils.json_to_sheet(data);
@@ -765,7 +788,11 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
   };
 
   const handleDeleteEntry = async (entry: LedgerEntry) => {
-    if (!confirm(t('Are you sure you want to delete this entry? This action cannot be undone.'))) {
+    const linkedDiscount = linkedDiscounts.get(String(entry.id || entry._id));
+    const message = linkedDiscount
+      ? `${t('Are you sure you want to delete this entry? This action cannot be undone.')}\n\n${t('The discount received with this payment will be deleted too')}: ${formatMoney(Number(linkedDiscount.debit) || 0)}`
+      : t('Are you sure you want to delete this entry? This action cannot be undone.');
+    if (!confirm(message)) {
       return;
     }
 
@@ -811,10 +838,14 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
         ? entries[entryIndex - 1].balance
         : supplierBalanceBeforeFromLedgerEntry(entry);
 
+    // A discount the supplier gave with this payment: receipt shows both, balance after both.
+    const discountRow = linkedDiscounts.get(String(entry.id || entry._id));
     setSelectedPayment({
       entry,
+      discount: discountRow ? Number(discountRow.debit) || 0 : 0,
+      discountReason: discountRow?.discount?.reason,
       previousBalance,
-      currentBalance: entry.balance,
+      currentBalance: discountRow ? discountRow.balance : entry.balance,
     });
     setReceiptDialogOpen(true);
   };
@@ -827,8 +858,10 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
     const closingBalance = entries.length > 0
       ? entries[entries.length - 1].balance
       : openingBalance;
-    return { periodDebit, periodCredit, closingBalance };
+    return { periodDebit, periodCredit, closingBalance, discount: sumDiscounts(entries) };
   }, [entries, openingBalance]);
+
+  const linkedDiscounts = useMemo(() => indexLinkedDiscounts(entries), [entries]);
 
   const categoryGroups = useMemo(() => groupSupplierLedgerEntries(entries), [entries]);
 
@@ -1131,6 +1164,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
       credit_note: t('Credit Note'),
       adjustment: t('Adjustment'),
       opening_balance: t('Opening Balance'),
+      discount_received: t('Discount Received'),
     };
     return labels[type] || type;
   };
@@ -1294,6 +1328,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
               editingEntry={editingEntry}
               defaultTransactionType={ledgerFormPreset?.transactionType}
               defaultPaymentMethod={ledgerFormPreset?.paymentMethod}
+              currentBalance={currentBalance ?? supplier.balance ?? 0}
               onSuccess={(createdEntry) => {
                 handleCloseForm();
                 fetchLedgerEntries();
@@ -1303,10 +1338,13 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                 if (createdEntry && createdEntry.transactionType === 'payment_made') {
                   setTimeout(() => {
                     const previousBalance = currentBalance || 0;
-                    const newBalance = previousBalance - createdEntry.debit;
+                    const discount = Number(createdEntry.discountEntry?.debit) || 0;
+                    const newBalance = previousBalance - createdEntry.debit - discount;
 
                     setSelectedPayment({
                       entry: createdEntry,
+                      discount,
+                      discountReason: createdEntry.discountEntry?.discount?.reason,
                       previousBalance: previousBalance,
                       currentBalance: newBalance,
                     });
@@ -1399,6 +1437,8 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                 reference: selectedPayment.entry.reference,
                 paymentMethod: selectedPayment.entry.paymentMethod,
                 description: selectedPayment.entry.description,
+                discount: discountRules.settings.showOnReceipts ? selectedPayment.discount : 0,
+                discountReason: selectedPayment.discountReason,
               }}
               balance={{
                 previousBalance: selectedPayment.previousBalance,
@@ -1441,6 +1481,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                         name: supplier.name,
                         amount: selectedPayment.entry.debit,
                         remainingBalance: selectedPayment.currentBalance,
+                        discount: selectedPayment.discount,
                         currency: currencyMeta.symbol,
                       })}
                       templateCategory="payment_made"
@@ -1461,6 +1502,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                         name: supplier.name,
                         amount: selectedPayment.entry.debit,
                         remainingBalance: selectedPayment.currentBalance,
+                        discount: selectedPayment.discount,
                         currency: currencyMeta.symbol,
                       })}
                     />
@@ -1552,6 +1594,11 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
               <p className="mt-1 text-lg font-semibold tabular-nums text-red-600">
                 {formatMoney(periodSummary.periodDebit)}
               </p>
+              {periodSummary.discount.count > 0 && (
+                <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                  {t('incl. discount received')} {formatMoney(periodSummary.discount.total)} ({periodSummary.discount.count})
+                </p>
+              )}
             </div>
             <div className="rounded-lg border px-4 py-3">
               <p className="text-xs text-muted-foreground">{t('Credit')}</p>

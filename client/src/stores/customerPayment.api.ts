@@ -2,6 +2,7 @@ import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
 import { invalidateWalletCaches } from './wallet-cache-invalidation'
 import { invoiceApi } from './invoice.api'
+import { creditControlApi } from './creditControl.api'
 
 /**
  * Recording a customer payment moves a Bank Account / the cash till AND changes how much
@@ -14,6 +15,7 @@ const invalidateMoneyAndInvoices = async (_arg: unknown, { dispatch, queryFulfil
   try {
     await queryFulfilled
     dispatch(invoiceApi.util.invalidateTags(['Invoice']))
+    dispatch(creditControlApi.util.invalidateTags(['CreditStatus', 'CreditOverview']))
     invalidateWalletCaches(dispatch)
   } catch {
     // mutation failed — nothing to invalidate
@@ -22,7 +24,8 @@ const invalidateMoneyAndInvoices = async (_arg: unknown, { dispatch, queryFulfil
 
 export type AllocationMode = 'fifo' | 'due_date' | 'manual' | 'reference' | 'none'
 /** 'return_credit' carries no cash — goods came back, so the invoice is worth less. */
-export type PaymentDirection = 'payment' | 'refund' | 'return_credit'
+/** 'discount' carries no cash — a ledger discount that settled invoices (features/ledger-discounts). */
+export type PaymentDirection = 'payment' | 'refund' | 'return_credit' | 'discount'
 export type SettlementStatus = 'unpaid' | 'partial' | 'paid' | 'overpaid'
 export type DueStatus = 'overdue' | 'due_today' | 'due_soon' | 'not_due' | 'no_due_date' | 'settled'
 

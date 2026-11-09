@@ -1,6 +1,8 @@
 import { DEFAULT_PAGE_SIZE_OPTIONS, formatPageSize } from '@/lib/page-size'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useDeleteExpenseMutation, useGetExpensesQuery, type ExpenseRecord } from '@/stores/expense.api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,7 +49,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useGetExpenseCategoriesQuery } from '@/stores/expenseCategory.api';
+import { useGetExpenseCategoriesQuery, type ExpenseNature } from '@/stores/expenseCategory.api';
+import { ExpenseNatureBadge } from './expense-nature';
+import { ExpenseCategoryChip } from './expense-category-icon';
+import { EXPENSE_IMPORT_FIELDS } from './expense-import-dialog';
 import { CreatedByCell, useCanViewCreatedBy } from '@/components/created-by-cell';
 import { useFormatMoney } from '@/lib/format-money';
 import { formatAppDate } from '@/lib/date-format'
@@ -55,10 +60,11 @@ import { formatAppDate } from '@/lib/date-format'
 interface ExpenseListProps {
   onEdit: (expense: any) => void;
   onDelete: () => void;
+  /** @deprecated The list refreshes itself through RTK Query tags; kept for old callers. */
   refreshTrigger?: number;
 }
 
-export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListProps) {
+export function ExpenseList({ onEdit, onDelete }: ExpenseListProps) {
   const formatMoney = useFormatMoney();
   const { t } = useLanguage();
   const { hasExplicitPermission } = usePermissions();
@@ -69,65 +75,68 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
   });
   const categories = Array.isArray(categoryData) ? categoryData : [];
   const expenseCategories = ['All', ...categories.map((c) => c.name)];
-  const [expenses, setExpenses] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedNature, setSelectedNature] = useState<'all' | ExpenseNature>('all');
+  const [exporting, setExporting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = usePersistedPageSize('expenses', 10);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalResults, setTotalResults] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [expenseToDelete, setExpenseToDelete] = useState<any>(null);
 
-  useEffect(() => {
-    loadExpenses();
-  }, [currentPage, pageSize, selectedCategory, searchTerm, refreshTrigger]);
+  // One request once typing pauses — not one per keystroke (each new search string also
+  // costs a CORS preflight, so this halves the traffic twice over).
+  const debouncedSearch = useDebouncedValue(searchTerm.trim(), 350);
+  const { data, isLoading, isFetching, isError } = useGetExpensesQuery(
+    {
+      page: currentPage,
+      limit: pageSize,
+      sortBy: 'date:desc',
+      search: debouncedSearch || undefined,
+      category: selectedCategory !== 'All' ? selectedCategory : undefined,
+      expenseNature: selectedNature !== 'all' ? selectedNature : undefined,
+    },
+    // Coming back from Add/Edit within 30s reuses the cached page; saves invalidate it anyway.
+    { refetchOnMountOrArgChange: 30 },
+  );
+  const expenses: ExpenseRecord[] = data?.results ?? [];
+  const totalPages = data?.totalPages || 1;
+  const totalResults = data?.totalResults || 0;
+  const loading = isLoading;
+  const [deleteExpense] = useDeleteExpenseMutation();
 
-  const loadExpenses = async () => {
+  // Every row matching the filters (not just this page), in the same column layout the
+  // Import dialog reads — so an exported file can be edited and imported straight back.
+  const exportToExcel = async () => {
     try {
-      setLoading(true);
-
-      const params: any = {
-        page: currentPage,
-        limit: pageSize,
-        sortBy: 'date:desc',
-      };
-
-      if (searchTerm) {
-        params.search = searchTerm;
+      setExporting(true);
+      const params: Record<string, string | number> = { page: 1, limit: 5000, sortBy: 'date:desc' };
+      if (searchTerm) params.search = searchTerm;
+      if (selectedCategory && selectedCategory !== 'All') params.category = selectedCategory;
+      if (selectedNature !== 'all') params.expenseNature = selectedNature;
+      const response = await Axios({ ...summery.fetchExpenses, params });
+      const rows: Array<{
+        expenseNumber?: string; date: string; category: string; expenseNature?: ExpenseNature; description?: string
+        amount?: number; paymentMethod?: string; walletType?: string; vendor?: string; reference?: string
+        notes?: string; isPaid?: boolean
+      }> = response.data?.results || [];
+      if (rows.length === 0) {
+        toast.error(t('No data available to export'));
+        return;
       }
-
-      if (selectedCategory && selectedCategory !== 'All') {
-        params.category = selectedCategory;
-      }
-
-      const response = await Axios({
-        ...summery.fetchExpenses,
-        params,
-      });
-
-      setExpenses(response.data?.results || []);
-      setTotalPages(response.data?.totalPages || 1);
-      setTotalResults(response.data?.totalResults || 0);
-    } catch (error) {
-      console.error('Error loading expenses:', error);
-      toast.error(t('Failed to load expenses'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const exportToExcel = () => {
-    try {
-      const data = expenses.map(expense => ({
-        'Expense No': expense.expenseNumber || '-',
-        'Date': formatAppDate(new Date(expense.date)),
-        'Category': expense.category,
-        'Description': expense.description,
-        'Vendor': expense.vendor || '-',
-        'Amount': expense.amount.toFixed(2),
-        'Payment Method': expense.paymentMethod
+      const label = (key: string) => EXPENSE_IMPORT_FIELDS.find((f) => f.key === key)?.label || key;
+      const data = rows.map((expense) => ({
+        'Expense No': expense.expenseNumber || '',
+        [label('date')]: formatAppDate(new Date(expense.date)),
+        [label('category')]: expense.category,
+        [label('expenseNature')]: expense.expenseNature === 'direct' ? 'Direct' : 'Indirect',
+        [label('description')]: expense.description,
+        [label('amount')]: Number(expense.amount || 0),
+        [label('paymentMethod')]: expense.paymentMethod === 'Wallet' && expense.walletType ? expense.walletType : expense.paymentMethod,
+        [label('vendor')]: expense.vendor || '',
+        [label('reference')]: expense.reference || '',
+        [label('notes')]: expense.notes || '',
+        Status: expense.isPaid === false ? 'Unpaid' : 'Paid',
       }));
 
       const ws = XLSX.utils.json_to_sheet(data);
@@ -138,6 +147,8 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
     } catch (error) {
       console.error('Export error:', error);
       toast.error(t('Failed to export data'));
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -145,37 +156,22 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
     if (!expenseToDelete) return;
 
     try {
-      await Axios({
-        ...summery.deleteExpense,
-        url: `${summery.deleteExpense.url}/${expenseToDelete.id}`,
-      });
+      await deleteExpense(expenseToDelete.id).unwrap();
 
       toast.success(t('Expense deleted successfully'));
       setDeleteDialogOpen(false);
       setExpenseToDelete(null);
       onDelete();
-      loadExpenses();
     } catch (error: any) {
       console.error('Error deleting expense:', error);
-      toast.error(error?.response?.data?.message || t('Failed to delete expense'));
+      toast.error(error?.data?.message || error?.response?.data?.message || t('Failed to delete expense'));
     }
   };
 
-  const getCategoryColor = (category: string) => {
-    const colors: Record<string, string> = {
-      Rent: 'bg-blue-100 text-blue-800',
-      Utilities: 'bg-green-100 text-green-800',
-      Salaries: 'bg-purple-100 text-purple-800',
-      Transportation: 'bg-yellow-100 text-yellow-800',
-      Marketing: 'bg-pink-100 text-pink-800',
-      Supplies: 'bg-indigo-100 text-indigo-800',
-      Maintenance: 'bg-orange-100 text-orange-800',
-      Insurance: 'bg-cyan-100 text-cyan-800',
-      Tax: 'bg-red-100 text-red-800',
-      Other: 'bg-gray-100 text-gray-800',
-    };
-    return colors[category] || 'bg-gray-100 text-gray-800';
-  };
+  // Each category's own colour (set in Expense Categories) — not a fixed table that only
+  // knew the old default names and left every other category grey.
+  const colorByCategory = new Map(categories.map((c) => [c.name.trim().toLowerCase(), c.color]));
+  const categoryColor = (name: string) => colorByCategory.get(String(name || '').trim().toLowerCase());
 
   if (loading && expenses.length === 0) {
     return (
@@ -191,11 +187,12 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row items-end gap-3">
+      <Card className="max-sm:py-4">
+        <CardContent className="pt-6 max-sm:px-3 max-sm:pt-0">
+          {/* Phones: search full width, category | per page side by side, clear below. */}
+          <div className="flex flex-col md:flex-row items-end gap-3 max-sm:grid max-sm:grid-cols-2 max-sm:gap-2">
             {/* Search */}
-            <div className="flex-1 w-full space-y-2">
+            <div className="flex-1 w-full space-y-2 max-sm:col-span-2">
               <Label>{t('Search')}</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -234,9 +231,30 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
               </Select>
             </div>
 
+            {/* Direct / Indirect */}
+            <div className="w-full md:w-40 space-y-2">
+              <Label>{t('Type')}</Label>
+              <Select
+                value={selectedNature}
+                onValueChange={(value) => {
+                  setSelectedNature(value as 'all' | ExpenseNature);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className='w-full'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('All')}</SelectItem>
+                  <SelectItem value="direct">{t('Direct')}</SelectItem>
+                  <SelectItem value="indirect">{t('Indirect')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Records per page */}
             <div className="w-full md:w-40 space-y-2">
-              <Label>{t('Records per page')}</Label>
+              <Label className="max-sm:truncate">{t('Records per page')}</Label>
               <Select value={pageSize.toString()} onValueChange={(value) => { setPageSize(Number(value)); setCurrentPage(1); }}>
                 <SelectTrigger className='w-full'>
                   <SelectValue>{formatPageSize(pageSize)}</SelectValue>
@@ -255,9 +273,10 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
               onClick={() => {
                 setSearchTerm('');
                 setSelectedCategory('All');
+                setSelectedNature('all');
                 setCurrentPage(1);
               }}
-              className="w-full md:w-auto"
+              className="w-full md:w-auto max-sm:col-span-2"
             >
               <Filter className="h-4 w-4 mr-2" />
               {t('Clear Filters')}
@@ -267,24 +286,102 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
       </Card>
 
       {/* Expenses Table */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
+      <Card className="max-sm:gap-4 max-sm:py-4">
+        <CardHeader className="max-sm:px-3">
+          <div className="flex items-center justify-between gap-2">
             <CardTitle>{t('Expense List')}</CardTitle>
-            <Button variant="outline" size="sm" onClick={exportToExcel}>
-              <Download className="h-4 w-4 mr-2" />
-              {t('Export to Excel')}
+            <Button variant="outline" size="sm" onClick={exportToExcel} disabled={exporting}>
+              <Download className="h-4 w-4 mr-2 max-sm:mr-1.5" />
+              <span className="max-sm:hidden">{t('Export to Excel')}</span>
+              <span className="sm:hidden">{t('Excel')}</span>
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
+        <CardContent className={`max-sm:px-3 transition-opacity ${isFetching && !isLoading ? 'opacity-60' : ''}`} aria-busy={isFetching}>
+          {isError && (
+            <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+              {t('Failed to load expenses')}
+            </p>
+          )}
+          {/* Phones: one compact card per expense — the 9-column table needs ~1000px. */}
+          <div className="divide-y rounded-lg border sm:hidden">
+            {expenses.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">{t('No expenses found')}</div>
+            ) : (
+              expenses.map((expense) => (
+                <div key={expense.id} className="space-y-1.5 px-3 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <ExpenseCategoryChip name={expense.category} color={categoryColor(expense.category)} />
+                        <ExpenseNatureBadge nature={expense.expenseNature} compact />
+                      </div>
+                      {expense.description ? (
+                        <p className="text-sm font-medium leading-snug break-words">{expense.description}</p>
+                      ) : null}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-semibold tabular-nums">{formatMoney(expense.amount)}</p>
+                      {expense.isPaid === false ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700">
+                          <Clock className="h-3 w-3" />
+                          {t('Pending')}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-700">
+                          <CheckCircle2 className="h-3 w-3" />
+                          {t('Paid')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-end justify-between gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1 tabular-nums">
+                        <Calendar className="h-3 w-3" />
+                        {formatAppDate(new Date(expense.date))}
+                      </span>
+                      {expense.expenseNumber ? <span className="font-mono">· {expense.expenseNumber}</span> : null}
+                      {expense.vendor ? <span className="break-all">· {expense.vendor}</span> : null}
+                      {expense.paymentMethod ? <span>· {t(expense.paymentMethod)}</span> : null}
+                    </div>
+                    {canManageExpenses && (
+                      <div className="-mr-2 flex shrink-0 items-center">
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => onEdit(expense)} aria-label={t('Edit')}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          aria-label={t('Delete')}
+                          onClick={() => {
+                            setExpenseToDelete(expense);
+                            setDeleteDialogOpen(true);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  {canViewCreatedBy && expense.createdBy ? (
+                    <div className="text-xs text-muted-foreground">
+                      <CreatedByCell createdBy={expense.createdBy} />
+                    </div>
+                  ) : null}
+                </div>
+              ))
+            )}
+          </div>
+          <div className="overflow-x-auto max-sm:hidden">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('Expense No')}</TableHead>
                   <TableHead>{t('Date')}</TableHead>
                   <TableHead>{t('Category')}</TableHead>
+                  <TableHead>{t('Type')}</TableHead>
                   <TableHead>{t('Description')}</TableHead>
                   <TableHead>{t('Vendor')}</TableHead>
                   <TableHead>{t('Amount')}</TableHead>
@@ -297,7 +394,7 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
               <TableBody>
                 {expenses.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={canViewCreatedBy ? 10 : 9} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={canViewCreatedBy ? 11 : 10} className="text-center py-8 text-muted-foreground">
                       {t('No expenses found')}
                     </TableCell>
                   </TableRow>
@@ -314,9 +411,10 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge className={getCategoryColor(expense.category)}>
-                          {t(expense.category)}
-                        </Badge>
+                        <ExpenseCategoryChip name={expense.category} color={categoryColor(expense.category)} />
+                      </TableCell>
+                      <TableCell>
+                        <ExpenseNatureBadge nature={expense.expenseNature} compact />
                       </TableCell>
                       <TableCell>{expense.description}</TableCell>
                       <TableCell>{expense.vendor || '-'}</TableCell>

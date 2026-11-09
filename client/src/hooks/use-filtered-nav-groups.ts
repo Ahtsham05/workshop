@@ -5,6 +5,7 @@ import type { NavGroup } from '@/components/layout/types'
 import { usePermissions } from '@/context/permission-context'
 import { useFeatureAccess } from '@/hooks/use-feature-access'
 import { useManufacturingAccess } from '@/hooks/use-manufacturing-access'
+import { useWarehouseSettings } from '@/hooks/use-warehouse-settings'
 import { normalizeBusinessType } from '@/lib/business-types'
 import { WHATSAPP_UI_ENABLED } from '@/config/whatsapp-ui'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
@@ -70,6 +71,7 @@ export function useFilteredNavGroups(): NavGroup[] {
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const userBusinessType = normalizeBusinessType(org?.businessType || user?.businessType)
   const { available: manufacturingOn } = useManufacturingAccess()
+  const { enabled: warehousesOn } = useWarehouseSettings()
   const { canAccess } = useFeatureAccess()
   const isPlatformAdmin = user?.systemRole === 'system_admin'
   const schoolRole = resolveSchoolRole(user)
@@ -111,6 +113,10 @@ export function useFilteredNavGroups(): NavGroup[] {
       }
 
       if (item.module === 'manufacturing' && !manufacturingOn) {
+        return false
+      }
+
+      if (item.module === 'warehouses' && !warehousesOn) {
         return false
       }
 
@@ -210,5 +216,6 @@ export function useFilteredNavGroups(): NavGroup[] {
     canAccess,
     org?.businessType,
     manufacturingOn,
+    warehousesOn,
   ])
 }

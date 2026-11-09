@@ -10,6 +10,8 @@ type PaymentCtx = {
   name?: string
   amount?: number
   remainingBalance?: number
+  /** Discount given with this payment (ledger Discount Allowed / Received). */
+  discount?: number
   currency: string
 }
 
@@ -69,24 +71,32 @@ export function buildSupplierBalanceMessage({ branchName, name, balance, currenc
   return `${h}\n${greeting}You have a credit balance of ${fmt(Math.abs(balance), currency)} with us.\n\nPlease contact us for further details.\n\nThank you!`
 }
 
-export function buildPaymentReceivedMessage({ branchName, name, amount, remainingBalance, currency }: PaymentCtx) {
+export function buildPaymentReceivedMessage({ branchName, name, amount, remainingBalance, discount, currency }: PaymentCtx) {
   const h = heading(branchName)
   const greeting = name ? `Dear ${name},\n\n` : ''
   const remaining =
     remainingBalance !== undefined
       ? `\nYour remaining balance: ${fmt(Math.abs(remainingBalance), currency)}${remainingBalance < 0 ? ' (credit)' : remainingBalance === 0 ? ' (fully settled)' : ' (payable)'}.`
       : ''
-  return `${h}\n${greeting}We have received a payment of ${fmt(amount, currency)} from you. Thank you!\n${remaining}\nThank you for your prompt payment!`
+  const discountLine =
+    discount && discount > 0
+      ? `\nDiscount allowed: ${fmt(discount, currency)} (total settled ${fmt((amount || 0) + discount, currency)}).`
+      : ''
+  return `${h}\n${greeting}We have received a payment of ${fmt(amount, currency)} from you. Thank you!\n${discountLine}${remaining}\nThank you for your prompt payment!`
 }
 
-export function buildPaymentMadeMessage({ branchName, name, amount, remainingBalance, currency }: PaymentCtx) {
+export function buildPaymentMadeMessage({ branchName, name, amount, remainingBalance, discount, currency }: PaymentCtx) {
   const h = heading(branchName)
   const greeting = name ? `Dear ${name},\n\n` : ''
   const remaining =
     remainingBalance !== undefined
       ? `\nRemaining balance: ${fmt(Math.abs(remainingBalance), currency)}${remainingBalance <= 0 ? ' (credit)' : ' (payable)'}.`
       : ''
-  return `${h}\n${greeting}We have made a payment of ${fmt(amount, currency)} to you.\n${remaining}\nThank you for your services!`
+  const discountLine =
+    discount && discount > 0
+      ? `\nDiscount received: ${fmt(discount, currency)} (total settled ${fmt((amount || 0) + discount, currency)}).`
+      : ''
+  return `${h}\n${greeting}We have made a payment of ${fmt(amount, currency)} to you.\n${discountLine}${remaining}\nThank you for your services!`
 }
 
 type InvoiceSmsCtx = {

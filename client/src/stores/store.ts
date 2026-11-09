@@ -27,6 +27,10 @@ import { partnerPaymentApi } from './partnerPayment.api';
 import { paymentVoucherApi } from './paymentVoucher.api';
 import { supplierPaymentApi } from './supplierPayment.api';
 import { customerPaymentApi } from './customerPayment.api';
+import { creditControlApi } from './creditControl.api';
+import { ledgerAlertsApi } from './ledgerAlerts.api';
+import { ledgerDiscountsApi } from './ledgerDiscounts.api';
+import { customerProfitApi } from './customerProfit.api';
 import { receiptVoucherApi } from './receiptVoucher.api';
 import { bankReconciliationApi } from './bankReconciliation.api';
 import { hrApi } from './hr.api';
@@ -70,6 +74,7 @@ import { inventoryTransferApi } from './inventoryTransfer.api';
 import { stockAdjustmentApi } from './stockAdjustment.api';
 import { manufacturingApi } from './manufacturing.api';
 import { stockCountApi } from './stockCount.api';
+import { warehouseApi } from './warehouse.api';
 import { productListApi } from './productList.api';
 import { inventoryCleanupApi } from './inventoryCleanup.api';
 import { warrantyClaimApi } from './warrantyClaim.api';
@@ -122,6 +127,10 @@ export const store = configureStore({
     [paymentVoucherApi.reducerPath]: paymentVoucherApi.reducer,
     [supplierPaymentApi.reducerPath]: supplierPaymentApi.reducer,
     [customerPaymentApi.reducerPath]: customerPaymentApi.reducer,
+    [creditControlApi.reducerPath]: creditControlApi.reducer,
+    [ledgerAlertsApi.reducerPath]: ledgerAlertsApi.reducer,
+    [ledgerDiscountsApi.reducerPath]: ledgerDiscountsApi.reducer,
+    [customerProfitApi.reducerPath]: customerProfitApi.reducer,
     [receiptVoucherApi.reducerPath]: receiptVoucherApi.reducer,
     [bankReconciliationApi.reducerPath]: bankReconciliationApi.reducer,
     [hrApi.reducerPath]: hrApi.reducer,
@@ -165,6 +174,7 @@ export const store = configureStore({
     [stockAdjustmentApi.reducerPath]: stockAdjustmentApi.reducer,
     [manufacturingApi.reducerPath]: manufacturingApi.reducer,
     [stockCountApi.reducerPath]: stockCountApi.reducer,
+    [warehouseApi.reducerPath]: warehouseApi.reducer,
     [productListApi.reducerPath]: productListApi.reducer,
     [inventoryCleanupApi.reducerPath]: inventoryCleanupApi.reducer,
     [warrantyClaimApi.reducerPath]: warrantyClaimApi.reducer,
@@ -214,6 +224,10 @@ export const store = configureStore({
       paymentVoucherApi.middleware,
       supplierPaymentApi.middleware,
       customerPaymentApi.middleware,
+      creditControlApi.middleware,
+      ledgerAlertsApi.middleware,
+      ledgerDiscountsApi.middleware,
+      customerProfitApi.middleware,
       receiptVoucherApi.middleware,
       bankReconciliationApi.middleware,
       hrApi.middleware,
@@ -257,6 +271,7 @@ export const store = configureStore({
       stockAdjustmentApi.middleware,
       manufacturingApi.middleware,
       stockCountApi.middleware,
+      warehouseApi.middleware,
       productListApi.middleware,
       inventoryCleanupApi.middleware,
       warrantyClaimApi.middleware,

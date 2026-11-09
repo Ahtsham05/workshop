@@ -34,6 +34,10 @@ import { useSelector } from 'react-redux'
 import { isMobileShopBusiness } from '@/lib/business-types'
 import type { RootState } from '@/stores/store'
 import { getTextClasses } from '@/utils/urdu-text-utils'
+import { CreditCell } from '@/features/customers/credit/credit-cell'
+import { useLedgerStatus } from '@/features/ledger-alerts/hooks/use-ledger-alerts'
+import { AgingChip } from '@/features/ledger-alerts/components/aging-chip'
+import type { CreditSummary } from '@/stores/creditControl.api'
 
 export interface CustomerWithBalance {
   _id: string
@@ -45,6 +49,8 @@ export interface CustomerWithBalance {
   address?: string
   balance: number
   lastTransactionDate?: string
+  /** Credit limit / used / available (server creditControl.summarizeCustomers). */
+  credit?: CreditSummary | null
   picture?: { url?: string; publicId?: string }
   idCardFront?: { url?: string; publicId?: string }
   idCardBack?: { url?: string; publicId?: string }
@@ -90,6 +96,7 @@ export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, p
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const isMobileShop = isMobileShopBusiness(user?.businessType)
   const branchName = useBranchName()
+  const { cardStyleFor, agingFor, settings: ledgerSettings, colorsOn } = useLedgerStatus()
 
   const visibleActions = useMemo(() => {
     const all = getCustomerQuickActions('sample')
@@ -164,7 +171,7 @@ export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, p
             <p className='text-muted-foreground'>{t('no_results')}</p>
           </div>
         ) : (
-          <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+          <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
             {customers.map((customer) => {
               const whatsapp = customer.whatsapp || customer.phone
               const balanceDisplay = formatCustomerBalanceDisplay(Number(customer.balance ?? 0), t, currencyMeta)
@@ -173,14 +180,19 @@ export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, p
                 <EntityCardLayout
                   key={customer._id || customer.name}
                   header={
-                    <ContactMediaNameCell
-                      compact
-                      name={customer.name}
-                      nameUrdu={customer.nameUrdu}
-                      picture={customer.picture}
-                      idCardFront={customer.idCardFront}
-                      idCardBack={customer.idCardBack}
-                    />
+                    <div className='min-w-0 space-y-1.5'>
+                      <ContactMediaNameCell
+                        compact
+                        name={customer.name}
+                        nameUrdu={customer.nameUrdu}
+                        picture={customer.picture}
+                        idCardFront={customer.idCardFront}
+                        idCardBack={customer.idCardBack}
+                      />
+                      {customer.credit && (customer.credit.hasLimit || customer.credit.onHold) ? (
+                        <CreditCell credit={customer.credit} className='max-w-none' />
+                      ) : null}
+                    </div>
                   }
                   email={customer.email}
                   phone={customer.phone && customer.phone !== whatsapp ? customer.phone : undefined}
@@ -209,6 +221,8 @@ export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, p
                   actions={renderActions(customer)}
                   ledgerLabel={t('customers_ledger')}
                   onOpenLedger={() => onSelectCustomer(customer)}
+                  cardStyle={cardStyleFor(customer._id)}
+                  status={colorsOn ? <AgingChip aging={agingFor(customer._id)} settings={ledgerSettings} size='xs' /> : null}
                 />
               )
             })}

@@ -590,6 +590,11 @@ export function PurchaseViewDrawer({
                             </Badge>
                           )}
                           {payment.direction === 'refund' && <Badge variant='secondary'>{t('Refund')}</Badge>}
+                          {payment.direction === 'discount' && (
+                            <Badge variant='outline' className='border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400'>
+                              {t('Discount received')}
+                            </Badge>
+                          )}
                           {payment.direction === 'return_credit' && (
                             <Badge
                               variant='outline'
@@ -605,6 +610,8 @@ export function PurchaseViewDrawer({
                               "Cash" here would read as a payment that never happened. */}
                           {payment.direction === 'return_credit'
                             ? t('Goods returned')
+                            : payment.direction === 'discount'
+                            ? t('Discount (no cash)')
                             : payment.paymentMethod === 'wallet'
                               ? payment.walletType
                               : t('Cash')}

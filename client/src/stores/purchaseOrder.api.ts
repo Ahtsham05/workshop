@@ -245,6 +245,7 @@ export const purchaseOrderApi = createApi({
           expiryDate?: string
         }>
         receivedAt?: string
+        warehouseId?: string
         notes?: string
         paidAmount?: number
         type?: 'cash' | 'credit'

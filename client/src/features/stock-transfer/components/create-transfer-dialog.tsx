@@ -30,6 +30,7 @@ import { SerialPickDialog } from '@/components/serial-pick-dialog'
 import { formatAppDate } from '@/lib/date-format'
 import { DatePicker } from '@/components/ui/date-picker'
 import { getBusinessToday } from '@/lib/business-timezone'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 
 export interface TransferPrefill {
   fromProductId: string
@@ -70,6 +71,9 @@ export function CreateTransferDialog({ open, onOpenChange, prefill, onTransferAn
   const [quantity, setQuantity] = useState('')
   const [reason, setReason] = useState('')
   const [transferDate, setTransferDate] = useState(() => getBusinessToday())
+  // Multi-warehouse: which warehouse of this branch the goods leave from.
+  const [fromWarehouseId, setFromWarehouseId] = useState('')
+  const warehousePicker = useWarehousePicker('any')
 
   // IMEI/serial-tracked products move per-unit — quantity just sets the target for the
   // serial picker dialog below; `imeis` (not `quantity`) is what's actually sent. See
@@ -190,6 +194,7 @@ export function CreateTransferDialog({ open, onOpenChange, prefill, onTransferAn
         ...(needsSerials ? { imeis: selectedImeis } : { quantity: qtyNum }),
         reason: reason.trim() || undefined,
         transferDate,
+        ...(warehousePicker.visible && fromWarehouseId ? { fromWarehouseId } : {}),
       }).unwrap()
       toast.success(t('Transfer created — stock has left the source branch'), {
         description: `${selectedItem.name} → ${branches.find((b) => b.id === toBranchId)?.name ?? ''}`,
@@ -453,6 +458,8 @@ export function CreateTransferDialog({ open, onOpenChange, prefill, onTransferAn
               </button>
             </div>
           )}
+
+          <WarehouseField kind='any' id='transfer-from-warehouse' label={t('Send from warehouse')} value={fromWarehouseId} onValueChange={setFromWarehouseId} />
 
           <div className='space-y-1.5'>
             <Label htmlFor='transfer-date'>{t('Transfer date')}</Label>

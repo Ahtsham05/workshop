@@ -91,6 +91,32 @@ const organizationSchema = mongoose.Schema(
     repairSettings: {
       partCategories: { type: [String], default: [] },
     },
+    // Customer credit control — see services/creditControl.service.js (DEFAULT_SETTINGS
+    // there is what an org that never opened Settings → Credit Control gets).
+    creditControl: {
+      enabled: { type: Boolean, default: true },
+      // block: a sale over the limit is refused unless someone allowed to override approves
+      // it with a reason. warn: the cashier is warned and can carry on (logged).
+      mode: { type: String, enum: ['block', 'warn'], default: 'block' },
+      // Pending (goods handed over, not billed yet) invoices count as money owed.
+      includePendingInvoices: { type: Boolean, default: true },
+      // > 0: also stop new credit while an invoice is overdue by more than this many days.
+      overdueBlockDays: { type: Number, default: 0, min: 0 },
+      // Limit given to new customers when the form leaves it empty (0 = no limit).
+      defaultCreditLimit: { type: Number, default: 0, min: 0 },
+      // Utilisation % at which a customer shows as "near limit".
+      nearLimitPercent: { type: Number, default: 80, min: 1, max: 100 },
+    },
+    // Ledger alerts — invoice due dates + overdue colour bands (Settings → Due Dates &
+    // Ledger Colours). Free-form here; services/ledgerAlerts.service.js normalizeSettings
+    // validates it and its DEFAULT_SETTINGS is what an org that never saved it gets.
+    ledgerAlerts: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    // Ledger discount rules (Settings → Ledger Discounts): on/off, limits, reasons, print.
+    // Free-form here; services/ledgerDiscount.service.js normalizeSettings owns the shape.
+    ledgerDiscounts: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    // Multi-warehouse (Settings → Warehouses): on/off + options. Free-form here;
+    // services/warehouse.service.js normalizeSettings owns the shape.
+    warehouseSettings: { type: mongoose.Schema.Types.Mixed, default: undefined },
     // Localization / Currency / Tax settings — all optional/defaulted so existing
     // organizations keep working unchanged until they configure these explicitly (e.g. via
     // the new Business Profile / Localization settings pages).

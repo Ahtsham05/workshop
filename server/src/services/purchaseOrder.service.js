@@ -598,6 +598,8 @@ const receiveItems = async (orderId, body, ctx) => {
     invoiceNumber,
     items: purchaseItems,
     purchaseDate: body.receivedAt ? new Date(body.receivedAt) : new Date(),
+    // Multi-warehouse: receive into the picked warehouse (unset = branch default).
+    warehouseId: body.warehouseId || null,
     discountType: overallDiscountType,
     discountValue: overallDiscountValue,
     discount: overallDiscountAmount,

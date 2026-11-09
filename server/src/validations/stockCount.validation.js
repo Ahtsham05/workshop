@@ -23,6 +23,7 @@ const createCount = {
     title: Joi.string().allow('').trim().max(120),
     notes: Joi.string().allow('').trim().max(1000),
     blind: Joi.boolean(),
+    warehouseId: Joi.string().custom(objectId).allow(null, ''),
     classes: Joi.array().items(cls),
     categoryIds: Joi.array().items(Joi.string().custom(objectId)),
     productIds: Joi.array().items(Joi.string().custom(objectId)).max(2000),

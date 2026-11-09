@@ -6,6 +6,7 @@ const supplierLedgerService = require('./supplierLedger.service');
 // Shared spreadsheet-cell parsing for the bulk import below — see utils/importRow.js
 const { toImportText, parseImportNumber, matchKey, phoneKey, isValidEmail } = require('../utils/importRow');
 const accountsSystemService = require('./accountsSystem.service');
+const { startOfBusinessDay } = require('../utils/businessTimezone');
 
 /**
  * Create a supplier
@@ -140,7 +141,7 @@ const updateSupplierById = async (supplierId, updateBody) => {
         amount: newBalance,
         organizationId: supplier.organizationId,
         branchId: supplier.branchId,
-        transactionDate: supplier.createdAt,
+        defaultDate: supplier.createdAt,
       });
     }
   }
@@ -207,6 +208,10 @@ const bulkAddSuppliers = async (suppliersToAdd, branchContext = {}, options = {}
   const duplicateStrategy = ['skip', 'update', 'error'].includes(options.duplicateStrategy)
     ? options.duplicateStrategy
     : 'skip';
+  // Optional "Opening balance date" for every imported opening balance (YYYY-MM-DD),
+  // stored at 00:00 Pakistan time — the same convention as receipts and other dated
+  // vouchers, so the opening balance sorts first on that day.
+  const openingBalanceDate = startOfBusinessDay(options.openingBalanceDate);
 
   // The whole branch's suppliers, projected down to the three fields duplicate matching
   // needs. Fetched in full rather than filtered by this batch's values because matching
@@ -353,7 +358,9 @@ const bulkAddSuppliers = async (suppliersToAdd, branchContext = {}, options = {}
           amount: supplier.balance || 0,
           organizationId: supplier.organizationId,
           branchId: supplier.branchId,
-          transactionDate: supplier.createdAt,
+          // The import's \"Opening balance date\" (e.g. the 1st of the month the books start),
+          // not the moment of the upload — falls back to creation time when not chosen.
+          transactionDate: openingBalanceDate || supplier.createdAt,
         });
         try {
           await accountsSystemService.ensureSupplierAccount(

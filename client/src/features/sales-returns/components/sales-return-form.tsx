@@ -24,6 +24,7 @@ import {
 import { useGetInvoicesQuery } from '@/stores/invoice.api'
 import { useCreateSalesReturnMutation, type SalesReturnPayload } from '@/stores/returns.api'
 import { useFormatMoney } from '@/lib/format-money'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 
 interface ReturnItem {
   productId: string
@@ -49,6 +50,12 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
   const [refundMethod, setRefundMethod] = useState<'cash' | 'jazzcash' | 'easypaisa' | 'adjustment'>('cash')
   const [reason, setReason] = useState('')
   const [damageDescription, setDamageDescription] = useState('')
+  // Multi-warehouse: where the returned goods go back to (starts on the invoice's warehouse).
+  const [warehouseId, setWarehouseId] = useState('')
+  const warehousePicker = useWarehousePicker('any')
+  useEffect(() => {
+    setWarehouseId('')
+  }, [selectedInvoice])
 
   const [createSalesReturn, { isLoading }] = useCreateSalesReturnMutation()
 
@@ -150,6 +157,7 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
       refundMethod,
       reason,
       damageDescription,
+      ...(warehousePicker.visible && warehouseId ? { warehouseId } : {}),
     }
 
     if (isValidObjectId) {
@@ -359,6 +367,15 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
                 />
               </div>
             </div>
+            <WarehouseField
+              kind='any'
+              id='return-warehouse'
+              label='Return goods to warehouse'
+              hint='Starts on the warehouse the invoice delivered from — pick “Returns & Damaged” for faulty items.'
+              value={warehouseId}
+              onValueChange={setWarehouseId}
+              preferredId={selectedInvoice?.warehouseId || null}
+            />
             <div className='space-y-2'>
               <Label>Damage Description (optional)</Label>
               <Textarea

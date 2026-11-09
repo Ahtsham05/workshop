@@ -30,6 +30,10 @@ export interface ReceiptPrintData {
   description?: string
   previousBalance: number
   currentBalance: number
+  /** Discount given with this payment (its own ledger row) — printed between payment and balance. */
+  discount?: number
+  /** Already-translated reason, e.g. "Cash discount". */
+  discountReason?: string
   company: { name: string; address?: string; phone?: string; email?: string; logo?: string }
   isTrial?: boolean
   /** Formats an absolute amount with the business currency. */
@@ -59,6 +63,9 @@ const labels = {
     account: 'Account Position',
     previous: 'Previous Balance',
     this_payment_in: 'Less: This Payment',
+    discount_in: 'Less: Discount Allowed',
+    discount_out: 'Less: Discount Received',
+    total_settled: 'Total Settled (payment + discount)',
     this_payment_out: 'Less: This Payment',
     remaining: 'Balance After Payment',
     receivable: 'Receivable',
@@ -97,6 +104,9 @@ const labels = {
     account: 'کھاتے کی صورتحال',
     previous: 'سابقہ بیلنس',
     this_payment_in: 'منہا: موجودہ وصولی',
+    discount_in: 'منہا: رعایت',
+    discount_out: 'منہا: ملی رعایت',
+    total_settled: 'کل ادائیگی (رقم + رعایت)',
     this_payment_out: 'منہا: موجودہ ادائیگی',
     remaining: 'بقایا بیلنس',
     receivable: 'بنام',
@@ -135,6 +145,9 @@ const labels = {
     account: 'موقف الحساب',
     previous: 'الرصيد السابق',
     this_payment_in: 'يُخصم: هذه الدفعة',
+    discount_in: 'يُخصم: خصم مسموح به',
+    discount_out: 'يُخصم: خصم مكتسب',
+    total_settled: 'إجمالي التسوية (دفعة + خصم)',
     this_payment_out: 'يُخصم: هذه الدفعة',
     remaining: 'الرصيد بعد الدفع',
     receivable: 'مستحق لنا',
@@ -173,6 +186,9 @@ const labels = {
     account: 'खाते की स्थिति',
     previous: 'पिछला शेष',
     this_payment_in: 'घटाएँ: यह भुगतान',
+    discount_in: 'घटाएँ: दी गई छूट',
+    discount_out: 'घटाएँ: मिली छूट',
+    total_settled: 'कुल निपटान (भुगतान + छूट)',
     this_payment_out: 'घटाएँ: यह भुगतान',
     remaining: 'भुगतान के बाद शेष',
     receivable: 'प्राप्य',
@@ -256,6 +272,13 @@ export function generatePaymentReceiptBodyHTML(data: ReceiptPrintData, fit: Rece
   const owedByUs = isSupplier ? data.currentBalance > 0 : data.currentBalance < 0
   const settled = Math.abs(data.currentBalance) < 0.005
   const statusLabel = settled ? L.settled : owedByUs ? L.payable : L.receivable
+  // "Received 9,950 · Discount 50 · Settled 10,000" — a discount given with the payment.
+  const discount = Math.abs(Number(data.discount) || 0)
+  const discountRows =
+    discount > 0.004
+      ? `<tr><td>${isSupplier ? L.discount_out : L.discount_in}${data.discountReason ? ` <span class="ltr">(${escapeHtml(data.discountReason)})</span>` : ''}</td><td class="amt">${money(discount)}</td></tr>
+        <tr><td><strong>${L.total_settled}</strong></td><td class="amt"><strong>${money(Math.abs(Number(data.amount) || 0) + discount)}</strong></td></tr>`
+      : ''
 
   const methodKey = (data.paymentMethod || '').trim().toLowerCase().replace(/\s+/g, '_')
   const method = METHOD_LABELS[methodKey]?.[language] || data.paymentMethod?.trim() || ''
@@ -331,6 +354,7 @@ export function generatePaymentReceiptBodyHTML(data: ReceiptPrintData, fit: Rece
       <tbody>
         <tr><td>${L.previous}</td><td class="amt">${money(data.previousBalance)}</td></tr>
         <tr><td>${isSupplier ? L.this_payment_out : L.this_payment_in}</td><td class="amt">${money(data.amount)}</td></tr>
+        ${discountRows}
         <tr class="total"><td>${L.remaining}</td><td class="amt">${money(data.currentBalance)} <span class="status">${statusLabel}</span></td></tr>
       </tbody>
     </table>

@@ -51,6 +51,7 @@ import {
 } from '@/lib/wallet-payment-options'
 import { SplitPaymentFields, type SplitPaymentValue } from '@/components/split-payment-fields'
 import { formatAppDate } from '@/lib/date-format'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 
 type Row = {
   productId: string
@@ -363,6 +364,9 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
   const [splitWalletType, setSplitWalletType] = useState<string>('')
   const [splitPaidAmount, setSplitPaidAmount] = useState<number>(0)
   const [notes, setNotes] = useState<string>('')
+  // Multi-warehouse: which warehouse the goods are received into.
+  const [warehouseId, setWarehouseId] = useState('')
+  const warehousePicker = useWarehousePicker('receipt')
   // Overall receipt-level discount — defaults to the order's own overall discount
   // *rate* prorated against however much of the order this receipt actually covers,
   // same idea as each row's per-line discount default above.
@@ -645,6 +649,7 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
         discountType,
         discountValue: Number(discountValue || 0),
         notes,
+        ...(warehousePicker.visible && warehouseId ? { warehouseId } : {}),
       }).unwrap()
       toast.success(`Goods received against ${order.orderNumber}`)
 
@@ -748,6 +753,9 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                 className='mt-1.5 h-9'
               />
             </div>
+            {warehousePicker.visible ? (
+              <WarehouseField kind='receipt' id='receive-warehouse' className='w-full sm:w-[220px] [&_label]:text-xs' value={warehouseId} onValueChange={setWarehouseId} />
+            ) : null}
             <div className='w-[110px] shrink-0'>
               <Label className='text-xs'>Purchase Type</Label>
               <Select

@@ -26,7 +26,7 @@ interface BaseNavItem {
   businessTypes?: string[]
   excludeBusinessTypes?: string[]
   /** Shown only when that module is on for this login (e.g. 'manufacturing' — see useManufacturingAccess). */
-  module?: 'manufacturing'
+  module?: 'manufacturing' | 'warehouses'
   /** Feature key that must be unlocked on the user's plan. Used with useFeatureAccess(). */
   requiredFeature?: string
   /** If set, only users whose schoolRole is in this list can see this item */

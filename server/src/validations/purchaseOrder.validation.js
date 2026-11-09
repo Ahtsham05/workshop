@@ -110,6 +110,7 @@ const receiveItems = {
   }),
   body: Joi.object().keys({
     receivedAt: Joi.date().optional(),
+    warehouseId: objectId.allow('', null).optional(),
     notes: Joi.string().allow('').optional(),
     paidAmount: Joi.number().min(0).optional(),
     // Settlement status (does the unpaid remainder become a Supplier Ledger debt on the

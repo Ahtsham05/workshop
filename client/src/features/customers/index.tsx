@@ -1,7 +1,8 @@
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { useCustomerColumns } from './components/users-columns'
 import CustomerDialogs from './components/users-dialogs'
 import CustomerPrimaryButtons from './components/users-primary-buttons'
+import { CustomerCreditTools } from './credit/customer-credit-tools'
 import { CustomerCardGrid } from './components/customer-card-grid'
 import { CustomerListToolbar } from './components/customer-list-toolbar'
 import { QuickAddCustomerCard } from './components/quick-add-customer-card'
@@ -39,6 +40,8 @@ import { toneColor } from '@/lib/stat-card-tones'
 import type { Customer } from './data/schema'
 import { useFormatMoney } from '@/lib/format-money'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
+import { LedgerColorLegend } from '@/features/ledger-alerts/components/ledger-color-legend'
+import { useLedgerStatus } from '@/features/ledger-alerts/hooks/use-ledger-alerts'
 
 const SEARCH_DEBOUNCE_MS = 400
 const ALL_STATUS = 'all'
@@ -70,6 +73,8 @@ export default function Customers() {
   const dispatch = useDispatch<AppDispatch>()
   const { t, language } = useLanguage()
   const { data: stats, isLoading: isStatsLoading } = useGetCustomerStatsQuery()
+  const navigate = useNavigate()
+  const { board: ledgerBoard } = useLedgerStatus()
 
   // Re-sorts/re-navigates the list after a per-row Active toggle — see
   // active-toggle-cell.tsx. Deactivating moves a customer to the inactive group at the
@@ -208,6 +213,10 @@ export default function Customers() {
                 </Can>
               </>
             )}
+            <CustomerCreditTools
+              selected={viewMode === 'table' ? selectedCustomers : []}
+              onChanged={() => setFetch((prev) => !prev)}
+            />
             <CustomerPrimaryButtons />
           </div>
         </div>
@@ -242,6 +251,14 @@ export default function Customers() {
             isLoading={isStatsLoading}
           />
         </div>
+
+        {/* Overdue colour key (Settings → Due Dates & Ledger Colours). This list is paged on
+            the server, so a chip opens the Overdue Ledgers report filtered to that colour. */}
+        <LedgerColorLegend
+          board={ledgerBoard}
+          className='mb-4'
+          onFilterChange={(band) => navigate({ to: '/reports', search: { tab: 'overdue-ledgers', band: band === 'all' ? undefined : band } })}
+        />
 
         <div className={`grid grid-cols-1 items-start gap-4 ${SHOW_QUICK_ADD_CUSTOMER ? 'lg:grid-cols-[minmax(0,1fr)_320px]' : ''}`}>
           <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>

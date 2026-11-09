@@ -5,6 +5,7 @@ const createPurchaseReturn = {
   body: Joi.object().keys({
     purchaseId: Joi.string().custom(objectId).optional().allow('', null),
     supplierId: Joi.string().custom(objectId).required(),
+    warehouseId: Joi.string().custom(objectId).allow('', null).optional(),
     items: Joi.array()
       .items(
         Joi.object().keys({

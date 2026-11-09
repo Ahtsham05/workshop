@@ -25,6 +25,8 @@ const businessNotifications = require('./whatsapp/businessNotifications.service'
 const { computeDiscountAmount } = require('../utils/discount');
 const { resolveTransactionTaxAndCurrency } = require('./transactionTaxSnapshot.service');
 const documentNumberingService = require('./documentNumbering.service');
+const creditControlService = require('./creditControl.service');
+const ledgerAlertsService = require('./ledgerAlerts.service');
 const Money = require('../utils/money');
 const { tokenizeSearch, tokenSearchClauses } = require('../utils/searchQuery');
 const { buildSettlementAddFieldsStage } = require('../utils/invoiceSettlement');
@@ -293,7 +295,19 @@ const syncWalkInInvoiceCashEntry = (invoice) =>
  * @param {string} userId
  * @returns {Promise<Invoice>}
  */
-const createInvoice = async (invoiceBody, userId) => {
+/**
+ * @param {Object} invoiceBody
+ * @param {string} userId
+ * @param {Object} [options]
+ * @param {'enforce'|'record'|'skip'} [options.creditMode] — credit-limit gate (see
+ *   creditControl.service.js): record = offline sale synced later, never blocked; skip = demo data.
+ * @param {boolean} [options.canOverrideCredit] — the user holds overrideCreditLimit.
+ * @param {{id:string,name?:string}} [options.actor]
+ */
+const createInvoice = async (rawInvoiceBody, userId, options = {}) => {
+  // Credit approval fields come from the request, never straight onto the document — the
+  // stamp is written by the credit gate below only when the approval is genuine.
+  const { creditOverride: requestedCreditOverride, creditAcknowledgeWarning, ...invoiceBody } = rawInvoiceBody;
   // Plan invoice quota + read-only check. Every invoice path funnels through here (routes, AI
   // assistant actions, desktop sync, phone sales, duplication). Trial demo data and
   // quotations don't count toward the monthly invoice limit.
@@ -497,37 +511,9 @@ const createInvoice = async (invoiceBody, userId) => {
     fallbackTax: Number(invoiceBody.tax || 0),
   });
 
-  // Number is resolved up front — either the caller's manual override (kept as-is; a
-  // collision throws a clean error below rather than being silently swapped for a number
-  // the user never asked for) or the org's own customizable auto sequence (see
-  // documentNumbering.service.js). Previously assigned by a model-level pre-save hook, which
-  // couldn't reach organizationId/the org's format cleanly.
-  const hasManualInvoiceNumber = Boolean(invoiceBody.invoiceNumber && String(invoiceBody.invoiceNumber).trim());
-  const numberingDocType = invoiceBody.type === 'quotation' ? 'quotation' : 'invoice';
-  let initialInvoiceNumber;
-  if (hasManualInvoiceNumber) {
-    initialInvoiceNumber = String(invoiceBody.invoiceNumber).trim();
-    // The DB's unique index is branch-scoped, which alone isn't enough when this docType is
-    // configured for organization-wide numbering (the default) — without this, two branches
-    // could end up with the same manually-typed number. See assertManualNumberAvailable.
-    await documentNumberingService.assertManualNumberAvailable({
-      organizationId: invoiceBody.organizationId,
-      branchId: invoiceBody.branchId,
-      docType: numberingDocType,
-      invoiceNumber: initialInvoiceNumber,
-    });
-  } else {
-    initialInvoiceNumber = await documentNumberingService.generateNextNumber({
-      organizationId: invoiceBody.organizationId,
-      branchId: invoiceBody.branchId,
-      docType: numberingDocType,
-    });
-  }
-
   // Create invoice
   const invoice = new Invoice({
     ...invoiceBody,
-    invoiceNumber: initialInvoiceNumber,
     items: taxAndCurrency.items,
     discountType: overallDiscountType,
     discountValue: overallDiscountValue,
@@ -555,6 +541,63 @@ const createInvoice = async (invoiceBody, userId) => {
     invoice.finalize();
   }
 
+  // Due date from Settings → Due Dates & Ledger Colours when the request sent none (see
+  // ledgerAlerts.service.js) — before the credit gate so its overdue check sees it.
+  await ledgerAlertsService.applyDefaultDueDate(invoice, invoiceBody);
+
+  // Credit-limit gate — after totals (it needs the unpaid amount) and before a number is
+  // minted, so a refused sale leaves no gap in the invoice sequence. A bill consolidating
+  // pending invoices is exempt while pending invoices count toward credit: those goods were
+  // already checked when each pending invoice was made.
+  let creditOutcome = null;
+  if (invoice.type !== 'quotation') {
+    const creditSettings = await creditControlService.getSettings(invoice.organizationId);
+    const isPendingBill = Boolean(invoiceBody.billNumber) && creditSettings.includePendingInvoices;
+    const countsTowardCredit = invoice.type !== 'pending' || creditSettings.includePendingInvoices;
+    if (!isPendingBill && countsTowardCredit) {
+      creditOutcome = await creditControlService.enforceSale({
+        organizationId: invoice.organizationId,
+        customerId: invoice.customerId,
+        newUnpaid: creditControlService.unpaidOf(invoice),
+        creditMode: options.creditMode || (invoiceBody.isDemo ? 'skip' : 'enforce'),
+        override: requestedCreditOverride,
+        acknowledgeWarning: Boolean(creditAcknowledgeWarning),
+        canOverride: Boolean(options.canOverrideCredit),
+        actor: options.actor || { id: userId },
+      });
+      if (creditOutcome) invoice.creditOverride = creditControlService.toInvoiceStamp(creditOutcome);
+    }
+  }
+
+  // Number is resolved up front — either the caller's manual override (kept as-is; a
+  // collision throws a clean error below rather than being silently swapped for a number
+  // the user never asked for) or the org's own customizable auto sequence (see
+  // documentNumbering.service.js). Previously assigned by a model-level pre-save hook, which
+  // couldn't reach organizationId/the org's format cleanly.
+  const hasManualInvoiceNumber = Boolean(invoiceBody.invoiceNumber && String(invoiceBody.invoiceNumber).trim());
+  const numberingDocType = invoiceBody.type === 'quotation' ? 'quotation' : 'invoice';
+  let initialInvoiceNumber;
+  if (hasManualInvoiceNumber) {
+    initialInvoiceNumber = String(invoiceBody.invoiceNumber).trim();
+    // The DB's unique index is branch-scoped, which alone isn't enough when this docType is
+    // configured for organization-wide numbering (the default) — without this, two branches
+    // could end up with the same manually-typed number. See assertManualNumberAvailable.
+    await documentNumberingService.assertManualNumberAvailable({
+      organizationId: invoiceBody.organizationId,
+      branchId: invoiceBody.branchId,
+      docType: numberingDocType,
+      invoiceNumber: initialInvoiceNumber,
+    });
+  } else {
+    initialInvoiceNumber = await documentNumberingService.generateNextNumber({
+      organizationId: invoiceBody.organizationId,
+      branchId: invoiceBody.branchId,
+      docType: numberingDocType,
+    });
+  }
+
+  invoice.invoiceNumber = initialInvoiceNumber;
+
   // documentNumberingService.generateNextNumber already guarantees an auto-generated number
   // is free at mint time, so the only collision `.save()` can still hit here is a manually-typed
   // override — give that a clear, actionable error instead of a raw Mongo E11000.
@@ -568,6 +611,7 @@ const createInvoice = async (invoiceBody, userId) => {
     throw err;
   }
   console.log('Invoice saved with ID:', invoice._id);
+  if (creditOutcome) creditControlService.recordSaleOutcome(creditOutcome, invoice).catch(() => {});
   await syncWalkInInvoiceCashEntry(invoice);
   postInvoiceToAccounts(invoice);
   commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
@@ -871,19 +915,73 @@ const getInvoiceById = async (id) => {
 };
 
 /**
+ * The credit check for an invoice edit (also used by quotation conversion). Projects the
+ * edited invoice from the stored one plus the incoming changes, then asks the credit gate
+ * whether the extra unpaid amount fits. Returns the outcome to stamp, or null.
+ */
+const enforceCreditForInvoiceEdit = async (invoice, changes, { creditMode, canOverrideCredit, actor, userId, override, acknowledgeWarning }) => {
+  const pick = (key) => (Object.prototype.hasOwnProperty.call(changes, key) && changes[key] !== undefined ? changes[key] : invoice[key]);
+  const projected = {
+    type: pick('type'),
+    status: pick('status'),
+    total: Number(pick('total')) || 0,
+    paidAmount: Number(pick('paidAmount')) || 0,
+    splitPaymentMethod: pick('splitPaymentMethod'),
+    isConvertedToBill: pick('isConvertedToBill'),
+    billNumber: pick('billNumber'),
+  };
+  const projectedCustomerId = pick('customerId');
+  if (projected.type === 'quotation') return null;
+
+  const settings = await creditControlService.getSettings(invoice.organizationId);
+  const counts = (inv) => inv.type !== 'pending' || settings.includePendingInvoices;
+  // A bill consolidating pending invoices was already checked pending-by-pending.
+  if (projected.billNumber && settings.includePendingInvoices && projected.type === 'credit') return null;
+
+  const newUnpaid = counts(projected) ? creditControlService.unpaidOf(projected) : 0;
+  const sameCustomer = String(projectedCustomerId) === String(invoice.customerId);
+  const oldUnpaid = sameCustomer && counts(invoice) ? creditControlService.unpaidOf(invoice) : 0;
+
+  return creditControlService.enforceSale({
+    organizationId: invoice.organizationId,
+    customerId: projectedCustomerId,
+    newUnpaid,
+    oldUnpaid,
+    excludeInvoiceId: sameCustomer ? invoice._id : undefined,
+    creditMode: creditMode || 'enforce',
+    override,
+    acknowledgeWarning,
+    canOverride: Boolean(canOverrideCredit),
+    actor: actor || { id: userId },
+  });
+};
+
+/**
  * Update invoice by id
  * @param {ObjectId} invoiceId
  * @param {Object} updateBody
  * @param {string} userId
  * @returns {Promise<Invoice>}
  */
-const updateInvoiceById = async (invoiceId, updateBody, userId) => {
+const updateInvoiceById = async (invoiceId, rawUpdateBody, userId, options = {}) => {
+  const { creditOverride: requestedCreditOverride, creditAcknowledgeWarning, ...updateBody } = rawUpdateBody;
   // Get the actual Mongoose document, not the plain object
   const invoice = await Invoice.findById(invoiceId);
   
   if (!invoice) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Invoice not found');
   }
+
+  // Credit-limit gate, BEFORE anything below touches stock: judged on the totals the edit
+  // asks for. Only an edit that adds credit (more unpaid than before, same customer) can be
+  // refused — trimming an over-limit customer's invoice always goes through.
+  const creditOutcome = await enforceCreditForInvoiceEdit(invoice, updateBody, {
+    ...options,
+    userId,
+    override: requestedCreditOverride,
+    acknowledgeWarning: Boolean(creditAcknowledgeWarning),
+  });
+  if (creditOutcome) updateBody.creditOverride = creditControlService.toInvoiceStamp(creditOutcome);
   
   // Store original values for ledger and wallet update
   const originalTotal = invoice.total;
@@ -1196,6 +1294,9 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
 
   Object.assign(invoice, updateBody);
   invoice.updatedBy = userId;
+  // A credit/pending invoice without a due date (e.g. switched from cash by a client that
+  // doesn't send one) gets the default; a date sent or cleared on purpose is left alone.
+  await ledgerAlertsService.applyDefaultDueDate(invoice, updateBody, { onlyWhenMissing: true });
 
   // Recalculate totals on every update — a discount-only edit (no item changes) must
   // still re-resolve total/balance, not just item edits.
@@ -1217,6 +1318,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
 
   await invoice.save();
   console.log('Invoice updated successfully');
+  if (creditOutcome) creditControlService.recordSaleOutcome(creditOutcome, invoice).catch(() => {});
   await syncInvoiceCashAndWalletEntries(invoice, previousPaymentLegSnapshot);
   postInvoiceToAccounts(invoice);
   commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
@@ -1484,7 +1586,7 @@ const deleteInvoiceById = async (invoiceId) => {
  * Convert a quotation to a cash or credit invoice.
  * Assigns a new INV number, deducts stock, and posts ledger/accounts.
  */
-const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
+const convertQuotationToInvoice = async (invoiceId, convertBody, userId, options = {}) => {
   const invoice = await Invoice.findById(invoiceId);
 
   if (!invoice) {
@@ -1529,6 +1631,23 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
     // Simple products may go negative on sale — see createInvoice for rationale.
   }
 
+  // Credit gate before a number is minted or stock moves — same rule as a new sale.
+  const creditOutcome = await enforceCreditForInvoiceEdit(
+    invoice,
+    {
+      type: targetType,
+      paidAmount: paidAmount !== undefined ? paidAmount : targetType === 'cash' ? invoice.total : 0,
+      splitPaymentMethod: invoice.splitPaymentMethod,
+    },
+    {
+      ...options,
+      userId,
+      override: convertBody.creditOverride,
+      acknowledgeWarning: Boolean(convertBody.creditAcknowledgeWarning),
+    }
+  );
+  if (creditOutcome) invoice.creditOverride = creditControlService.toInvoiceStamp(creditOutcome);
+
   const previousQuotationNumber = invoice.invoiceNumber;
   invoice.type = targetType;
   invoice.invoiceNumber = await documentNumberingService.generateNextNumber({
@@ -1542,6 +1661,9 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
 
   if (dueDate) {
     invoice.dueDate = dueDate;
+  } else {
+    // No date picked in the convert dialog → the org's default terms (ledgerAlerts.service.js).
+    await ledgerAlertsService.applyDefaultDueDate(invoice, {}, { onlyWhenMissing: true });
   }
   if (paymentMethod) {
     invoice.paymentMethod = paymentMethod;
@@ -1570,6 +1692,7 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
   }
 
   await invoice.save();
+  if (creditOutcome) creditControlService.recordSaleOutcome(creditOutcome, invoice).catch(() => {});
   await syncInvoiceCashAndWalletEntries(invoice, null);
   postInvoiceToAccounts(invoice);
   commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
@@ -2338,6 +2461,8 @@ const getInvoiceHistory = async (filter, options = {}) => {
         walletType: 1,
         discount: 1,
         tax: 1,
+        deliveryCharge: 1,
+        serviceCharge: 1,
         total: 1,
         settledAmount: 1,
         remainingAmount: 1,
@@ -2407,6 +2532,8 @@ const getInvoiceHistory = async (filter, options = {}) => {
       walletType: row.walletType || '',
       discount: Number(row.discount) || 0,
       tax: Number(row.tax) || 0,
+      // Delivery + service charges, so a ledger's invoice-wise view can show how the bill adds up.
+      charges: (Number(row.deliveryCharge) || 0) + (Number(row.serviceCharge) || 0),
       total: Number(row.total) || 0,
       paid: Money.roundMoney(row.settledAmount || 0),
       remaining: Money.roundMoney(row.remainingAmount || 0),
@@ -2421,10 +2548,74 @@ const getInvoiceHistory = async (filter, options = {}) => {
   return { results, limit, truncated };
 };
 
+// ── Multi-warehouse (services/warehouse.service.js) ─────────────────────────────────────
+// The picked warehouse is checked before the invoice is written; once it is saved (or
+// edited, converted, deleted) its lines are mirrored into warehouse moves. The mirror never
+// throws, so warehouses can never block a sale. Wrapped here, at the export, so every caller
+// (controller, POS sync, AI assistant, phone sales, demo data) gets the same behaviour.
+const warehouseService = require('./warehouse.service');
+
+const cleanWarehouseId = (body) => {
+  if (body && 'warehouseId' in body && !body.warehouseId) body.warehouseId = null;
+  return body;
+};
+
+const createInvoiceWithWarehouse = async (rawInvoiceBody, userId, options = {}) => {
+  cleanWarehouseId(rawInvoiceBody);
+  if (rawInvoiceBody && rawInvoiceBody.warehouseId) {
+    await warehouseService.assertDocWarehouse({
+      organizationId: rawInvoiceBody.organizationId,
+      branchId: rawInvoiceBody.branchId,
+      warehouseId: rawInvoiceBody.warehouseId,
+      kind: 'sale',
+    });
+  }
+  const invoice = await createInvoice(rawInvoiceBody, userId, options);
+  if (invoice && invoice._id) await warehouseService.syncInvoice(invoice._id);
+  return invoice;
+};
+
+const assertInvoiceWarehouseChange = async (invoiceId, body) => {
+  cleanWarehouseId(body);
+  if (!body || !body.warehouseId) return;
+  const current = await Invoice.findById(invoiceId).select('organizationId branchId warehouseId').lean();
+  if (!current || String(current.warehouseId || '') === String(body.warehouseId)) return;
+  await warehouseService.assertDocWarehouse({
+    organizationId: current.organizationId,
+    branchId: current.branchId,
+    warehouseId: body.warehouseId,
+    kind: 'sale',
+  });
+};
+
+const updateInvoiceWithWarehouse = async (invoiceId, rawUpdateBody, userId, options = {}) => {
+  await assertInvoiceWarehouseChange(invoiceId, rawUpdateBody);
+  const invoice = await updateInvoiceById(invoiceId, rawUpdateBody, userId, options);
+  await warehouseService.syncInvoice(invoiceId);
+  return invoice;
+};
+
+const deleteInvoiceWithWarehouse = async (invoiceId) => {
+  const result = await deleteInvoiceById(invoiceId);
+  await warehouseService.syncInvoice(invoiceId);
+  return result;
+};
+
+const convertQuotationWithWarehouse = async (invoiceId, convertBody = {}, userId, options = {}) => {
+  await assertInvoiceWarehouseChange(invoiceId, convertBody);
+  const invoice = await convertQuotationToInvoice(invoiceId, convertBody, userId, options);
+  if (convertBody && 'warehouseId' in convertBody) {
+    await Invoice.updateOne({ _id: invoiceId }, { $set: { warehouseId: convertBody.warehouseId || null } });
+    if (invoice && typeof invoice === 'object' && 'warehouseId' in invoice) invoice.warehouseId = convertBody.warehouseId || null;
+  }
+  await warehouseService.syncInvoice(invoiceId);
+  return invoice;
+};
+
 module.exports = {
   buildInvoiceListMatch,
 
-  createInvoice,
+  createInvoice: createInvoiceWithWarehouse,
   queryInvoices,
   queryInvoiceList,
   getInvoiceListSummary,
@@ -2432,8 +2623,8 @@ module.exports = {
   getInvoiceHistory,
   getInvoiceById,
   setInvoiceFlag,
-  updateInvoiceById,
-  deleteInvoiceById,
+  updateInvoiceById: updateInvoiceWithWarehouse,
+  deleteInvoiceById: deleteInvoiceWithWarehouse,
   finalizeInvoice,
   processPayment,
   getInvoiceStatistics,
@@ -2441,5 +2632,5 @@ module.exports = {
   generateBillNumber,
   previewNextInvoiceNumber,
   getCustomerProductHistory,
-  convertQuotationToInvoice,
+  convertQuotationToInvoice: convertQuotationWithWarehouse,
 };

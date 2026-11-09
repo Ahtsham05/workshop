@@ -37,6 +37,8 @@ export interface TransactionHistoryEntry {
   walletType?: string
   discount: number
   tax: number
+  /** Sales only — delivery + service charges added to the bill. */
+  charges?: number
   total: number
   paid: number
   remaining: number

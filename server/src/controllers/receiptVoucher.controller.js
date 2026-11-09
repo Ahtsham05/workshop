@@ -8,9 +8,17 @@ const ApiError = require('../utils/ApiError');
 const { formatMoney } = require('../utils/money');
 const { voucherAuditSnapshot, voucherCreateAuditFields } = require('../utils/voucherAudit');
 const { addTokenSearch } = require('../utils/searchQuery');
+const { userHasAnyPermission } = require('../middlewares/permission');
+
+/** Who may give a ledger discount on a voucher line, and go above the limit. */
+const discountRights = async (req) => ({
+  user: req.user,
+  canGiveDiscount: await userHasAnyPermission(req.user, ['giveLedgerDiscount']),
+  canApproveDiscount: await userHasAnyPermission(req.user, ['approveLedgerDiscount']),
+});
 
 const createVoucher = catchAsync(async (req, res) => {
-  const voucher = await receiptVoucherService.createVoucher({ ...req.body, ...getBranchContext(req) }, req.user.id);
+  const voucher = await receiptVoucherService.createVoucher({ ...req.body, ...getBranchContext(req) }, req.user.id, await discountRights(req));
   const currencyMeta = await localizationService.resolveOrganizationCurrencyMeta(req.organizationId);
   await auditLogService.recordAuditLog({
     req,
@@ -68,7 +76,7 @@ const updateVoucher = catchAsync(async (req, res) => {
   }
   const beforeSnapshot = voucherAuditSnapshot(before, 'payerName');
 
-  const voucher = await receiptVoucherService.updateVoucher(req.params.receiptVoucherId, scope, req.body, req.user.id);
+  const voucher = await receiptVoucherService.updateVoucher(req.params.receiptVoucherId, scope, req.body, req.user.id, await discountRights(req));
 
   const currencyMeta = await localizationService.resolveOrganizationCurrencyMeta(req.organizationId);
   await auditLogService.recordAuditLog({

@@ -73,6 +73,8 @@ const PERMISSION_HOME: Partial<Record<PermissionKey, string>> = {
   viewStockAdjustments: '/stock-adjustments',
   manageStockAdjustments: '/stock-adjustments',
   countStock: '/stock-counts',
+  viewWarehouses: '/warehouses',
+  manageWarehouseTransfers: '/warehouses',
   viewSalesReturns: '/sales-returns',
   createSalesReturns: '/sales-returns',
   viewPurchaseReturns: '/purchase-returns',

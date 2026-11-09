@@ -30,6 +30,7 @@ import { DEFAULT_NARROW_COLUMN_SIZES, usePersistedColumnSizing } from '@/compone
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
 import type { CustomerListViewMode } from '../utils/customer-list-view'
+import { useLedgerStatus } from '@/features/ledger-alerts/hooks/use-ledger-alerts'
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -64,6 +65,17 @@ interface DataTableProps {
   highlightRowId?: string | null
 }
 
+const COLUMN_VISIBILITY_STORAGE_KEY = 'customers-table-column-visibility'
+const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {
+  email: false,
+  address: false,
+  creditStatus: false,
+  customerType: false,
+  taxNumber: false,
+  notes: false,
+  createdAt: false,
+}
+
 export function CustomerTable({
   columns,
   data,
@@ -78,10 +90,23 @@ export function CustomerTable({
   highlightRowId,
 }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-    email: false,
-    address: false,
+  // Shown/hidden columns stick per browser (View → Toggle columns). A column added later
+  // starts from its default below until the user toggles it.
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY) || '{}')
+      return { ...DEFAULT_COLUMN_VISIBILITY, ...saved }
+    } catch {
+      return DEFAULT_COLUMN_VISIBILITY
+    }
   })
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(columnVisibility))
+    } catch {
+      // storage blocked — the choice just won't persist
+    }
+  }, [columnVisibility])
   const [columnOrder, setColumnOrder] = usePersistedColumnOrder(
     COLUMN_ORDER_STORAGE_KEY,
     columns.map(getColumnId)
@@ -92,6 +117,8 @@ export function CustomerTable({
   const { t, language } = useLanguage()
   const navigate = useNavigate()
   const highlightRowRef = useRef<HTMLTableRowElement | null>(null)
+  // Overdue colour per customer (Settings → Due Dates & Ledger Colours).
+  const { rowStyleFor } = useLedgerStatus()
 
   useEffect(() => {
     if (onSelectedRowsChange) {
@@ -171,6 +198,7 @@ export function CustomerTable({
                   key={row.id}
                   ref={isHighlighted ? highlightRowRef : undefined}
                   data-state={row.getIsSelected() && 'selected'}
+                  style={rowStyleFor(customerId)}
                   className={`group/row cursor-pointer hover:bg-muted/50 ${isHighlighted ? 'animate-pulse bg-primary/10 ring-2 ring-inset ring-primary/40' : ''}`}
                   onClick={() => {
                     navigate({ to: '/accounting', search: { tab: 'customer-ledger', customerId, customerName: row.original.name } })

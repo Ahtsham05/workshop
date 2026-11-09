@@ -38,6 +38,7 @@ module.exports.branchOverviewService = require('./branchOverview.service.js');
 module.exports.inventoryTransferService = require('./inventoryTransfer.service.js');
 module.exports.stockAdjustmentService = require('./stockAdjustment.service.js');
 module.exports.stockCountService = require('./stockCount.service.js');
+module.exports.warehouseService = require('./warehouse.service.js');
 module.exports.membershipService = require('./membership.service.js');
 module.exports.paymentService = require('./payment.service.js');
 module.exports.cashBookService = require('./cashBook.service.js');

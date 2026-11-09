@@ -59,10 +59,12 @@ interface BalanceSheetPrintButtonProps {
   /** The whole list — the sheet ignores the current page and search. */
   rows: BalanceSheetRow[];
   disabled?: boolean;
+  /** Overdue colour key, when rows carry colours (features/ledger-alerts). */
+  colorLegend?: { label: string; color: string }[];
 }
 
 /** "Print List" button + options dialog for the customer / supplier ledger lists. */
-export function BalanceSheetPrintButton({ party, rows, disabled }: BalanceSheetPrintButtonProps) {
+export function BalanceSheetPrintButton({ party, rows, disabled, colorLegend }: BalanceSheetPrintButtonProps) {
   const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const nativeLanguage = useNativeLanguage();
@@ -92,6 +94,7 @@ export function BalanceSheetPrintButton({ party, rows, disabled }: BalanceSheetP
         rows,
         language: printLanguage,
         hideSettled,
+        colorLegend,
         companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
         companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
         companyAddress: [branchData?.location?.address, branchData?.location?.city]
@@ -115,10 +118,11 @@ export function BalanceSheetPrintButton({ party, rows, disabled }: BalanceSheetP
         variant="outline"
         onClick={() => setOpen(true)}
         disabled={disabled || rows.length === 0}
-        className="shrink-0"
+        className="shrink-0 max-sm:w-full max-sm:px-2"
       >
-        <Printer className="w-4 h-4 mr-2" />
-        {t('Print List')}
+        <Printer className="w-4 h-4 mr-2 max-sm:mr-1.5" />
+        <span className="max-sm:hidden">{t('Print List')}</span>
+        <span className="sm:hidden">{t('Print')}</span>
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

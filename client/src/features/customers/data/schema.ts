@@ -34,6 +34,24 @@ export const customerSchema = z.object({
   address: z.string().optional(), // customer address is optional
   customerType: z.enum(['retail', 'wholesale', 'vip', 'corporate']).optional(),
   creditLimit: z.number().optional(),
+  creditHold: z.boolean().optional(),
+  creditHoldReason: z.string().optional(),
+  // Server-computed on the Customers list (creditControl.summarizeCustomers).
+  credit: z
+    .object({
+      customerId: z.string(),
+      limit: z.number(),
+      baseLimit: z.number(),
+      hasLimit: z.boolean(),
+      temporary: z.object({ amount: z.number(), expiresAt: z.string() }).passthrough().nullable(),
+      onHold: z.boolean(),
+      exposure: z.number(),
+      available: z.number().nullable(),
+      utilization: z.number().nullable(),
+      status: z.enum(['ok', 'near', 'over', 'hold', 'no_limit']),
+    })
+    .nullable()
+    .optional(),
   paymentTerms: z.enum(['cash', 'due_on_receipt', 'net_15', 'net_30', 'net_60']).optional(),
   taxNumber: z.string().optional(),
   notes: z.string().optional(),

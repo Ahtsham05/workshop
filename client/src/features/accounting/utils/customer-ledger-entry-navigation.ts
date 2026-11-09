@@ -179,6 +179,8 @@ export function getLedgerFormPreset(categoryKey: string): {
       return { transactionType: 'payment_made', paymentMethod: 'Cash' };
     case 'sales_return':
       return { transactionType: 'sales_return' };
+    case 'discount_allowed':
+      return { transactionType: 'discount_allowed' };
     case 'credit_note':
       return { transactionType: 'credit_note' };
     case 'debit_note':

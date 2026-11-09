@@ -63,6 +63,10 @@ const createInvoice = {
     // Optional manual override — omitted, invoice.service.js#createInvoice auto-generates
     // the next number from the org's own customizable sequence instead (see
     // documentNumbering.service.js).
+    // Credit-limit approval (creditControl.service.js): a reason from someone allowed to
+    // override, or "carry on" after a warning-mode credit warning.
+    creditOverride: Joi.object({ reason: Joi.string().trim().max(500).allow('') }).optional(),
+    creditAcknowledgeWarning: Joi.boolean().optional(),
     invoiceNumber: Joi.string().trim().allow('').optional(),
     items: Joi.array().items(invoiceItem).min(1).required(),
     customerId: Joi.alternatives().try(
@@ -89,7 +93,7 @@ const createInvoice = {
     paidAmount: Joi.number().min(0).default(0),
     balance: Joi.number().default(0),
     invoiceDate: Joi.date().optional(),
-    dueDate: Joi.date().optional(),
+    dueDate: Joi.date().allow(null).optional(), // null = no due date on purpose (ledgerAlerts.service.js)
     receivedByName: Joi.string().trim().allow('').optional(),
     invoiceAddress: Joi.string().allow('').optional(),
     invoiceAddressUrdu: Joi.string().allow('').optional(),
@@ -123,6 +127,7 @@ const createInvoice = {
     convertedAt: Joi.date().optional(),
     convertedTo: Joi.string().custom(objectId).optional(),
     salesmanId: Joi.string().custom(objectId).allow('', null).optional(),
+    warehouseId: Joi.string().custom(objectId).allow('', null).optional(),
   })
 };
 
@@ -202,6 +207,10 @@ const updateInvoice = {
     invoiceId: Joi.string().custom(objectId)
   }),
   body: Joi.object({
+    // Credit-limit approval (creditControl.service.js): a reason from someone allowed to
+    // override, or "carry on" after a warning-mode credit warning.
+    creditOverride: Joi.object({ reason: Joi.string().trim().max(500).allow('') }).optional(),
+    creditAcknowledgeWarning: Joi.boolean().optional(),
     items: Joi.array().items(invoiceItem).min(1).optional(),
     customerId: Joi.alternatives().try(
       Joi.string().custom(objectId),
@@ -222,7 +231,7 @@ const updateInvoice = {
     paidAmount: Joi.number().min(0).optional(),
     balance: Joi.number().optional(),
     invoiceDate: Joi.date().optional(),
-    dueDate: Joi.date().optional(),
+    dueDate: Joi.date().allow(null).optional(),
     receivedByName: Joi.string().trim().allow('').optional(),
     invoiceAddress: Joi.string().allow('').optional(),
     invoiceAddressUrdu: Joi.string().allow('').optional(),
@@ -258,6 +267,7 @@ const updateInvoice = {
     billNumber: Joi.string().optional(),
     allowUpdateFinalized: Joi.boolean().optional(),
     salesmanId: Joi.string().custom(objectId).allow('', null).optional(),
+    warehouseId: Joi.string().custom(objectId).allow('', null).optional(),
   })
 };
 
@@ -351,7 +361,12 @@ const convertQuotation = {
     invoiceId: Joi.string().custom(objectId)
   }),
   body: Joi.object({
+    // Credit-limit approval (creditControl.service.js): a reason from someone allowed to
+    // override, or "carry on" after a warning-mode credit warning.
+    creditOverride: Joi.object({ reason: Joi.string().trim().max(500).allow('') }).optional(),
+    creditAcknowledgeWarning: Joi.boolean().optional(),
     targetType: Joi.string().valid('cash', 'credit').required(),
+    warehouseId: Joi.string().custom(objectId).allow('', null).optional(),
     paidAmount: Joi.number().min(0).optional(),
     dueDate: Joi.date().optional(),
     paymentMethod: Joi.string().valid('cash', 'wallet', 'bank', 'card').optional(),

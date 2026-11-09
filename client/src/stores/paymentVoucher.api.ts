@@ -54,6 +54,12 @@ export interface PaymentVoucherLine {
   supplierName?: string
   payeeName: string
   amount: number
+  /** Settlement discount given with this line (no cash) — features/ledger-discounts. */
+  discountAmount?: number
+  discountReason?: string
+  discountPercent?: number
+  discountApprovalNote?: string
+  discountNote?: string
   description?: string
   expenseId?: string
   supplierLedgerEntryId?: string
@@ -75,6 +81,8 @@ export interface PaymentVoucherRecord {
   bankAccountName?: string
   lines: PaymentVoucherLine[]
   totalAmount: number
+  /** Sum of line discounts (no cash). */
+  totalDiscount?: number
   reference?: string
   notes?: string
   createdBy?: PaymentVoucherUser | string
@@ -89,6 +97,12 @@ export interface CreatePaymentVoucherLine {
   supplierId?: string
   payeeName?: string
   amount: number
+  /** Settlement discount given with this line (no cash) — features/ledger-discounts. */
+  discountAmount?: number
+  discountReason?: string
+  discountPercent?: number
+  discountApprovalNote?: string
+  discountNote?: string
   description?: string
 }
 

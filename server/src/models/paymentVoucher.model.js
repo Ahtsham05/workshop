@@ -57,6 +57,16 @@ const paymentVoucherLineSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'SupplierLedger',
     },
+    // Settlement discount given with this line (supplier lines — Discount Received) — its own ledger row, linked to the
+    // payment row (services/ledgerDiscount.service.js). Cash moved = amount; settled = amount +
+    // discountAmount. Removed / re-posted together with the line.
+    discountAmount: { type: Number, min: 0, default: 0 },
+    discountReason: { type: String, trim: true },
+    discountPercent: { type: Number, min: 0, max: 100 },
+    discountBaseAmount: { type: Number, min: 0 },
+    discountApprovalNote: { type: String, trim: true },
+    discountNote: { type: String, trim: true },
+    discountLedgerEntryId: { type: mongoose.Schema.Types.ObjectId, ref: 'SupplierLedger' },
   },
   { _id: true }
 );
@@ -121,6 +131,8 @@ const paymentVoucherSchema = new mongoose.Schema(
     },
     // Sum of all lines' amounts — stored for fast list/report display, recomputed by the
     // service on every create (never trusted from client input).
+    // Sum of line discounts (no cash) — amount settled on ledgers = totalAmount + totalDiscount.
+    totalDiscount: { type: Number, min: 0, default: 0 },
     totalAmount: {
       type: Number,
       required: true,

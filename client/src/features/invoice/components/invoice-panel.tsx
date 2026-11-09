@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DatePicker } from '@/components/ui/date-picker'
 import { getBusinessToday } from '@/lib/business-timezone'
+import { InvoiceDueDateField } from '@/features/ledger-alerts/components/due-date-field'
+import { isDueDateInvoiceType } from '@/features/ledger-alerts/lib/ledger-colors'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -33,6 +35,9 @@ import { Invoice, InvoiceItem, BatchAllocation, createEmptyManualInvoiceItem } f
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation, useGetNextInvoiceNumberQuery, invoiceApi } from '@/stores/invoice.api'
 import { useDuplicateEntryGuard } from '@/components/duplicate-entry-guard'
+import { useCreditLimitGuard, type CreditExtra } from '@/features/customers/credit/credit-limit-guard'
+import { InvoiceCreditStrip } from '@/features/customers/credit/invoice-credit-strip'
+import { invoiceUnpaidAmount } from '@/features/customers/credit/credit-utils'
 import { useGetAllSalesmanProfilesQuery } from '@/stores/salesmanProfile.api'
 import { useSendSmsMutation } from '@/stores/smsGateway.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '../utils/print-utils'
@@ -165,6 +170,7 @@ import { formatAppDate } from '@/lib/date-format'
 
 import { useNativeLanguageName } from '@/hooks/use-native-language-name'
 import { useTransactionLayout } from '@/lib/transaction-layout'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 /** Toggle to show payment source fields on invoice checkout. */
 const SHOW_INVOICE_PAYMENT_METHOD_UI = true
 
@@ -413,6 +419,7 @@ export function InvoicePanel({
   const { isElectron, online } = useSync()
   // "Has this bill already been entered?" — checked just before a new sale is saved.
   const { confirm: confirmNotDuplicate, element: duplicateGuardElement } = useDuplicateEntryGuard('sale')
+  const { check: checkCredit, handleError: handleCreditError, element: creditGuardElement } = useCreditLimitGuard()
   
   // Fetch active branch data for invoice printing
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
@@ -425,6 +432,13 @@ export function InvoicePanel({
   const branchDefaultTerms = branchData?.defaultInvoiceTerms?.trim() || ''
   const canSaveDefaultTerms = hasPermission('manageBranches' as never) || hasPermission('editSettings' as never)
   const [updateBranch, { isLoading: isSavingDefaultTerms }] = useUpdateBranchMutation()
+
+  // Multi-warehouse: which warehouse the goods leave from (components/warehouse-field.tsx).
+  const warehousePicker = useWarehousePicker('sale')
+  const setInvoiceWarehouse = useCallback(
+    (value: string) => setInvoice(prev => (prev.warehouseId === value ? prev : { ...prev, warehouseId: value })),
+    [setInvoice]
+  )
 
   // New invoices start with the branch's default terms. Only fills while the field has
   // never been touched (undefined) — '' means the user cleared it, and edits keep what
@@ -509,6 +523,7 @@ export function InvoicePanel({
         customerName: invoice.customerName || invoiceData.customerName,
         walkInCustomerName: invoiceData.walkInCustomerName,
         type: invoiceData.type,
+        dueDate: invoiceData.dueDate || invoice.dueDate || undefined,
         subtotal: invoiceData.subtotal,
         tax: invoiceData.tax,
         discount: invoiceData.discount,
@@ -607,6 +622,7 @@ export function InvoicePanel({
         customerName: invoice.customerName || invoiceData.customerName,
         walkInCustomerName: invoiceData.walkInCustomerName,
         type: invoiceData.type,
+        dueDate: invoiceData.dueDate || invoice.dueDate || undefined,
         subtotal: invoiceData.subtotal,
         tax: invoiceData.tax,
         discount: invoiceData.discount,
@@ -705,6 +721,7 @@ export function InvoicePanel({
       customerName: invoice.customerName,
       walkInCustomerName: invoice.walkInCustomerName,
       type: invoice.type,
+      dueDate: invoice.dueDate || undefined,
       subtotal: invoice.subtotal,
       tax: invoice.tax,
       discount: invoice.discount,
@@ -1648,6 +1665,8 @@ export function InvoicePanel({
         paidAmount: totalPaidAmountForSave,
         balance: invoice.total - totalPaidAmountForSave,
         salesmanId: invoice.salesmanId || undefined,
+        // Only sent while the picker is shown — otherwise the server keeps what the invoice had.
+        ...(warehousePicker.visible ? { warehouseId: invoice.warehouseId || null } : {}),
         notes: normalizeInvoiceNotesHtml(invoice.notes || ''),
         termsAndConditions: normalizeInvoiceNotesHtml(invoice.termsAndConditions || ''),
         receivedByName: invoice.type === 'pending' ? (invoice.receivedByName || '').trim() : undefined,
@@ -1664,6 +1683,9 @@ export function InvoicePanel({
         couponCode: invoice.couponCode,
         returnPolicy: invoice.returnPolicy,
         invoiceDate: invoice.invoiceDate,
+        // Due date (ledger alerts): a picked date, null = none on purpose (or no longer a
+        // credit/pending sale), undefined = let the server apply the org default.
+        dueDate: isDueDateInvoiceType(invoice.type) ? invoice.dueDate : (isEditing ? null : undefined),
         language: invoice.language,
         isUrduOnly: invoice.isUrduOnly,
       }
@@ -1689,6 +1711,40 @@ export function InvoicePanel({
         if (!save) return
       }
 
+      // Credit limit / hold / overdue (server creditControl.service.js) — checked online only;
+      // an offline sale is recorded against the customer's credit when it syncs instead.
+      const creditParams = {
+        customerId: invoice.customerId,
+        type: invoice.type,
+        unpaid: invoiceUnpaidAmount({
+          type: invoice.type,
+          total: Number(invoice.total) || 0,
+          paidAmount: totalPaidAmountForSave,
+          splitPaymentMethod: invoice.splitPaymentMethod,
+        }),
+        excludeInvoiceId: isEditing ? editingInvoiceId || undefined : undefined,
+      }
+      let creditExtra: CreditExtra = {}
+      if (online && invoice.type !== 'quotation') {
+        const credit = await checkCredit(creditParams)
+        if (!credit.proceed) return
+        creditExtra = credit.extra
+      }
+      // The server refused on credit (it raced the check, or the check couldn't run): show the
+      // same dialog from its numbers, then retry once with whatever was decided.
+      const withCreditRetry = async (
+        save: (extra: CreditExtra) => Promise<Record<string, unknown>>,
+      ): Promise<Record<string, unknown> | null> => {
+        try {
+          return await save(creditExtra)
+        } catch (error) {
+          const resolution = await handleCreditError(error, creditParams)
+          if (!resolution) throw error
+          if (!resolution.proceed) return null
+          return save({ ...creditExtra, ...resolution.extra })
+        }
+      }
+
       const canQueueOffline = isElectron && !isEditing
 
       const saveOffline = async (): Promise<Record<string, unknown>> => {
@@ -1710,10 +1766,14 @@ export function InvoicePanel({
       if (canQueueOffline && !online) {
         result = await saveOffline()
       } else if (isEditing && editingInvoiceId) {
-        result = await updateInvoice({ id: editingInvoiceId, ...invoiceData }).unwrap()
+        const saved = await withCreditRetry((extra) => updateInvoice({ id: editingInvoiceId, ...invoiceData, ...extra }).unwrap())
+        if (!saved) return
+        result = saved
       } else {
         try {
-          result = await createInvoice(invoiceData).unwrap()
+          const saved = await withCreditRetry((extra) => createInvoice({ ...invoiceData, ...extra }).unwrap())
+          if (!saved) return
+          result = saved
         } catch (error) {
           if (canQueueOffline && isApiUnreachable(error)) {
             result = await saveOffline()
@@ -1926,6 +1986,7 @@ export function InvoicePanel({
               customerName: resolvedCustomerName,
               walkInCustomerName: resolvedWalkInCustomerName,
               type: savedInvoicePayload.type,
+              dueDate: (savedInvoicePayload.dueDate as string | null | undefined) || undefined,
               subtotal: savedInvoicePayload.subtotal,
               tax: savedInvoicePayload.tax,
               discount: savedInvoicePayload.discount,
@@ -1987,7 +2048,7 @@ export function InvoicePanel({
     } finally {
       setSavingType(null)
     }
-  }, [canPrint, invoice, createInvoice, updateInvoice, isEditing, editingInvoice, editingInvoiceId, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms, sendWhatsAppMessage, invoiceTemplate, confirmNotDuplicate])
+  }, [canPrint, invoice, createInvoice, updateInvoice, isEditing, editingInvoice, editingInvoiceId, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms, sendWhatsAppMessage, invoiceTemplate, confirmNotDuplicate, checkCredit, handleCreditError])
 
   useInvoiceSaveShortcuts(
     () => handleSaveInvoice('none'),
@@ -3412,6 +3473,18 @@ export function InvoicePanel({
                 />
               ) : null}
               </div>
+              {invoice.type !== 'quotation' && (
+                <InvoiceCreditStrip
+                  className='mt-1.5'
+                  customerId={invoice.customerId}
+                  excludeInvoiceId={isEditing ? editingInvoiceId || undefined : undefined}
+                  unpaid={
+                    invoice.type === 'pending' || invoice.type === 'credit' || invoice.splitPaymentMethod
+                      ? Math.max(0, (Number(invoice.total) || 0) - totalPaidNow)
+                      : 0
+                  }
+                />
+              )}
           </div>
           <div>
             <Label htmlFor="invoiceDate">{t('invoice_date') || 'Invoice Date'}</Label>
@@ -3515,6 +3588,11 @@ export function InvoicePanel({
                   </div>
                 )}
               </div>
+              <WarehouseField
+                kind='sale'
+                value={invoice.warehouseId}
+                onValueChange={setInvoiceWarehouse}
+              />
               {invoice.type === 'pending' && (
                 <div>
                   <Label htmlFor="receivedByName">{t('received_by') || 'Received By'}</Label>
@@ -3594,6 +3672,12 @@ export function InvoicePanel({
                   </div>
                 )}
 
+                <WarehouseField
+                  kind='sale'
+                  value={invoice.warehouseId}
+                  onValueChange={setInvoiceWarehouse}
+                />
+
                 {/* Free-text name for walk-in sales only — a linked customer already has a
                     real name on their record (print pulls from there instead; see
                     formatPrintCustomerCell in print-utils.ts), so editing it here would
@@ -3633,6 +3717,18 @@ export function InvoicePanel({
               </div>
             </>
           )}
+
+          {/* Due date for credit/pending sales — default from Settings → Due Dates & Ledger
+              Colours, adjustable here (features/ledger-alerts/components/due-date-field.tsx). */}
+          <InvoiceDueDateField
+            type={invoice.type}
+            invoiceDate={invoice.invoiceDate}
+            customerId={invoice.customerId}
+            paymentTerms={customers.find((c) => (c._id || c.id) === invoice.customerId)?.paymentTerms}
+            value={invoice.dueDate}
+            onChange={(dueDate) => setInvoice((prev) => ({ ...prev, dueDate }))}
+            isEditing={Boolean(isEditing)}
+          />
         </CardContent>
       </Card>
 
@@ -4611,6 +4707,7 @@ export function InvoicePanel({
           itself rendered nothing on desktop. */}
       {createPortal(mobileActionsBar, document.body)}
       {duplicateGuardElement}
+      {creditGuardElement}
     </div>
   )
 }

@@ -25,6 +25,8 @@ import { Badge } from '@/components/ui/badge'
 import { useLanguage } from '@/context/language-context'
 import { useFormatMoney } from '@/lib/format-money'
 import { useConvertQuotationMutation } from '@/stores/invoice.api'
+import { useCreditLimitGuard } from '@/features/customers/credit/credit-limit-guard'
+import { invoiceUnpaidAmount } from '@/features/customers/credit/credit-utils'
 
 type QuotationInvoice = {
   _id?: string
@@ -72,6 +74,7 @@ export function QuotationConvertDialog({
   const [dueDate, setDueDate] = useState('')
   const [notes, setNotes] = useState('')
   const [convertQuotation, { isLoading }] = useConvertQuotationMutation()
+  const { check: checkCredit, handleError: handleCreditError, element: creditGuardElement } = useCreditLimitGuard()
 
   useEffect(() => {
     if (!open || !invoice) return
@@ -113,14 +116,31 @@ export function QuotationConvertDialog({
       return
     }
 
+    const body = {
+      id: invoiceId,
+      targetType,
+      paidAmount: parsedPaid,
+      dueDate: targetType === 'credit' && dueDate ? dueDate : undefined,
+      notes: notes.trim() || undefined,
+    }
+    // Credit check before converting into a credit sale; a server refusal reopens it.
+    const creditParams = {
+      customerId: typeof invoice.customerId === 'object' && invoice.customerId ? (invoice.customerId._id || invoice.customerId.id) : invoice.customerId,
+      unpaid: invoiceUnpaidAmount({ type: targetType, total, paidAmount: parsedPaid }),
+    }
+    const credit = await checkCredit(creditParams)
+    if (!credit.proceed) return
+
     try {
-      const result = await convertQuotation({
-        id: invoiceId,
-        targetType,
-        paidAmount: parsedPaid,
-        dueDate: targetType === 'credit' && dueDate ? dueDate : undefined,
-        notes: notes.trim() || undefined,
-      }).unwrap()
+      let result: unknown
+      try {
+        result = await convertQuotation({ ...body, ...credit.extra }).unwrap()
+      } catch (error) {
+        const resolution = await handleCreditError(error, creditParams)
+        if (!resolution) throw error
+        if (!resolution.proceed) return
+        result = await convertQuotation({ ...body, ...credit.extra, ...resolution.extra }).unwrap()
+      }
       toast.success(t('quotation_converted_success') || 'Quotation converted to invoice')
       onOpenChange(false)
       onConverted?.(result)
@@ -244,6 +264,7 @@ export function QuotationConvertDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      {creditGuardElement}
     </Dialog>
   )
 }

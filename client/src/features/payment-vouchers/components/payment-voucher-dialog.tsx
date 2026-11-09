@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useForm, useFieldArray, SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -39,6 +39,15 @@ import { cn } from '@/lib/utils'
 import { useFormDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
 import { formatAppDate } from '@/lib/date-format'
+import { usePermissions } from '@/context/permission-context'
+import { ledgerDiscountsApi, type LedgerDiscountReason } from '@/stores/ledgerDiscounts.api'
+import { purchaseApi } from '@/stores/purchase.api'
+import { supplierPaymentApi } from '@/stores/supplierPayment.api'
+import { useLedgerDiscountSettings } from '@/features/ledger-discounts/hooks/use-ledger-discount-settings'
+import { usePartyBalances } from '../hooks/use-party-balances'
+import { PartyLedgerQuickView, type QuickViewParty } from './party-ledger-quick-view'
+import { BalanceAfterCell, LineDiscountCell, PartyBalanceCell, QuickLedgerButton } from './voucher-line-cells'
+import { lineAccountState, type LineAccountState } from '../utils/line-account-state'
 
 const lineSchema = z
   .object({
@@ -53,6 +62,10 @@ const lineSchema = z
     // row the user actually put an amount into needs its payee filled in.
     amount: z.coerce.number().min(0),
     description: z.string(),
+    // Discount the supplier gave with this payment (Discount Received) — no cash moves.
+    discountAmount: z.coerce.number().min(0),
+    discountReason: z.string(),
+    discountApprovalNote: z.string(),
   })
   .refine((d) => Number(d.amount) <= 0 || d.payeeType !== 'expense' || !!d.category, {
     message: 'Select a category',
@@ -84,6 +97,9 @@ const emptyLine = () => ({
   payeeName: '',
   amount: 0,
   description: '',
+  discountAmount: 0,
+  discountReason: 'cash_discount',
+  discountApprovalNote: '',
 })
 
 const DEFAULT_ROW_COUNT = 8
@@ -108,6 +124,9 @@ const valuesFromVoucher = (voucher: PaymentVoucherRecord): VoucherFormValues => 
     payeeName: line.payeeType === 'other' ? line.payeeName : '',
     amount: line.amount,
     description: line.description ?? '',
+    discountAmount: Number(line.discountAmount) || 0,
+    discountReason: line.discountReason || 'cash_discount',
+    discountApprovalNote: line.discountApprovalNote ?? '',
   })),
 })
 
@@ -128,6 +147,9 @@ const fingerprint = (values: VoucherFormValues) =>
         line.payeeName,
         Number(line.amount) || 0,
         line.description,
+        Number(line.discountAmount) || 0,
+        Number(line.discountAmount) > 0 ? line.discountReason : '',
+        Number(line.discountAmount) > 0 ? line.discountApprovalNote : '',
       ]),
   })
 
@@ -179,6 +201,56 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
 
   const lines = form.watch('lines')
   const totalAmount = lines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0)
+
+  // ── Balances, discounts, quick ledger ──
+  const { hasAnyPermission } = usePermissions()
+  const canQuickView = hasAnyPermission('viewLedgerFromVouchers', 'viewAccounting', 'manageLedgers', 'viewPayments')
+  const discountRules = useLedgerDiscountSettings('supplier', { skip: !open })
+  const [quickParty, setQuickParty] = useState<QuickViewParty | null>(null)
+  const pickedSupplierIds = lines.filter((l) => l.payeeType === 'supplier' && l.supplierId).map((l) => l.supplierId)
+  // Balances that came with the supplier list loaded on open — no extra request for those.
+  const listBalances = useMemo(() => {
+    const map: Record<string, number | undefined> = {}
+    suppliers.forEach((party) => {
+      const balance = (party as { balance?: unknown }).balance
+      if (typeof balance === 'number') map[resolveEntityId(party)] = balance
+    })
+    return map
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suppliersData])
+  const liveBalances = usePartyBalances('supplier', pickedSupplierIds, open && canQuickView, listBalances)
+  // On edit the live payable already has this voucher's own lines taken off — add them back.
+  const storedBySupplier = useMemo(() => {
+    const map = new Map<string, number>()
+    voucher?.lines.forEach((line) => {
+      if (line.payeeType !== 'supplier' || !line.supplierId) return
+      map.set(line.supplierId, (map.get(line.supplierId) || 0) + Number(line.amount || 0) + Number(line.discountAmount || 0))
+    })
+    return map
+  }, [voucher])
+  const discountColumn = discountRules.available || lines.some((l) => Number(l.discountAmount) > 0)
+  const lineStates: (LineAccountState | null)[] = (() => {
+    const consumed = new Map<string, number>()
+    return lines.map((line) => {
+      if (line.payeeType !== 'supplier' || !line.supplierId) return null
+      const live = liveBalances[line.supplierId]
+      const before = live === undefined ? undefined : live + (storedBySupplier.get(line.supplierId) || 0) - (consumed.get(line.supplierId) || 0)
+      const amount = Number(line.amount) || 0
+      const discount = Number(line.discountAmount) || 0
+      consumed.set(line.supplierId, (consumed.get(line.supplierId) || 0) + amount + discount)
+      return lineAccountState({
+        owingBefore: before,
+        amount,
+        discount,
+        approvalNote: line.discountApprovalNote,
+        settings: discountRules.settings,
+        canGive: discountRules.canGive,
+        canApprove: discountRules.canApprove,
+        t: (k) => k,
+      })
+    })
+  })()
+  const totalDiscount = lines.reduce((sum, line) => sum + (line.payeeType === 'supplier' ? Number(line.discountAmount) || 0 : 0), 0)
   const hasChanges = isEdit && fingerprint(form.watch()) !== initialFingerprint
 
   const supplierOptions = suppliers.map((s) => ({
@@ -244,6 +316,11 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
         return
       }
     }
+    const badDiscount = data.lines.findIndex((line, i) => Number(line.amount) > 0 && lineStates[i]?.error)
+    if (badDiscount >= 0) {
+      toast.error(lineStates[badDiscount]?.error || 'Check the discount')
+      return
+    }
     const nonEmptyLines = data.lines.filter((line) => Number(line.amount) > 0)
     if (nonEmptyLines.length === 0) {
       toast.error('Add an amount to at least one line')
@@ -260,6 +337,13 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
         payeeName: line.payeeType === 'other' ? line.payeeName.trim() : undefined,
         amount: line.amount,
         description: line.description || undefined,
+        ...(line.payeeType === 'supplier' && Number(line.discountAmount) > 0
+          ? {
+              discountAmount: Number(line.discountAmount),
+              discountReason: line.discountReason as LedgerDiscountReason,
+              discountApprovalNote: line.discountApprovalNote || undefined,
+            }
+          : { discountAmount: 0 }),
       })),
       notes: data.notes,
     }
@@ -277,6 +361,10 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
         draft.clear()
         onCreated?.(created.id)
       }
+      // Supplier lines settle purchase bills (and discounts land in the register).
+      dispatch(purchaseApi.util.invalidateTags(['Purchase']))
+      dispatch(supplierPaymentApi.util.invalidateTags(['SupplierPayment', 'SupplierAccount']))
+      dispatch(ledgerDiscountsApi.util.invalidateTags(['DiscountRegister']))
       onOpenChange(false)
     } catch (error: any) {
       toast.error(error?.data?.message || `Failed to ${isEdit ? 'update' : 'create'} payment voucher`)
@@ -287,7 +375,7 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-[960px]'>
+      <DialogContent className='flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-[1200px]'>
         <DialogHeader className='px-6 pt-6 pb-4'>
           <DialogTitle>{isEdit ? (
               <>
@@ -386,10 +474,13 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
             <Table>
               <TableHeader className='sticky top-0 z-10 bg-background'>
                 <TableRow>
-                  <TableHead className='w-[130px]'>Pay For</TableHead>
-                  <TableHead className='min-w-[220px]'>Payee</TableHead>
-                  <TableHead className='min-w-[180px]'>Description</TableHead>
-                  <TableHead className='w-[130px] text-right'>Amount (Rs)</TableHead>
+                  <TableHead className='w-[120px]'>Pay For</TableHead>
+                  <TableHead className='min-w-[230px]'>Payee</TableHead>
+                  {canQuickView && <TableHead className='w-[110px] text-right'>Balance</TableHead>}
+                  <TableHead className='min-w-[150px]'>Description</TableHead>
+                  <TableHead className='w-[120px] text-right'>Amount (Rs)</TableHead>
+                  {discountColumn && <TableHead className='w-[130px] text-right'>Discount</TableHead>}
+                  {canQuickView && <TableHead className='w-[110px] text-right'>Balance After</TableHead>}
                   <TableHead className='w-[44px]' />
                 </TableRow>
               </TableHeader>
@@ -398,6 +489,9 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                   const payeeType = form.watch(`lines.${index}.payeeType`)
                   const lineError = form.formState.errors.lines?.[index]
                   const payeeEnterProps = voucherEnter.enterProps(`line-${index}-payee`)
+                  const lineState = lineStates[index]
+                  const supplierId = form.watch(`lines.${index}.supplierId`)
+                  const supplierOption = supplierOptions.find((o) => o.value === supplierId)
                   return (
                     <TableRow key={field.id}>
                       <TableCell className='p-1.5 align-top'>
@@ -448,6 +542,8 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                             {...form.register(`lines.${index}.payeeName`)}
                           />
                         ) : (
+                          <div className='flex gap-1'>
+                          <div className='min-w-0 flex-1'>
                           <SearchableSelect
                             options={supplierOptions}
                             value={form.watch(`lines.${index}.supplierId`)}
@@ -462,6 +558,15 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                             onSelected={() => voucherEnter.advance(`line-${index}-payee`)}
                             popoverClassName='w-[320px]'
                           />
+                          </div>
+                          {canQuickView && supplierId && (
+                            <QuickLedgerButton
+                              onClick={() =>
+                                setQuickParty({ side: 'supplier', id: supplierId, name: supplierOption?.label || 'Supplier', phone: supplierOption?.sublabel, balance: liveBalances[supplierId] })
+                              }
+                            />
+                          )}
+                          </div>
                         )}
                         {(lineError?.category || lineError?.supplierId || lineError?.payeeName) && (
                           <p className='mt-1 text-xs text-red-500'>
@@ -469,6 +574,12 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                           </p>
                         )}
                       </TableCell>
+
+                      {canQuickView && (
+                        <TableCell className='p-1.5 align-top'>
+                          {lineState ? <PartyBalanceCell side='supplier' owing={lineState.owingBefore} /> : <span className='block pt-2 text-right text-xs text-muted-foreground'>—</span>}
+                        </TableCell>
+                      )}
 
                       <TableCell className='p-1.5 align-top'>
                         <Input
@@ -492,6 +603,39 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                         {lineError?.amount && <p className='mt-1 text-xs text-red-500'>{lineError.amount.message}</p>}
                       </TableCell>
 
+                      {discountColumn && (
+                        <TableCell className='p-1.5 align-top'>
+                          {payeeType === 'supplier' ? (
+                            <LineDiscountCell
+                              side='supplier'
+                              amount={Number(form.watch(`lines.${index}.amount`)) || 0}
+                              discount={Number(form.watch(`lines.${index}.discountAmount`)) || 0}
+                              reason={form.watch(`lines.${index}.discountReason`) as LedgerDiscountReason}
+                              approvalNote={form.watch(`lines.${index}.discountApprovalNote`)}
+                              state={lineState}
+                              settings={discountRules.settings}
+                              canGive={discountRules.available}
+                              canApprove={discountRules.canApprove}
+                              inputProps={form.register(`lines.${index}.discountAmount`)}
+                              onDiscount={(v) => form.setValue(`lines.${index}.discountAmount`, Math.round(v * 100) / 100, { shouldDirty: true })}
+                              onReason={(v) => form.setValue(`lines.${index}.discountReason`, v, { shouldDirty: true })}
+                              onApprovalNote={(v) => form.setValue(`lines.${index}.discountApprovalNote`, v, { shouldDirty: true })}
+                            />
+                          ) : (
+                            <span className='block pt-2 text-center text-xs text-muted-foreground'>—</span>
+                          )}
+                        </TableCell>
+                      )}
+
+                      {canQuickView && (
+                        <TableCell className='p-1.5 align-top'>
+                          <BalanceAfterCell
+                            state={lineState}
+                            active={(Number(form.watch(`lines.${index}.amount`)) || 0) + (Number(form.watch(`lines.${index}.discountAmount`)) || 0) > 0}
+                          />
+                        </TableCell>
+                      )}
+
                       <TableCell className='p-1.5 align-top'>
                         <Button
                           type='button'
@@ -512,9 +656,21 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
             </Table>
           </div>
 
-          <div className='flex shrink-0 items-center justify-end gap-2'>
-            <span className='text-sm font-medium text-muted-foreground'>Total:</span>
-            <span className='text-lg font-bold'>{formatMoney(totalAmount)}</span>
+          <div className='flex shrink-0 flex-wrap items-center justify-end gap-x-5 gap-y-1'>
+            {totalDiscount > 0 && (
+              <>
+                <span className='text-sm text-muted-foreground'>
+                  Discount received: <span className='font-semibold text-amber-700 dark:text-amber-400'>{formatMoney(totalDiscount)}</span>
+                </span>
+                <span className='text-sm text-muted-foreground'>
+                  Settled on ledgers: <span className='font-semibold text-foreground'>{formatMoney(totalAmount + totalDiscount)}</span>
+                </span>
+              </>
+            )}
+            <span className='flex items-center gap-2'>
+              <span className='text-sm font-medium text-muted-foreground'>{totalDiscount > 0 ? 'Cash paid:' : 'Total:'}</span>
+              <span className='text-lg font-bold'>{formatMoney(totalAmount)}</span>
+            </span>
           </div>
 
           <div className='shrink-0 space-y-2'>
@@ -535,6 +691,8 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
             </Button>
           </DialogFooter>
         </form>
+        {/* Rendered inside the dialog so it stacks on top and the voucher stays as typed. */}
+        <PartyLedgerQuickView party={quickParty} onClose={() => setQuickParty(null)} />
       </DialogContent>
     </Dialog>
   )

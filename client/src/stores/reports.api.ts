@@ -187,6 +187,11 @@ export interface ProductReportData {
 
 export interface CustomerReportData {
   _id: string
+  /** Discount given on the bills themselves (bill + line discounts) in the period. */
+  billDiscount?: number
+  /** Ledger Discount Allowed / Received in the period (features/ledger-discounts). */
+  ledgerDiscount?: number
+  ledgerDiscountCount?: number
   customerName: string
   customerNameUrdu?: string
   phone?: string
@@ -287,6 +292,11 @@ export interface SupplierAgingSummary {
 
 export interface SupplierReportData {
   _id: string
+  /** Discount given on the bills themselves (bill + line discounts) in the period. */
+  billDiscount?: number
+  /** Ledger Discount Allowed / Received in the period (features/ledger-discounts). */
+  ledgerDiscount?: number
+  ledgerDiscountCount?: number
   supplierName: string
   supplierNameUrdu?: string
   phone?: string
@@ -316,6 +326,10 @@ export interface ProfitLossReport {
     salesReturnsCount: number
     netRevenue: number
     costOfGoodsSold: number
+    /** Sales profit before direct expenses. */
+    salesProfit?: number
+    directExpenses?: number
+    /** Trading gross profit — after direct expenses. */
     grossProfit: number
     grossProfitMargin: number
   }
@@ -335,6 +349,8 @@ export interface ProfitLossReport {
   }
   expenses: {
     totalExpenses: number
+    directExpenses?: number
+    indirectExpenses?: number
   }
   netProfit: {
     amount: number
@@ -703,6 +719,11 @@ export interface ProfitLossFullReport {
     salesReturnsCount: number
     netRevenue: number
     costOfGoodsSold: number
+    /** Net revenue − cost of goods sold, before direct expenses. */
+    salesProfit?: number
+    /** Direct (trading) expenses for the period — part of cost of sales. */
+    directExpenses?: number
+    /** Trading gross profit: salesProfit − directExpenses. */
     grossProfit: number
     grossProfitMargin: number
   }
@@ -720,8 +741,18 @@ export interface ProfitLossFullReport {
     purchaseReturns: number
     purchaseReturnsCount: number
     billLatePaymentLoss: number
+    /** Ledger Discount Allowed to customers in the period (a cost). */
+    discountAllowed?: number
+    discountAllowedCount?: number
+    /** Ledger Discount Received from suppliers in the period (income). */
+    discountReceived?: number
+    discountReceivedCount?: number
   }
+  /** All paid expenses (direct + indirect). */
   expenses: number
+  directExpenses?: number
+  /** Operating expenses — the ones taken off after gross profit. */
+  indirectExpenses?: number
   unpaidExpenses: number
   unpaidExpensesCount: number
   netProfit: number
@@ -1400,21 +1431,23 @@ export const reportsApi = createApi({
     }),
     getExpenseReport: builder.query<{
       data: ExpenseReportData[]
-      categoryBreakdown: { _id: string; totalAmount: number; expenseCount: number; avgAmount: number }[]
+      /** directAmount/indirectAmount: the category's split by expense type (see ExpenseNature). */
+      categoryBreakdown: { _id: string; totalAmount: number; expenseCount: number; avgAmount: number; directAmount?: number; indirectAmount?: number }[]
       recurringBreakdown: { _id: string; totalAmount: number; expenseCount: number; avgAmount: number }[]
       categoryExpenses: {
         _id: string; expenseNumber: string; category: string; description: string
         amount: number; paymentMethod: string; date: string; vendor?: string; reference?: string; notes?: string
       }[]
-      summary: { totalExpenses: number; expenseCount: number; avgExpense: number }
+      summary: { totalExpenses: number; expenseCount: number; avgExpense: number; directExpenses?: number; indirectExpenses?: number }
       period: { startDate: string; endDate: string }
-    }, { startDate?: string; endDate?: string; category?: string; groupRecurring?: boolean }>({
+    }, { startDate?: string; endDate?: string; category?: string; groupRecurring?: boolean; expenseNature?: 'direct' | 'indirect' }>({
       query: (params) => {
         const searchParams = new URLSearchParams()
         if (params.startDate) searchParams.set('startDate', params.startDate)
         if (params.endDate) searchParams.set('endDate', params.endDate)
         if (params.category) searchParams.set('category', params.category)
         if (params.groupRecurring) searchParams.set('groupRecurring', 'true')
+        if (params.expenseNature) searchParams.set('expenseNature', params.expenseNature)
         return `/expenses?${searchParams.toString()}`
       },
       providesTags: ['ExpenseReport'],

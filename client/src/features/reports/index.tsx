@@ -25,6 +25,9 @@ import { LedgerReport } from './components/ledger-report'
 import { ProductReport } from './components/product-report'
 import { CustomerReport } from './components/customer-report'
 import { AgingReport } from './components/aging-report'
+import { OverdueLedgersReport } from '@/features/ledger-alerts/components/overdue-ledgers-report'
+import { DiscountRegisterReport } from '@/features/ledger-discounts/components/discount-register-report'
+import { CustomerProfitReport } from '@/features/customer-profit/components/customer-profit-report'
 import { SupplierAgingReport } from './components/supplier-aging-report'
 import { SupplierReport } from './components/supplier-report'
 import { ExpenseReport } from './components/expense-report'
@@ -78,6 +81,10 @@ const REPORT_TAB_PERMISSIONS: Partial<Record<string, PermissionKey | PermissionK
   products: 'viewProductReports',
   customers: 'viewCustomerReports',
   aging: 'viewCustomerReports',
+  'overdue-ledgers': ['viewCustomerReports', 'viewReports'],
+  discounts: ['viewReports', 'viewCustomerReports', 'viewSupplierReports', 'viewProfitLossReports'],
+  // Reveals cost: only its own permission, never the general viewReports key.
+  'customer-profit': 'viewCustomerProfit',
   suppliers: 'viewSupplierReports',
   'supplier-aging': 'viewSupplierReports',
   expenses: 'viewExpenseReports',
@@ -106,7 +113,7 @@ const MOBILE_SHOP_ONLY_TABS = new Set([
 // Display order, matching the TabsList below — used to pick a sensible default tab.
 const TAB_ORDER = [
   'activities', 'summary', 'daily-summary', 'complete', 'sales', 'purchases', 'ledger',
-  'salesman-commission', 'partner-profit-share', 'products', 'customers', 'aging',
+  'salesman-commission', 'partner-profit-share', 'products', 'customers', 'customer-profit', 'aging', 'overdue-ledgers', 'discounts',
   'suppliers', 'supplier-aging', 'expenses', 'stock', 'batch-expiry', 'stock-adjustments',
   'stock-transfers', 'tax', 'sales-returns', 'purchase-returns', 'load', 'my-wallet',
   'bank-position', 'repair', 'services', 'bill-payments', 'agent-bills', 'profit-loss',
@@ -359,8 +366,17 @@ export default function ReportsPage() {
             {isTabVisible('customers') && (
               <TabsTrigger value='customers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Customers')}</TabsTrigger>
             )}
+            {isTabVisible('customer-profit') && (
+              <TabsTrigger value='customer-profit' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Customer Profit')}</TabsTrigger>
+            )}
             {isTabVisible('aging') && (
               <TabsTrigger value='aging' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Customer Aging')}</TabsTrigger>
+            )}
+            {isTabVisible('overdue-ledgers') && (
+              <TabsTrigger value='overdue-ledgers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Overdue Ledgers')}</TabsTrigger>
+            )}
+            {isTabVisible('discounts') && (
+              <TabsTrigger value='discounts' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Discounts')}</TabsTrigger>
             )}
             {isTabVisible('suppliers') && (
               <TabsTrigger value='suppliers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Suppliers')}</TabsTrigger>
@@ -500,6 +516,24 @@ export default function ReportsPage() {
         {isTabVisible('aging') && (
           <TabsContent value='aging' className='mt-6'>
             <AgingReport ref={activeTab === 'aging' ? exportRef : null} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('overdue-ledgers') && (
+          <TabsContent value='overdue-ledgers' className='mt-6'>
+            <OverdueLedgersReport ref={activeTab === 'overdue-ledgers' ? exportRef : null} initialFilter={search.band} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('customer-profit') && (
+          <TabsContent value='customer-profit' className='mt-6'>
+            <CustomerProfitReport ref={activeTab === 'customer-profit' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('discounts') && (
+          <TabsContent value='discounts' className='mt-6'>
+            <DiscountRegisterReport ref={activeTab === 'discounts' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
           </TabsContent>
         )}
 

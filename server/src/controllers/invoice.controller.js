@@ -7,11 +7,22 @@ const catchAsync = require('../utils/catchAsync');
 const { invoiceService, auditLogService } = require('../services');
 const { tokenizeSearch, escapeRegex } = require('../utils/searchQuery');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+const { userHasAnyPermission } = require('../middlewares/permission');
+
+/** Who is saving, and whether they may approve a sale over a customer's credit limit. */
+const creditOptions = async (req) => ({
+  canOverrideCredit: await userHasAnyPermission(req.user, ['overrideCreditLimit']),
+  actor: { id: req.user.id, name: req.user.name },
+});
 
 const TRACKED_INVOICE_FIELDS = ['status', 'total', 'paidAmount', 'balance', 'discount', 'items', 'tax', 'currency'];
 
 const createInvoice = catchAsync(async (req, res) => {
-  const invoice = await invoiceService.createInvoice({ ...req.body, ...getBranchContext(req) }, req.user.id);
+  const invoice = await invoiceService.createInvoice(
+    { ...req.body, ...getBranchContext(req) },
+    req.user.id,
+    await creditOptions(req)
+  );
   // recordAuditLog never throws (failures are logged internally) — don't make the
   // client wait on it, it has no bearing on whether the invoice was saved.
   auditLogService.recordAuditLog({
@@ -201,7 +212,7 @@ const getInvoice = catchAsync(async (req, res) => {
 const updateInvoice = catchAsync(async (req, res) => {
   const before = await invoiceService.getInvoiceById(req.params.invoiceId);
   const beforeSnapshot = before && before.toObject ? before.toObject() : before;
-  const invoice = await invoiceService.updateInvoiceById(req.params.invoiceId, req.body, req.user.id);
+  const invoice = await invoiceService.updateInvoiceById(req.params.invoiceId, req.body, req.user.id, await creditOptions(req));
   await auditLogService.recordAuditLog({
     req,
     action: 'update',
@@ -346,7 +357,7 @@ const duplicateInvoice = catchAsync(async (req, res) => {
     notes: originalInvoice.notes ? `Copy of ${originalInvoice.invoiceNumber}: ${originalInvoice.notes}` : `Copy of ${originalInvoice.invoiceNumber}`
   };
   
-  const duplicatedInvoice = await invoiceService.createInvoice(duplicateData, req.user.id);
+  const duplicatedInvoice = await invoiceService.createInvoice(duplicateData, req.user.id, await creditOptions(req));
   res.status(httpStatus.CREATED).send(duplicatedInvoice);
 });
 
@@ -373,6 +384,7 @@ const convertQuotation = catchAsync(async (req, res) => {
     req.params.invoiceId,
     req.body,
     req.user.id,
+    await creditOptions(req),
   );
   res.send(invoice);
 });

@@ -277,6 +277,10 @@ const summery = {
     url: '/expenses',
     method: 'get',
   },
+  bulkImportExpenses: {
+    url: '/expenses/bulk',
+    method: 'post',
+  },
   fetchExpenseSummary: {
     url: '/expenses/summary',
     method: 'get',

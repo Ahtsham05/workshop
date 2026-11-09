@@ -139,6 +139,8 @@ export interface CreateTransferRequest {
   notes?: string
   /** `YYYY-MM-DD`; omitted = today. */
   transferDate?: string
+  /** Multi-warehouse: sending warehouse in this branch (unset = default). */
+  fromWarehouseId?: string
 }
 
 export interface BulkTransferLineInput {
@@ -156,6 +158,8 @@ export interface CreateBulkTransferRequest {
   notes?: string
   /** `YYYY-MM-DD`; omitted = today. */
   transferDate?: string
+  /** Multi-warehouse: sending warehouse in this branch (unset = default). */
+  fromWarehouseId?: string
 }
 
 export interface CreateBulkTransferResponse {
@@ -210,8 +214,12 @@ export const inventoryTransferApi = createApi({
       invalidatesTags: ['InventoryTransfer'],
       onQueryStarted: invalidateDownstreamCaches,
     }),
-    completeTransfer: builder.mutation<InventoryTransfer, string>({
-      query: (id) => ({ url: `/inventory-transfers/${id}/complete`, method: 'POST' }),
+    // A plain id still works; `{ id, toWarehouseId }` receives into a chosen warehouse.
+    completeTransfer: builder.mutation<InventoryTransfer, string | { id: string; toWarehouseId?: string | null }>({
+      query: (arg) => {
+        const { id, toWarehouseId } = typeof arg === 'string' ? { id: arg, toWarehouseId: null } : arg
+        return { url: `/inventory-transfers/${id}/complete`, method: 'POST', body: toWarehouseId ? { toWarehouseId } : {} }
+      },
       invalidatesTags: ['InventoryTransfer'],
       onQueryStarted: invalidateDownstreamCaches,
     }),

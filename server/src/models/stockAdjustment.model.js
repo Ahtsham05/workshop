@@ -53,6 +53,8 @@ const StockAdjustmentSchema = new mongoose.Schema(
     // of the original — keeps the ledger append-only/auditable. See docs on InventoryTransfer
     // for the same immutable-ledger rationale.
     reversalOf: { type: mongoose.Schema.Types.ObjectId, ref: 'StockAdjustment' },
+    // Multi-warehouse: which warehouse this moved stock in/out of (unset = branch default).
+    warehouseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', default: null },
     reversedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'StockAdjustment' },
 
     // Set when the adjustment was posted from a stock count (cycle count, audit, initial count).

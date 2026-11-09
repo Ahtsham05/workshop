@@ -358,6 +358,8 @@ export const adminLeadsApi = api
 /** One shared poll for the alerts feed (header badge + watchdog) — see notification-query-options.ts. */
 export const LEAD_ALERTS_POLL_OPTIONS = {
   pollingInterval: 60_000,
-  refetchOnFocus: true,
+  // Not RTK's refetchOnFocus (fires on every focus); the bell refetches on focus only when
+  // the copy is stale — see useRefetchOnFocusIfStale in components/layout/admin-leads-bell.tsx.
+  refetchOnFocus: false,
   refetchOnReconnect: true,
 } as const

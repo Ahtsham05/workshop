@@ -7,6 +7,8 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Label } from '@/components/ui/label'
+import { DatePicker } from '@/components/ui/date-picker'
+import { getBusinessToday } from '@/lib/business-timezone'
 import { nativeFieldLabel } from '@/lib/native-language'
 import {
   Select,
@@ -46,7 +48,7 @@ interface SupplierImportDialogProps {
   onClose: () => void
   onImport: (
     suppliers: ImportSupplier[],
-    options?: { duplicateStrategy?: DuplicateStrategy }
+    options?: { duplicateStrategy?: DuplicateStrategy; openingBalanceDate?: string }
   ) => Promise<BulkSupplierResult | void>
 }
 
@@ -110,6 +112,7 @@ const SAMPLE_ROWS = [
 export default function SupplierImportDialog({ open, onClose, onImport }: SupplierImportDialogProps) {
   const { t } = useLanguage()
   const [duplicateStrategy, setDuplicateStrategy] = useState<DuplicateStrategy>('skip')
+  const [openingBalanceDate, setOpeningBalanceDate] = useState<string>(() => getBusinessToday())
 
   const buildRow = useCallback(
     (values: Record<string, CellValue>): BuiltRow<ImportSupplier> => {
@@ -150,7 +153,7 @@ export default function SupplierImportDialog({ open, onClose, onImport }: Suppli
 
   const importBatch = useCallback(
     async (items: ImportSupplier[]): Promise<ImportBatchOutcome> => {
-      const result = (await onImport(items, { duplicateStrategy })) || {}
+      const result = (await onImport(items, { duplicateStrategy, openingBalanceDate })) || {}
       const notes: string[] = []
       if (result.updatedCount) {
         notes.push(t('{{count}} existing suppliers were updated', { count: result.updatedCount }))
@@ -163,7 +166,7 @@ export default function SupplierImportDialog({ open, onClose, onImport }: Suppli
         notes,
       }
     },
-    [onImport, duplicateStrategy, t]
+    [onImport, duplicateStrategy, openingBalanceDate, t]
   )
 
   const duplicateKeys = useMemo(
@@ -206,6 +209,18 @@ export default function SupplierImportDialog({ open, onClose, onImport }: Suppli
           <p className='text-xs text-muted-foreground'>
             {t('Suppliers are matched by phone number, then email, then name.')}
           </p>
+          <div className='space-y-1.5 pt-2'>
+            <Label className='text-sm'>{t('Opening balance date')}</Label>
+            <DatePicker
+              value={openingBalanceDate}
+              onChange={(value) => setOpeningBalanceDate(value || getBusinessToday())}
+              max={getBusinessToday()}
+              className='h-8 w-full sm:w-[200px]'
+            />
+            <p className='text-xs text-muted-foreground'>
+              {t('Opening balances are dated this day in the ledger (e.g. the 1st of the month your books start).')}
+            </p>
+          </div>
         </div>
       }
       renderPreview={(supplier) => (

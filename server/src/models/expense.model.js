@@ -23,6 +23,16 @@ const expenseSchema = new mongoose.Schema({
     required: true,
     trim: true,
   },
+  // Snapshot of the category's classification when the expense was saved (see
+  // expenseCategory.model.js). Kept on the row so reports can split gross vs net profit
+  // without a join, and refreshed whenever the category is re-classified with
+  // "apply to existing expenses". Rows saved before this field existed have no value
+  // and count as indirect everywhere ($ifNull) — their old behaviour.
+  expenseNature: {
+    type: String,
+    enum: ['direct', 'indirect'],
+    default: 'indirect',
+  },
   description: {
     type: String,
     required: true,
@@ -52,6 +62,13 @@ const expenseSchema = new mongoose.Schema({
   },
   reference: {
     type: String,
+  },
+  // Expense Voucher (EV-000001) this expense was entered on — several expenses paid from
+  // one account in one go. Each line is still a full expense of its own (cash book, books,
+  // reports); the number just ties them together for search, view and print.
+  voucherNumber: {
+    type: String,
+    trim: true,
   },
   referenceId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -105,6 +122,8 @@ expenseSchema.index({ organizationId: 1, branchId: 1 });
 expenseSchema.index({ organizationId: 1, branchId: 1, date: -1 });
 expenseSchema.index({ organizationId: 1, expenseNumber: 1 }, { unique: true, sparse: true });
 expenseSchema.index({ referenceId: 1, referenceModel: 1 });
+expenseSchema.index({ organizationId: 1, branchId: 1, category: 1 });
+expenseSchema.index({ organizationId: 1, branchId: 1, voucherNumber: 1 }, { sparse: true });
 
 async function getMaxExpenseSequence(organizationId, branchId) {
   const orgId = new mongoose.Types.ObjectId(String(organizationId));

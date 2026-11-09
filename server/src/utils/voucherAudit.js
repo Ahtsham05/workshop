@@ -11,12 +11,15 @@
  * receipt voucher.
  */
 const lineText = (line, partyField) =>
-  `${line[partyField]}: ${line.amount}${line.description ? ` (${line.description})` : ''}`;
+  `${line[partyField]}: ${line.amount}${Number(line.discountAmount) > 0 ? ` + discount ${line.discountAmount}` : ''}${
+    line.description ? ` (${line.description})` : ''
+  }`;
 
 const voucherAuditSnapshot = (voucher, partyField) => ({
   date: voucher.date,
   bankAccountName: voucher.bankAccountName,
   totalAmount: voucher.totalAmount,
+  ...(Number(voucher.totalDiscount) > 0 ? { totalDiscount: voucher.totalDiscount } : {}),
   reference: voucher.reference || '',
   notes: voucher.notes || '',
   lines: voucher.lines.map((line) => lineText(line, partyField)).join('; '),
@@ -30,6 +33,7 @@ const voucherCreateAuditFields = (voucher) => [
   'date',
   'bankAccountName',
   'totalAmount',
+  ...(Number(voucher.totalDiscount) > 0 ? ['totalDiscount'] : []),
   'lines',
   ...(voucher.reference ? ['reference'] : []),
   ...(voucher.notes ? ['notes'] : []),

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { WarehouseTag } from '@/components/warehouse-tag'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -77,6 +78,9 @@ import { InvoiceFiltersToolbar } from './invoice-filters-toolbar'
 import { useInvoiceFilters } from '../hooks/use-invoice-filters'
 import { exportInvoicesToCsv, exportInvoicesToPdf } from '../utils/invoice-export'
 import { DUE_STATUS_META, SETTLEMENT_STATUS_META, resolveInvoiceSettlement } from '../utils/invoice-settlement'
+import { useLedgerAlertSettings } from '@/features/ledger-alerts/hooks/use-ledger-alerts'
+import { DueStateChip } from '@/features/ledger-alerts/components/aging-chip'
+import { calendarOfDue, classifyDue, rowStyleForTone, toneForState } from '@/features/ledger-alerts/lib/ledger-colors'
 import { BilingualName } from '@/components/bilingual-name'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { CreatedByCell, useCanViewCreatedBy } from '@/components/created-by-cell'
@@ -159,6 +163,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const { t } = useLanguage()
   const nativeLanguageName = useNativeLanguageName()
   const formatMoney = useFormatMoney()
+  const { settings: ledgerSettings } = useLedgerAlertSettings()
   const currencyMeta = useCurrencyMeta()
   const { hasExplicitPermission } = usePermissions()
   const canCreate = hasExplicitPermission('createInvoices')
@@ -785,8 +790,15 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                   const statusMeta = SETTLEMENT_STATUS_META[settlement.settlementStatus]
                   const dueMeta = DUE_STATUS_META[settlement.dueStatus]
                   const isOverdue = settlement.dueStatus === 'overdue'
+                  // Overdue colour band for this invoice (Settings → Due Dates & Ledger Colours).
+                  const due = invoice.type === 'quotation' ? null : classifyDue(invoice.dueDate, settlement.remainingAmount, ledgerSettings)
+                  const dueTone = due && ledgerSettings.colorsEnabled ? toneForState(due.state as never, due.bandIndex, ledgerSettings) : null
                   return (
-                  <TableRow key={id} className={isSelectedForTwoUp ? 'bg-primary/5' : undefined}>
+                  <TableRow
+                    key={id}
+                    className={isSelectedForTwoUp ? 'bg-primary/5' : undefined}
+                    style={isSelectedForTwoUp ? undefined : rowStyleForTone(dueTone, ledgerSettings)}
+                  >
                     <TableCell onClick={(event) => event.stopPropagation()}>
                       <Checkbox
                         checked={Boolean(selected[id])}
@@ -808,17 +820,29 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                       <div className="flex items-center gap-2">
                         {invoice.invoiceNumber}
                         <FlagBadge flag={invoice.flag} />
+                        <WarehouseTag warehouseId={invoice.warehouseId} />
                         {invoice.offlinePending && (
                           <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
                             {t('Pending sync') || 'Pending sync'}
                           </Badge>
                         )}
                       </div>
-                      {invoice.dueDate && (
+                      {invoice.dueDate && due && due.state !== 'settled' ? (
+                        <div className='mt-0.5'>
+                          <DueStateChip
+                            state={due.state}
+                            daysOverdue={due.daysOverdue}
+                            daysUntilDue={due.daysUntilDue}
+                            bandIndex={due.bandIndex}
+                            settings={ledgerSettings}
+                            dueDate={invoice.dueDate}
+                          />
+                        </div>
+                      ) : invoice.dueDate ? (
                         <p className={cn('text-[11px]', isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground')}>
-                          {t('Due')} {formatAppDate(new Date(invoice.dueDate))}
+                          {t('Due')} {formatAppDate(calendarOfDue(invoice.dueDate))}
                         </p>
-                      )}
+                      ) : null}
                     </TableCell>
                     <TableCell className='max-w-[14rem]'>
                       <div className='flex min-w-0 items-center gap-2'>

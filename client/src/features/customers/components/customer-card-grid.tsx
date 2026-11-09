@@ -47,6 +47,10 @@ import type { Customer } from '../data/schema'
 import { CustomerListPagination } from './customer-list-pagination'
 import { formatCustomerBalanceDisplay } from '../utils/customer-list-view'
 import { useCurrencyMeta } from '@/lib/format-money'
+import { useLedgerStatus } from '@/features/ledger-alerts/hooks/use-ledger-alerts'
+import { AgingChip } from '@/features/ledger-alerts/components/aging-chip'
+import { CreditCell } from '../credit/credit-cell'
+import type { CreditSummary } from '@/stores/creditControl.api'
 
 type Props = {
   customers: Customer[]
@@ -144,6 +148,7 @@ function CustomerCardMenu({ customer }: { customer: Customer }) {
 export function CustomerCardGrid({ customers, loading, pagination }: Props) {
   const { t } = useLanguage()
   const currencyMeta = useCurrencyMeta()
+  const { agingFor, cardStyleFor, settings: ledgerSettings, colorsOn } = useLedgerStatus()
   const navigate = useNavigate()
   const { hasPermission } = usePermissions()
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -243,14 +248,19 @@ export function CustomerCardGrid({ customers, loading, pagination }: Props) {
                 <EntityCardLayout
                   key={customerId || customer.name}
                   header={
-                    <ContactMediaNameCell
-                      compact
-                      name={customer.name}
-                      nameUrdu={customer.nameUrdu}
-                      picture={customer.picture}
-                      idCardFront={customer.idCardFront}
-                      idCardBack={customer.idCardBack}
-                    />
+                    <div className='min-w-0 space-y-1.5'>
+                      <ContactMediaNameCell
+                        compact
+                        name={customer.name}
+                        nameUrdu={customer.nameUrdu}
+                        picture={customer.picture}
+                        idCardFront={customer.idCardFront}
+                        idCardBack={customer.idCardBack}
+                      />
+                      {customer.credit && (customer.credit.hasLimit || customer.credit.onHold) ? (
+                        <CreditCell credit={customer.credit as CreditSummary} className='max-w-none' />
+                      ) : null}
+                    </div>
                   }
                   menu={<CustomerCardMenu customer={customer} />}
                   email={customer.email}
@@ -280,6 +290,8 @@ export function CustomerCardGrid({ customers, loading, pagination }: Props) {
                   actions={renderActions(customer)}
                   ledgerLabel={t('customers_ledger')}
                   onOpenLedger={() => handleOpenLedger(customer)}
+                  cardStyle={cardStyleFor(customerId)}
+                  status={colorsOn ? <AgingChip aging={agingFor(customerId)} settings={ledgerSettings} size='xs' /> : null}
                 />
               )
             })}

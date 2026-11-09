@@ -47,6 +47,10 @@ const InventoryTransferSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // Multi-warehouse: sending warehouse (source branch) / receiving warehouse (destination
+    // branch). Unset = that branch's default warehouse. See warehouse.service.js#syncBranchTransfer.
+    fromWarehouseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', default: null },
+    toWarehouseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', default: null },
     fromProductId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
     toProductId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
     productName: { type: String, trim: true }, // snapshot for display

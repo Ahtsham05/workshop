@@ -356,7 +356,34 @@ const getCustomerReconciliation = async ({ organizationId, branchId, customer })
   const returnCredits = Money.roundMoney(returnTotals?.unapplied || 0);
   const appliedReturnCredits = Money.roundMoney(returnTotals?.applied || 0);
 
-  const explained = Money.roundMoney(summary.availableCredit + unallocatedPayments + returnCredits);
+  // Ledger discounts lower the balance; the part that settled an invoice also lowered the
+  // invoice outstanding (no gap), the rest sits on the account — e.g. a discount against an
+  // opening balance, which no invoice carries. That rest is a named, legitimate difference.
+  const [discountLedger] = await CustomerLedger.aggregate([
+    { $match: { ...match, transactionType: 'discount_allowed', referenceId: { $in: [null, undefined] } } },
+    { $group: { _id: null, total: { $sum: '$credit' } } },
+  ]);
+  const [discountAllocated] = await CustomerPayment.aggregate([
+    {
+      $match: {
+        customer: toObjectId(customer),
+        status: 'posted',
+        direction: 'discount',
+        ...(organizationId ? { organizationId: toObjectId(organizationId) } : {}),
+        ...(branchId ? { branchId: toObjectId(branchId) } : {}),
+      },
+    },
+    { $group: { _id: null, allocated: { $sum: '$allocatedTotal' }, recorded: { $sum: '$amount' } } },
+  ]);
+  const discountsOnAccount = Money.roundMoney(
+    Math.max(0, (discountLedger?.total || 0) - (discountAllocated?.allocated || 0))
+  );
+  // Discount rows that never got an allocation record at all (repair can settle these).
+  const unallocatedDiscounts = Money.roundMoney(
+    Math.max(0, (discountLedger?.total || 0) - (discountAllocated?.recorded || 0))
+  );
+
+  const explained = Money.roundMoney(summary.availableCredit + unallocatedPayments + returnCredits + discountsOnAccount);
   const unexplained = Money.roundMoney(summary.totalOutstanding - explained - ledgerBalance);
   const fixableAmount = Money.roundMoney(unallocatedPayments + returnCredits);
 
@@ -371,6 +398,8 @@ const getCustomerReconciliation = async ({ organizationId, branchId, customer })
     returnCredits,
     returnCount: returnTotals?.unappliedCount || 0,
     appliedReturnCredits,
+    discountsOnAccount,
+    unallocatedDiscounts,
     unexplained,
     fixableAmount,
     isReconciled: Math.abs(fixableAmount) <= SETTLEMENT_EPSILON && Math.abs(unexplained) <= SETTLEMENT_EPSILON,
@@ -399,6 +428,7 @@ const repairCustomerAllocations = async ({ organizationId, branchId, customer },
     $or: [
       { transactionType: 'payment_received', referenceId: { $in: [null, undefined] } },
       { transactionType: 'sales_return' },
+      { transactionType: 'discount_allowed' },
     ],
   }).sort({ transactionDate: 1, createdAt: 1 });
 
@@ -903,7 +933,7 @@ const reallocatePayment = async (paymentId, { allocations: manualAllocations = [
 
     payment.allocations = plan.allocations;
     payment.allocatedTotal = plan.allocatedTotal;
-    payment.unappliedAmount = plan.unappliedAmount;
+    payment.unappliedAmount = payment.direction === 'discount' ? 0 : plan.unappliedAmount;
     payment.allocationMode = mode;
     payment.history.push(
       historyEntry('reallocated', user, `Re-applied across ${plan.allocations.length} invoice(s)`, plan.allocatedTotal)
@@ -1010,7 +1040,11 @@ const recordAllocationForLedgerEntry = async (entry, user, { allocationMode = 'f
   if (!entry) return null;
   const isPayment = entry.transactionType === 'payment_received';
   const isReturn = entry.transactionType === 'sales_return';
-  if (!isPayment && !isReturn) return null;
+  // A settlement discount settles open invoices exactly like money would (oldest first) —
+  // but it is never spendable advance credit, so any part with nothing left to settle stays
+  // on the account (see ledgerDiscount.service.js, which refuses discounts above the balance).
+  const isDiscount = entry.transactionType === 'discount_allowed';
+  if (!isPayment && !isReturn && !isDiscount) return null;
   // A payment tied to a source document (an invoice's own paid-at-sale leg) is already
   // reflected on that invoice — allocating it again would settle the same invoice twice.
   // Returns are the opposite: they are ALWAYS tied to their SalesReturn document, which is
@@ -1054,6 +1088,7 @@ const recordAllocationForLedgerEntry = async (entry, user, { allocationMode = 'f
       manualAllocations: [{ invoiceId: String(invoice._id), amount: Math.min(amount, invoice.remainingAmount) }],
     });
   } else {
+    if (isDiscount) direction = 'discount';
     const openInvoices = await getOpenInvoicesForCustomer({
       organizationId: entry.organizationId,
       branchId: entry.branchId,
@@ -1085,7 +1120,7 @@ const recordAllocationForLedgerEntry = async (entry, user, { allocationMode = 'f
     allocatedTotal: plan.allocatedTotal,
     // A return credit is never an "advance": whatever it couldn't put on the invoice stays
     // on the account as the ledger already records it, not as spendable payment credit.
-    unappliedAmount: isReturn ? 0 : plan.unappliedAmount,
+    unappliedAmount: isReturn || isDiscount ? 0 : plan.unappliedAmount,
     status: 'posted',
     customerLedgerEntryId: entry._id,
     history: [
@@ -1094,7 +1129,9 @@ const recordAllocationForLedgerEntry = async (entry, user, { allocationMode = 'f
         user,
         isReturn
           ? `Sales return ${entry.reference || ''} credited ${formatMoney(plan.allocatedTotal)} to invoice ${plan.allocations[0]?.invoiceNumber || ''}`.trim()
-          : `Recorded from the customer ledger — ${formatMoney(amount)} applied across ${plan.allocations.length} invoice(s)`,
+          : isDiscount
+            ? `Discount allowed ${formatMoney(amount)} — settled ${formatMoney(plan.allocatedTotal)} across ${plan.allocations.length} invoice(s)`
+            : `Recorded from the customer ledger — ${formatMoney(amount)} applied across ${plan.allocations.length} invoice(s)`,
         amount
       ),
     ],
@@ -1170,7 +1207,7 @@ const syncAllocationForLedgerEntry = async (entry, user) => {
   payment.referenceNumber = entry.reference || payment.referenceNumber;
   payment.allocations = plan.allocations;
   payment.allocatedTotal = plan.allocatedTotal;
-  payment.unappliedAmount = plan.unappliedAmount;
+  payment.unappliedAmount = payment.direction === 'discount' ? 0 : plan.unappliedAmount;
   payment.history.push(
     historyEntry('reallocated', user, `Ledger entry edited — re-applied across ${plan.allocations.length} invoice(s)`, amount)
   );

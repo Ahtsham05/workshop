@@ -14,13 +14,17 @@ export default function UsersDialogs({setFetch}:any) {
 
   const handleImport = async (
     customers: any[],
-    options?: { duplicateStrategy?: 'skip' | 'update' | 'error' }
+    options?: { duplicateStrategy?: 'skip' | 'update' | 'error'; openingBalanceDate?: string }
   ) => {
     // The per-row breakdown in the response is what the import dialog turns into "row 14
     // could not be saved because…", so it's returned rather than swallowed. The AI card
     // scanner calls this too, without a strategy, and gets the server default.
     const result = await dispatch(
-      bulkAddCustomers({ customers, duplicateStrategy: options?.duplicateStrategy })
+      bulkAddCustomers({
+        customers,
+        duplicateStrategy: options?.duplicateStrategy,
+        openingBalanceDate: options?.openingBalanceDate,
+      })
     )
 
     if (result.meta.requestStatus !== 'fulfilled') {

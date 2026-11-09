@@ -2262,11 +2262,67 @@ const deletePurchaseComment = async (purchaseId, commentId) => {
   return purchase.comments;
 };
 
+// ── Multi-warehouse (services/warehouse.service.js) ─────────────────────────────────────
+// Same contract as invoice.service.js: check the picked warehouse, then mirror the saved
+// purchase into warehouse moves (never throws). A purchase created inside a caller's
+// transaction is mirrored from runPurchasePostCommit, after that caller commits.
+const warehouseService = require('./warehouse.service');
+
+const cleanWarehouseId = (body) => {
+  if (body && 'warehouseId' in body && !body.warehouseId) body.warehouseId = null;
+  return body;
+};
+
+const createPurchaseWithWarehouse = async (purchaseBody, options = {}) => {
+  cleanWarehouseId(purchaseBody);
+  if (purchaseBody && purchaseBody.warehouseId) {
+    await warehouseService.assertDocWarehouse({
+      organizationId: purchaseBody.organizationId,
+      branchId: purchaseBody.branchId,
+      warehouseId: purchaseBody.warehouseId,
+      kind: 'receipt',
+    });
+  }
+  const purchase = await createPurchase(purchaseBody, options);
+  if (purchase && purchase._id && !options.session) await warehouseService.syncPurchase(purchase._id);
+  return purchase;
+};
+
+const runPurchasePostCommitWithWarehouse = async (purchase) => {
+  const result = await runPurchasePostCommit(purchase);
+  if (purchase && purchase._id) await warehouseService.syncPurchase(purchase._id);
+  return result;
+};
+
+const updatePurchaseWithWarehouse = async (purchaseId, updateBody) => {
+  cleanWarehouseId(updateBody);
+  if (updateBody && updateBody.warehouseId) {
+    const current = await Purchase.findById(purchaseId).select('organizationId branchId warehouseId').lean();
+    if (current && String(current.warehouseId || '') !== String(updateBody.warehouseId)) {
+      await warehouseService.assertDocWarehouse({
+        organizationId: current.organizationId,
+        branchId: current.branchId,
+        warehouseId: updateBody.warehouseId,
+        kind: 'receipt',
+      });
+    }
+  }
+  const purchase = await updatePurchaseById(purchaseId, updateBody);
+  await warehouseService.syncPurchase(purchaseId);
+  return purchase;
+};
+
+const deletePurchaseWithWarehouse = async (purchaseId) => {
+  const result = await deletePurchaseById(purchaseId);
+  await warehouseService.syncPurchase(purchaseId);
+  return result;
+};
+
 module.exports = {
   buildPurchaseListMatch,
 
-  createPurchase,
-  runPurchasePostCommit,
+  createPurchase: createPurchaseWithWarehouse,
+  runPurchasePostCommit: runPurchasePostCommitWithWarehouse,
   generateNextPurchaseInvoiceNumber,
   previewNextPurchaseInvoiceNumber,
   queryPurchases,
@@ -2277,8 +2333,8 @@ module.exports = {
   addPurchaseComment,
   deletePurchaseComment,
   getPurchaseById,
-  updatePurchaseById,
-  deletePurchaseById,
+  updatePurchaseById: updatePurchaseWithWarehouse,
+  deletePurchaseById: deletePurchaseWithWarehouse,
   getPurchaseByDate,
   getBulkPriceComparison,
 };

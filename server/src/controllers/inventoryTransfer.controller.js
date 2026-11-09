@@ -62,6 +62,7 @@ const completeTransfer = catchAsync(async (req, res) => {
     transferId: req.params.transferId,
     organizationId,
     completedBy: createdBy,
+    toWarehouseId: req.body?.toWarehouseId || null,
   });
   res.send(transfer);
 });

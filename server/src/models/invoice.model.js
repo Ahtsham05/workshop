@@ -177,6 +177,26 @@ const InvoiceSchema = new mongoose.Schema({
     returnPolicy: { type: String },
     
     // Conversion tracking for pending invoices
+    // Set when this sale went over the customer's credit limit (or hold / overdue rule) and
+    // was approved anyway — who approved it, why, and the numbers at that moment. See
+    // creditControl.service.js. Absent on every sale that stayed within credit.
+    creditOverride: {
+      type: new mongoose.Schema(
+        {
+          approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+          approvedByName: { type: String },
+          approvedAt: { type: Date },
+          reason: { type: String, trim: true },
+          kind: { type: String, enum: ['override', 'warning', 'offline_sale'] },
+          reasons: { type: [String], default: undefined },
+          limit: { type: Number },
+          exposure: { type: Number },
+          excess: { type: Number },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
     isConvertedToBill: { type: Boolean, default: false },
     convertedAt: { type: Date },
     convertedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice' }, // Reference to converted credit invoice
@@ -228,6 +248,9 @@ const InvoiceSchema = new mongoose.Schema({
     // off), distinct from createdBy: the person entering the sale isn't always the one who
     // made it.
     salesmanId: { type: mongoose.Schema.Types.ObjectId, ref: 'SalesmanProfile', default: null, index: true },
+    // Warehouse the goods leave from (multi-warehouse). Unset = the branch's default
+    // warehouse. warehouse.service.js#syncInvoice mirrors the lines into WarehouseMove.
+    warehouseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', default: null },
 
     // Language preference (overrides user setting per invoice)
     language: { type: String, enum: ['en', 'ur'] },

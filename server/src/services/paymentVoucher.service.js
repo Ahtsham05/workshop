@@ -7,6 +7,34 @@ const walletEntryService = require('./walletEntry.service');
 const expenseService = require('./expense.service');
 const supplierLedgerService = require('./supplierLedger.service');
 const voucherEdit = require('./voucherEdit');
+const ledgerDiscountService = require('./ledgerDiscount.service');
+
+/** Discount fields only ever belong on a supplier line (Discount Received). */
+const DISCOUNT_FIELDS = ['discountAmount', 'discountReason', 'discountPercent', 'discountBaseAmount', 'discountApprovalNote', 'discountNote'];
+const lineDiscountFields = (line) =>
+  line.payeeType === 'supplier' && Number(line.discountAmount) > 0
+    ? Object.fromEntries(DISCOUNT_FIELDS.map((key) => [key, key === 'discountAmount' ? Number(line[key]) : line[key] || undefined]))
+    : { discountAmount: 0 };
+const lineDiscountAmount = (line) => (line?.payeeType === 'supplier' ? Number(line.discountAmount) || 0 : 0);
+
+/** Refuse a voucher whose discounts break the rules before anything is written. */
+const preflightDiscounts = async (organizationId, postedLines, ctx = {}, restored = new Map()) => {
+  const supplierLines = postedLines.filter((line) => line.payeeType === 'supplier');
+  if (supplierLines.some((line) => lineDiscountAmount(line) > 0) && !ctx.canGiveDiscount) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'You do not have permission to record discounts');
+  }
+  await ledgerDiscountService.preflightVoucherDiscounts({
+    side: 'supplier',
+    organizationId,
+    canApprove: Boolean(ctx.canApproveDiscount),
+    restored,
+    lines: supplierLines.map((line) => ({
+      partyId: line.supplierId,
+      amount: line.amount,
+      discount: ledgerDiscountService.voucherLineDiscount(line),
+    })),
+  });
+};
 
 const lineDescription = (voucher, line) => `Payment voucher ${voucher.voucherNumber} — ${line.payeeName}${line.description ? ` (${line.description})` : ''}`;
 
@@ -125,7 +153,8 @@ const syncLineCashEntry = async (voucher, line, isCashAccount) => {
  * debited twice. `paymentMethod` uses the same `"Wallet (<name>)"` string convention the
  * existing supplier ledger UI (`ledger-entry-form.tsx`) already sends.
  */
-const syncSupplierLine = async (voucher, line) => {
+const syncSupplierLine = async (voucher, line, ctx = {}) => {
+  const settlementDiscount = ledgerDiscountService.voucherLineDiscount(line);
   const entry = await supplierLedgerService.createLedgerEntry({
     organizationId: voucher.organizationId,
     branchId: voucher.branchId,
@@ -138,7 +167,9 @@ const syncSupplierLine = async (voucher, line) => {
     paymentMethod: `Wallet (${voucher.bankAccountName})`,
     reference: voucher.reference || undefined,
     notes: voucher.notes || '',
-  });
+    ...(settlementDiscount ? { settlementDiscount } : {}),
+  }, { user: ctx.user, canApproveDiscount: ctx.canApproveDiscount });
+  line.discountLedgerEntryId = entry.$locals?.discountEntry?.id || entry.$locals?.discountEntry?._id || undefined;
   return entry._id;
 };
 
@@ -148,7 +179,7 @@ const syncSupplierLine = async (voucher, line) => {
  * fields (number, date, account name, reference, notes, createdBy...), so an edit can pass the
  * voucher as it WILL be (or as it WAS) without touching the stored document.
  */
-const postLine = async (voucher, line, isCashAccount) => {
+const postLine = async (voucher, line, isCashAccount, ctx = {}) => {
   if (line.payeeType === 'expense') {
     await syncLineCashEntry(voucher, line, isCashAccount);
     try {
@@ -158,15 +189,15 @@ const postLine = async (voucher, line, isCashAccount) => {
       throw error;
     }
   } else if (line.payeeType === 'supplier') {
-    line.supplierLedgerEntryId = await syncSupplierLine(voucher, line);
+    line.supplierLedgerEntryId = await syncSupplierLine(voucher, line, ctx);
   } else {
     await syncLineCashEntry(voucher, line, isCashAccount);
   }
 };
 
-const syncVoucherLines = async (voucher, isCashAccount) => {
+const syncVoucherLines = async (voucher, isCashAccount, ctx = {}) => {
   for (const line of voucher.lines) {
-    await postLine(voucher, line, isCashAccount);
+    await postLine(voucher, line, isCashAccount, ctx);
   }
   await voucher.save();
 };
@@ -264,7 +295,7 @@ const resolveLinePayeeName = async (line, orgId, branchId) => {
  * @param {ObjectId} userId
  * @returns {Promise<PaymentVoucher>}
  */
-const createVoucher = async (voucherBody, userId) => {
+const createVoucher = async (voucherBody, userId, ctx = {}) => {
   const wallet = await Wallet.findOne({
     _id: voucherBody.bankAccountId,
     organizationId: voucherBody.organizationId,
@@ -290,10 +321,12 @@ const createVoucher = async (voucherBody, userId) => {
       payeeName,
       amount: Number(line.amount),
       description: line.description || undefined,
+      ...lineDiscountFields(line),
     });
   }
 
   const totalAmount = resolvedLines.reduce((sum, line) => sum + line.amount, 0);
+  await preflightDiscounts(voucherBody.organizationId, resolvedLines, ctx);
   if (totalAmount <= 0) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Voucher total must be greater than zero');
   }
@@ -311,12 +344,13 @@ const createVoucher = async (voucherBody, userId) => {
     bankAccountName: wallet.type,
     lines: resolvedLines,
     totalAmount,
+    totalDiscount: resolvedLines.reduce((sum, line) => sum + lineDiscountAmount(line), 0),
     reference: voucherBody.reference,
     notes: voucherBody.notes,
     createdBy: userId,
   });
 
-  await syncVoucherLines(voucher, wallet.accountType === 'cash');
+  await syncVoucherLines(voucher, wallet.accountType === 'cash', ctx);
 
   return voucher;
 };
@@ -376,7 +410,9 @@ const lineMoneyChanged = (existing, line) =>
   existing.payeeType !== line.payeeType ||
   !voucherEdit.sameAmount(existing.amount, line.amount) ||
   (line.payeeType === 'expense' && !voucherEdit.sameText(existing.category, line.category)) ||
-  (line.payeeType === 'supplier' && !voucherEdit.sameId(existing.supplierId, line.supplierId));
+  (line.payeeType === 'supplier' && !voucherEdit.sameId(existing.supplierId, line.supplierId)) ||
+  !voucherEdit.sameAmount(lineDiscountAmount(existing), lineDiscountAmount(line)) ||
+  (lineDiscountAmount(line) > 0 && !voucherEdit.sameText(existing.discountReason, line.discountReason));
 
 /** Build the stored shape of one submitted line, keeping what is already known about an
  * unchanged supplier instead of asking for it again. */
@@ -400,6 +436,7 @@ const resolveEditedLine = async (input, existing, voucher) => {
     payeeName,
     amount: Number(input.amount),
     description: input.description || undefined,
+    ...lineDiscountFields(input),
   };
 };
 
@@ -419,7 +456,7 @@ const resolveEditedLine = async (input, existing, voucher) => {
  * @param {ObjectId} userId
  * @returns {Promise<PaymentVoucher>}
  */
-const updateVoucher = async (voucherId, scope, body, userId) => {
+const updateVoucher = async (voucherId, scope, body, userId, ctx = {}) => {
   const voucher = await getVoucherById(voucherId, scope);
   if (!voucher) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Payment voucher not found');
@@ -484,11 +521,24 @@ const updateVoucher = async (voucherId, scope, body, userId) => {
     if (pair.existing && !replaced.has(pair)) {
       pair.line.expenseId = pair.existing.expenseId;
       pair.line.supplierLedgerEntryId = pair.existing.supplierLedgerEntryId;
+      pair.line.discountLedgerEntryId = pair.existing.discountLedgerEntryId;
     }
   });
 
   const toReverse = [...plan.removed, ...plan.replaced.map((pair) => pair.existing)];
   const toPost = [...plan.replaced, ...plan.added].map((pair) => pair.line);
+
+  // Discounts checked against the payable as it will be once the old lines are reversed.
+  const restored = new Map();
+  toReverse
+    .filter((line) => line.payeeType === 'supplier')
+    .forEach((line) => {
+      const key = String(line.supplierId);
+      restored.set(key, (restored.get(key) || 0) + Number(line.amount || 0) + lineDiscountAmount(line));
+    });
+  const postSet = new Set([...plan.added, ...plan.replaced]);
+  await preflightDiscounts(organizationId, pairs.filter((pair) => postSet.has(pair)).map((pair) => pair.line), ctx, restored);
+  const totalDiscount = pairs.reduce((sum, pair) => sum + lineDiscountAmount(pair.line), 0);
 
   await voucherEdit.assertLegsNotReconciled({
     organizationId,
@@ -537,11 +587,11 @@ const updateVoucher = async (voucherId, scope, body, userId) => {
       voucherNumber: voucher.voucherNumber,
       previous: {
         reverse: (line) => reverseLine(previousHeader, line),
-        post: (line) => postLine(previousHeader, line, previousIsCash),
+        post: (line) => postLine(previousHeader, line, previousIsCash, { ...ctx, canApproveDiscount: true }),
       },
       next: {
         reverse: (line) => reverseLine(nextHeader, line),
-        post: (line) => postLine(nextHeader, line, nextIsCash),
+        post: (line) => postLine(nextHeader, line, nextIsCash, ctx),
       },
       annotate: (existing, line) => annotateLine(nextHeader, existing, line),
       persist: () =>
@@ -556,6 +606,7 @@ const updateVoucher = async (voucherId, scope, body, userId) => {
               notes: nextNotes,
               lines: pairs.map((pair) => pair.line),
               totalAmount,
+              totalDiscount,
               updatedBy: userId,
             },
           }

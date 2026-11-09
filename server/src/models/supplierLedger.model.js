@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { paginate, toJSON } = require('./plugins');
+const { ledgerDiscountSchema } = require('./schemas/ledgerDiscount.schema');
 
 const supplierLedgerSchema = new mongoose.Schema({
   organizationId: {
@@ -21,7 +22,7 @@ const supplierLedgerSchema = new mongoose.Schema({
   },
   transactionType: {
     type: String,
-    enum: ['purchase', 'payment_made', 'payment_received', 'refund', 'credit_note', 'debit_note', 'adjustment', 'opening_balance', 'purchase_return'],
+    enum: ['purchase', 'payment_made', 'payment_received', 'refund', 'credit_note', 'debit_note', 'adjustment', 'opening_balance', 'purchase_return', 'discount_received'],
     required: true,
   },
   transactionDate: {
@@ -73,6 +74,15 @@ const supplierLedgerSchema = new mongoose.Schema({
   notes: {
     type: String,
   },
+  /** Only on discount_received rows (supplier let us pay less) — see schemas/ledgerDiscount.schema.js. */
+  discount: {
+    type: ledgerDiscountSchema,
+    default: undefined,
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
 }, {
   timestamps: true,
 });
@@ -85,6 +95,8 @@ supplierLedgerSchema.plugin(paginate);
 supplierLedgerSchema.index({ supplier: 1, transactionDate: -1 });
 supplierLedgerSchema.index({ organizationId: 1, branchId: 1 });
 supplierLedgerSchema.index({ supplier: 1, createdAt: -1 });
+supplierLedgerSchema.index({ organizationId: 1, transactionType: 1, transactionDate: -1 });
+supplierLedgerSchema.index({ 'discount.linkedEntryId': 1 }, { sparse: true });
 
 const SupplierLedger = mongoose.model('SupplierLedger', supplierLedgerSchema);
 

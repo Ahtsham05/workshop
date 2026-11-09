@@ -34,9 +34,16 @@ const ACCOUNT_CODES = {
   COMMISSION_INCOME: '4104',
   BILL_INCOME: '4105',
   OTHER_INCOME: '4203',
+  DISCOUNT_RECEIVED: '4201',
   COGS: '5101',
   BILL_LOSS: '5207',
   MISC_EXPENSE: '5303',
+  DISCOUNT_ALLOWED: '5304',
+  // Direct (trading) expenses — freight inward, carriage, factory power, direct labour.
+  // Sits under 5100 Cost of Sales so it reduces GROSS profit, unlike indirect
+  // (operating/administrative) expenses which only reduce net profit.
+  DIRECT_EXPENSE: '5103',
+  COST_OF_SALES_GROUP: '5100',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -210,6 +217,7 @@ const buildRetailTree = (base) => [
     { code: '5100', name: 'Cost of Sales', level: 1, children: [
       { code: '5101', name: 'Cost of Goods Sold', isGroup: false, level: 2 },
       { code: '5102', name: 'Purchase Discount', isGroup: false, level: 2 },
+      { code: '5103', name: 'Direct Expenses', isGroup: false, level: 2 },
     ]},
     { code: '5200', name: 'Operating Expenses', level: 1, children: [
       { code: '5201', name: 'Rent', isGroup: false, level: 2 },
@@ -224,6 +232,7 @@ const buildRetailTree = (base) => [
       { code: '5301', name: 'Marketing & Advertising', isGroup: false, level: 2 },
       { code: '5302', name: 'Bank Charges', isGroup: false, level: 2 },
       { code: '5303', name: 'Miscellaneous Expense', isGroup: false, level: 2 },
+      { code: '5304', name: 'Discount Allowed', isGroup: false, level: 2 },
     ]},
   ]},
 ];
@@ -350,6 +359,90 @@ const ensureInputTaxRecoverableAccount = async (scope) => {
     isSystem: true,
     createdBy: enriched.createdBy,
   });
+};
+
+/**
+ * Make sure a fixed posting account exists for an org whose chart was seeded before that
+ * account was added to the template (e.g. Discount Allowed, 2026-11). Same idea as
+ * ensureInputTaxRecoverableAccount, for any leaf under an existing group.
+ */
+const ensureSystemLeafAccount = async (scope, { code, name, parentCode }) => {
+  const enriched = await enrichScope(scope);
+  if (normalizeBusinessType(enriched.businessType) === 'school') return null;
+
+  const filter = getTenantFilter(enriched);
+  const exists = await AccountHead.findOne({ ...filter, code });
+  if (exists) return exists;
+
+  const parent = await AccountHead.findOne({ ...filter, code: parentCode });
+  if (!parent) return null;
+
+  return AccountHead.create({
+    ...filter,
+    code,
+    name,
+    rootType: parent.rootType,
+    balanceType: parent.balanceType,
+    parentId: parent._id,
+    level: (parent.level || 0) + 1,
+    isGroup: false,
+    isSystem: true,
+    createdBy: enriched.createdBy,
+  });
+};
+
+const DIRECT_EXPENSE_ACCOUNT_NAME = 'Direct Expenses';
+
+/**
+ * The ledger that direct expenses post to: a leaf under 5100 Cost of Sales. Orgs seeded
+ * before it existed get it created on first use. Found by NAME under the group first (not
+ * just by code), because an org may already have made its own account at 5103 — that one
+ * is left alone and the new head takes the next free 51xx code instead.
+ * Returns null when the chart has no Cost of Sales group (school charts), so the caller
+ * falls back to the general expense account.
+ */
+const ensureDirectExpenseAccount = async (scope) => {
+  const enriched = await enrichScope(scope);
+  if (normalizeBusinessType(enriched.businessType) === 'school') return null;
+  const filter = getTenantFilter(enriched);
+  const parent = await AccountHead.findOne({ ...filter, code: ACCOUNT_CODES.COST_OF_SALES_GROUP });
+  if (!parent || parent.rootType !== 'EXPENSE') return null;
+
+  const byName = await AccountHead.findOne({
+    ...filter,
+    parentId: parent._id,
+    isGroup: false,
+    name: DIRECT_EXPENSE_ACCOUNT_NAME,
+  });
+  if (byName) return byName;
+
+  const taken = new Set(
+    (await AccountHead.find({ ...filter, code: { $regex: /^51\d\d$/ } }).select('code').lean()).map((a) => a.code)
+  );
+  let code = ACCOUNT_CODES.DIRECT_EXPENSE;
+  for (let n = Number(ACCOUNT_CODES.DIRECT_EXPENSE); taken.has(code) && n < 5200; n += 1) code = String(n + 1);
+  if (taken.has(code) || Number(code) >= 5200) return null;
+
+  try {
+    return await AccountHead.create({
+      ...filter,
+      code,
+      name: DIRECT_EXPENSE_ACCOUNT_NAME,
+      rootType: parent.rootType,
+      balanceType: parent.balanceType,
+      parentId: parent._id,
+      level: (parent.level || 0) + 1,
+      isGroup: false,
+      isSystem: true,
+      createdBy: enriched.createdBy,
+    });
+  } catch (err) {
+    // Two expenses posting at once can both try to create it — take the winner's.
+    if (err && err.code === 11000) {
+      return AccountHead.findOne({ ...filter, parentId: parent._id, name: DIRECT_EXPENSE_ACCOUNT_NAME });
+    }
+    throw err;
+  }
 };
 
 /**
@@ -2097,16 +2190,94 @@ const postSupplierPayment = async (scope, { amount, paymentMethod, walletType, l
 };
 
 /**
+ * Discount allowed to a customer on their account (settlement / cash discount, rebate,
+ * write-off). No money moves — the receivable shrinks and the business carries the cost.
+ *   Dr Discount Allowed (expense)      Cr Accounts Receivable
+ */
+const postCustomerDiscount = async (scope, { amount, ledgerId, customerId, description, date }) => {
+  if (!ledgerId) return null;
+  return repostForReference(scope, 'CustomerLedger', ledgerId, 'DISCOUNT_ALLOWED', async () => {
+    const amt = round2(amount);
+    if (amt <= 0) return null;
+    await ensureSeeded(scope);
+    const [discAcc, arAcc] = await Promise.all([
+      ensureSystemLeafAccount(scope, { code: ACCOUNT_CODES.DISCOUNT_ALLOWED, name: 'Discount Allowed', parentCode: '5300' }),
+      getCustomerReceivableAccount(scope, customerId),
+    ]);
+    if (!discAcc || !arAcc) return null;
+    return {
+      date: date || new Date(),
+      narration: description || 'Discount allowed to customer',
+      lines: [
+        { accountId: discAcc._id, debit: amt, credit: 0, description: 'Discount allowed' },
+        { accountId: arAcc._id, debit: 0, credit: amt, description: 'Receivable reduced by discount' },
+      ],
+    };
+  });
+};
+
+/**
+ * Discount received from a supplier on our account with them. No money moves — the payable
+ * shrinks and the saving is income.
+ *   Dr Accounts Payable      Cr Discount Received (other income)
+ */
+const postSupplierDiscount = async (scope, { amount, ledgerId, supplierId, description, date }) => {
+  if (!ledgerId) return null;
+  return repostForReference(scope, 'SupplierLedger', ledgerId, 'DISCOUNT_RECEIVED', async () => {
+    const amt = round2(amount);
+    if (amt <= 0) return null;
+    await ensureSeeded(scope);
+    const [apAcc, discAcc] = await Promise.all([
+      getSupplierPayableAccount(scope, supplierId),
+      ensureSystemLeafAccount(scope, { code: ACCOUNT_CODES.DISCOUNT_RECEIVED, name: 'Discount Received', parentCode: '4200' }),
+    ]);
+    if (!discAcc || !apAcc) return null;
+    return {
+      date: date || new Date(),
+      narration: description || 'Discount received from supplier',
+      lines: [
+        { accountId: apAcc._id, debit: amt, credit: 0, description: 'Payable reduced by discount' },
+        { accountId: discAcc._id, debit: 0, credit: amt, description: 'Discount received' },
+      ],
+    };
+  });
+};
+
+/**
+ * The expense ledger an expense debits:
+ *   1. the category's own mapped account (any non-group EXPENSE head), when set and found;
+ *   2. Direct Expenses (under Cost of Sales) for a direct expense;
+ *   3. Miscellaneous Expense otherwise — the account every expense used before
+ *      direct/indirect existed, so indirect expenses post exactly as they always did.
+ */
+const resolveExpenseAccount = async (scope, { expenseAccountCode, expenseNature }) => {
+  if (expenseAccountCode) {
+    const mapped = await AccountHead.findOne({
+      ...getTenantFilter(scope),
+      code: expenseAccountCode,
+      isGroup: false,
+      rootType: 'EXPENSE',
+    });
+    if (mapped) return mapped;
+  }
+  if (expenseNature === 'direct') {
+    const direct = await ensureDirectExpenseAccount(scope);
+    if (direct) return direct;
+  }
+  return findAccount(scope, ACCOUNT_CODES.MISC_EXPENSE);
+};
+
+/**
  * General (non-school) expense.
  *   Dr Expense account      Cr Cash/Bank/Wallet
  */
-const postGeneralExpense = async (scope, { amount, paymentMethod, walletType, expenseAccountCode, expenseId, description, date }) => {
-  if (!expenseId) return postExpenseAdHoc(scope, { amount, paymentMethod, walletType, expenseAccountCode, description, date });
+const postGeneralExpense = async (scope, { amount, paymentMethod, walletType, expenseAccountCode, expenseNature, expenseId, description, date }) => {
+  if (!expenseId) return postExpenseAdHoc(scope, { amount, paymentMethod, walletType, expenseAccountCode, expenseNature, description, date });
   return repostForReference(scope, 'Expense', expenseId, 'EXPENSE', async () => {
     const amt = round2(amount);
     if (amt <= 0) return null;
     const [expAcc, payAcc] = await Promise.all([
-      findAccount(scope, expenseAccountCode || ACCOUNT_CODES.MISC_EXPENSE),
+      resolveExpenseAccount(scope, { expenseAccountCode, expenseNature }),
       resolvePaymentAccount(scope, paymentMethod, walletType),
     ]);
     if (!expAcc || !payAcc) return null;
@@ -2114,19 +2285,19 @@ const postGeneralExpense = async (scope, { amount, paymentMethod, walletType, ex
       date: date || new Date(),
       narration: description || 'Expense',
       lines: [
-        { accountId: expAcc._id, debit: amt, credit: 0, description: 'Expense' },
+        { accountId: expAcc._id, debit: amt, credit: 0, description: expenseNature === 'direct' ? 'Direct expense' : 'Expense' },
         { accountId: payAcc._id, debit: 0, credit: amt, description: 'Paid' },
       ],
     };
   });
 };
 
-const postExpenseAdHoc = async (scope, { amount, paymentMethod, walletType, expenseAccountCode, description, date }) => {
+const postExpenseAdHoc = async (scope, { amount, paymentMethod, walletType, expenseAccountCode, expenseNature, description, date }) => {
   await ensureSeeded(scope);
   const amt = round2(amount);
   if (amt <= 0) return null;
   const [expAcc, payAcc] = await Promise.all([
-    findAccount(scope, expenseAccountCode || ACCOUNT_CODES.MISC_EXPENSE),
+    resolveExpenseAccount(scope, { expenseAccountCode, expenseNature }),
     resolvePaymentAccount(scope, paymentMethod, walletType),
   ]);
   if (!expAcc || !payAcc) return null;
@@ -2327,7 +2498,10 @@ module.exports = {
   postPurchase,
   postCustomerPayment,
   postSupplierPayment,
+  postCustomerDiscount,
+  postSupplierDiscount,
   postGeneralExpense,
+  ensureDirectExpenseAccount,
   postSalesReturn,
   postPurchaseReturn,
   removePostingsForReference,

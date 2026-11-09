@@ -23,6 +23,10 @@ import {
 } from '../utils/ledger-list-view';
 import { usePersistedListState } from '@/hooks/use-persisted-list-state';
 import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { CREDIT_STATUS_META } from '@/features/customers/credit/credit-utils';
+import { useLedgerStatus } from '@/features/ledger-alerts/hooks/use-ledger-alerts';
+import { LedgerColorLegend } from '@/features/ledger-alerts/components/ledger-color-legend';
+import { describeDays, matchesLedgerFilter, type LedgerColorFilter } from '@/features/ledger-alerts/lib/ledger-colors';
 
 const VIEW_MODE_KEY = 'customer-ledger-list-view';
 const LIST_STATE_KEY = 'customer-ledger-list-state';
@@ -56,6 +60,10 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
   } = usePersistedListState(LIST_STATE_KEY);
   const [totalPages, setTotalPages] = useState(1);
   const [bulkSmsOpen, setBulkSmsOpen] = useState(false);
+  const [creditFilter, setCreditFilter] = useState<'all' | 'over' | 'near' | 'hold' | 'limited'>('all');
+  // Overdue colour filter (Settings → Due Dates & Ledger Colours).
+  const [colorFilter, setColorFilter] = useState<LedgerColorFilter>('all');
+  const { board: ledgerBoard, agingFor, toneFor, settings: ledgerSettings, colorsOn } = useLedgerStatus();
   const branchName = useBranchName();
   const [viewMode, setViewMode] = useState<LedgerListViewMode>(() =>
     getStoredLedgerListViewMode(VIEW_MODE_KEY),
@@ -104,6 +112,15 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
         'Phone': customer.phone || '-',
         'Balance': customer.balance.toFixed(2),
         'Status': customer.balance > 0 ? 'Receivable' : customer.balance < 0 ? 'Payable' : 'Settled',
+        'Credit Limit': customer.credit?.hasLimit ? customer.credit.limit : '',
+        'Credit Used': customer.credit?.hasLimit ? customer.credit.exposure : '',
+        'Credit Available': customer.credit?.hasLimit ? customer.credit.available ?? '' : '',
+        'Credit Status': customer.credit ? CREDIT_STATUS_META[customer.credit.status].label : '',
+        'Due Status': (() => {
+          const aging = agingFor(customer._id);
+          return aging ? describeDays(aging.state, aging.oldestDaysOverdue, null) : '';
+        })(),
+        'Overdue Amount': agingFor(customer._id)?.overdueAmount || '',
         'Last Transaction': customer.lastTransactionDate || '-'
       }));
 
@@ -118,12 +135,35 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
     }
   };
 
-  const filteredCustomers = customers.filter((customer) =>
-    ledgerRowMatchesSearch(searchTerm, customer),
+  // Credit filter chips — only shown once some customer has a limit or is on hold.
+  const creditCounts = {
+    over: customers.filter((c) => c.credit?.status === 'over').length,
+    near: customers.filter((c) => c.credit?.status === 'near').length,
+    hold: customers.filter((c) => c.credit?.status === 'hold').length,
+    limited: customers.filter((c) => c.credit?.hasLimit || c.credit?.onHold).length,
+  };
+  // A colour filter spans ALL pages: the server pages this list, so the matching customers
+  // come from the ledger status board instead (it already holds every customer who owes).
+  const colorRows: CustomerWithBalance[] | null =
+    colorFilter !== 'all' && ledgerBoard
+      ? ledgerBoard.rows
+          .filter((row) => matchesLedgerFilter(row, colorFilter))
+          .map((row) => {
+            const onPage = customers.find((c) => c._id === row.customerId);
+            return onPage ?? { _id: row.customerId, name: row.name, nameUrdu: row.nameUrdu, phone: row.phone, whatsapp: row.whatsapp, balance: row.balance };
+          })
+      : null;
+  const filteredCustomers = (colorRows ?? customers).filter(
+    (customer) =>
+      ledgerRowMatchesSearch(searchTerm, customer) &&
+      (creditFilter === 'all' ||
+        (creditFilter === 'limited'
+          ? Boolean(customer.credit?.hasLimit || customer.credit?.onHold)
+          : customer.credit?.status === creditFilter)),
   );
 
   const pagination = {
-    totalPage: totalPages,
+    totalPage: colorRows ? 1 : totalPages,
     currentPage,
     setCurrentPage,
     limit,
@@ -134,14 +174,15 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
   };
 
   return (
-    <Card>
-      <CardHeader>
+    // Phones: no card chrome or side padding, so the list uses the full screen width.
+    <Card className="max-sm:gap-4 max-sm:rounded-none max-sm:border-0 max-sm:bg-transparent max-sm:py-0 max-sm:shadow-none">
+      <CardHeader className="max-sm:px-0">
         <div>
           <CardTitle>{t('Customer Ledger')}</CardTitle>
           <CardDescription>{t('View all customer balances and transactions')}</CardDescription>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="max-sm:px-0">
         <LedgerListToolbar
           searchInput={searchTerm}
           onSearchChange={setSearchTerm}
@@ -149,18 +190,64 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           actions={
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setBulkSmsOpen(true)} className="shrink-0">
-                <MessageSquare className="w-4 h-4 mr-2" />
-                {t('Send SMS')}
+            <div className="flex items-center gap-2 max-sm:grid max-sm:grid-cols-3">
+              <Button variant="outline" onClick={() => setBulkSmsOpen(true)} className="shrink-0 max-sm:w-full max-sm:px-2">
+                <MessageSquare className="w-4 h-4 mr-2 max-sm:mr-1.5" />
+                <span className="max-sm:hidden">{t('Send SMS')}</span>
+                <span className="sm:hidden">{t('SMS')}</span>
               </Button>
-              <BalanceSheetPrintButton party="customer" rows={customers} disabled={loading} />
-              <Button variant="outline" onClick={exportToExcel} className="shrink-0">
-                <Download className="w-4 h-4 mr-2" />
-                {t('Export to Excel')}
+              <BalanceSheetPrintButton
+                party="customer"
+                rows={ledgerSettings.printColors ? customers.map((c) => ({ ...c, color: toneFor(c._id)?.color ?? null })) : customers}
+                colorLegend={ledgerSettings.printColors && colorsOn ? [
+                  ...ledgerSettings.bands.map((b) => ({ label: b.label, color: b.color })),
+                  { label: ledgerSettings.dueTodayLabel, color: ledgerSettings.dueTodayColor },
+                  ...(ledgerSettings.dueSoonEnabled ? [{ label: ledgerSettings.dueSoonLabel, color: ledgerSettings.dueSoonColor }] : []),
+                ] : undefined}
+                disabled={loading}
+              />
+              <Button variant="outline" onClick={exportToExcel} className="shrink-0 max-sm:w-full max-sm:px-2">
+                <Download className="w-4 h-4 mr-2 max-sm:mr-1.5" />
+                <span className="max-sm:hidden">{t('Export to Excel')}</span>
+                <span className="sm:hidden">{t('Excel')}</span>
               </Button>
             </div>
           }
+        />
+
+        {creditCounts.limited > 0 && (
+          // Phones: one swipeable row instead of three wrapped lines of chips.
+          <div className="mb-3 flex flex-wrap items-center gap-1.5 max-sm:no-scrollbar max-sm:flex-nowrap max-sm:overflow-x-auto">
+            <span className="mr-1 shrink-0 text-xs text-muted-foreground">{t('Credit')}:</span>
+            {(
+              [
+                ['all', t('All'), customers.length],
+                ['over', t('Over limit'), creditCounts.over],
+                ['near', t('Near limit'), creditCounts.near],
+                ['hold', t('On hold'), creditCounts.hold],
+                ['limited', t('Has a limit'), creditCounts.limited],
+              ] as const
+            ).map(([key, label, count]) => (
+              <Button
+                key={key}
+                type="button"
+                size="sm"
+                variant={creditFilter === key ? 'default' : 'outline'}
+                className="h-7 shrink-0 px-2.5 text-xs"
+                onClick={() => setCreditFilter(key)}
+              >
+                {label}
+                <span className="ml-1 tabular-nums opacity-70">{count}</span>
+              </Button>
+            ))}
+          </div>
+        )}
+
+        <LedgerColorLegend
+          board={ledgerBoard}
+          filter={colorFilter}
+          onFilterChange={setColorFilter}
+          className="mb-3 max-sm:no-scrollbar max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:py-1 max-sm:[&>*]:shrink-0"
         />
 
         {viewMode === 'cards' ? (

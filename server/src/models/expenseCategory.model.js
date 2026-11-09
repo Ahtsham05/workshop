@@ -30,6 +30,37 @@ const expenseCategorySchema = new mongoose.Schema(
       type: String,
       default: '#6366f1',
     },
+    // Accounting classification (business_expense categories only).
+    //   direct   — cost of producing/acquiring what is sold (freight & carriage inward,
+    //              direct labour, factory power, packing). Reduces GROSS profit and posts
+    //              under Cost of Sales.
+    //   indirect — cost of running the business (rent, office salaries, marketing,
+    //              utilities). Reduces NET profit only.
+    // Defaults to indirect: every expense was treated that way before this field existed,
+    // so existing categories and reports keep exactly their old figures.
+    expenseNature: {
+      type: String,
+      enum: ['direct', 'indirect'],
+      default: 'indirect',
+    },
+    // Optional chart-of-accounts leaf (an EXPENSE head's code) this category posts to.
+    // Empty → Direct Expenses (direct) or Miscellaneous Expense (indirect).
+    accountCode: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    description: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    // Inactive = retired: hidden from the Add Expense picker, but its saved expenses,
+    // reports and books are untouched (unlike deleting). Missing on old rows = active.
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
     isDefault: {
       type: Boolean,
       default: false,

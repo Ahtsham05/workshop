@@ -559,10 +559,41 @@ const deletePurchaseReturn = async (id) => {
   await PurchaseReturn.findByIdAndDelete(id);
 };
 
+// ── Multi-warehouse (services/warehouse.service.js) ─────────────────────────────────────
+// Goods leave the picked warehouse (default: the one the purchase was received into);
+// rejecting or deleting the return puts them back. Mirrors never throw.
+const warehouseService = require('./warehouse.service');
+
+const createPurchaseReturnWithWarehouse = async (returnBody) => {
+  if (returnBody && 'warehouseId' in returnBody && !returnBody.warehouseId) returnBody.warehouseId = null;
+  if (returnBody && returnBody.warehouseId) {
+    await warehouseService.assertDocWarehouse({ organizationId: returnBody.organizationId, branchId: returnBody.branchId, warehouseId: returnBody.warehouseId });
+  }
+  const ret = await createPurchaseReturn(returnBody);
+  const id = ret && (ret._id || ret.id);
+  if (id) {
+    if (returnBody && returnBody.warehouseId) await PurchaseReturn.updateOne({ _id: id }, { $set: { warehouseId: returnBody.warehouseId } });
+    await warehouseService.syncPurchaseReturn(id);
+  }
+  return ret;
+};
+
+const updatePurchaseReturnStatusWithWarehouse = async (id, ...rest) => {
+  const ret = await updatePurchaseReturnStatus(id, ...rest);
+  await warehouseService.syncPurchaseReturn(id);
+  return ret;
+};
+
+const deletePurchaseReturnWithWarehouse = async (id, ...rest) => {
+  const result = await deletePurchaseReturn(id, ...rest);
+  await warehouseService.syncPurchaseReturn(id);
+  return result;
+};
+
 module.exports = {
-  createPurchaseReturn,
+  createPurchaseReturn: createPurchaseReturnWithWarehouse,
   queryPurchaseReturns,
   getPurchaseReturnById,
-  updatePurchaseReturnStatus,
-  deletePurchaseReturn,
+  updatePurchaseReturnStatus: updatePurchaseReturnStatusWithWarehouse,
+  deletePurchaseReturn: deletePurchaseReturnWithWarehouse,
 };

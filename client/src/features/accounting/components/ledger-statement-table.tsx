@@ -10,6 +10,9 @@ import {
   type LedgerParty,
 } from '@/features/accounting/utils/ledger-display';
 import { formatAppDate } from '@/lib/date-format'
+import { useMemo } from 'react';
+import { BadgePercent } from 'lucide-react';
+import { discountReasonLabel, indexLinkedDiscounts, isDiscountType } from '@/features/ledger-discounts/lib/ledger-discounts';
 
 export interface LedgerStatementEntry {
   id?: string;
@@ -24,6 +27,15 @@ export interface LedgerStatementEntry {
   debit: number;
   credit: number;
   balance: number;
+  /** Only on discount_allowed / discount_received rows. */
+  discount?: {
+    reason?: string;
+    percent?: number;
+    linkedEntryId?: string;
+    linkedAmount?: number;
+    overLimit?: boolean;
+    approvalNote?: string;
+  } | null;
 }
 
 interface Props {
@@ -61,6 +73,8 @@ export function LedgerStatementTable({
   const pageCredit = entries.reduce((sum, e) => sum + (Number(e.credit) || 0), 0);
   const closingBalance =
     entries.length > 0 ? entries[entries.length - 1].balance : balanceBeforePage;
+  // Payment row id → the discount given with it, so the payment can say "+ discount".
+  const linkedDiscounts = useMemo(() => indexLinkedDiscounts(entries), [entries]);
 
   return (
     <div className='overflow-x-auto rounded-lg border'>
@@ -95,6 +109,8 @@ export function LedgerStatementTable({
           {entries.map((entry, index) => {
             const rowNumber = pageOffset + index + 1;
             const settledCash = isSettledCashRow(entry.debit, entry.credit);
+            const isDiscount = isDiscountType(entry.transactionType);
+            const withDiscount = linkedDiscounts.get(String(entry.id || entry._id));
 
             return (
               <TableRow
@@ -102,6 +118,7 @@ export function LedgerStatementTable({
                 className={cn(
                   index % 2 === 1 && 'bg-muted/15',
                   settledCash && 'bg-sky-50/70 dark:bg-sky-950/20',
+                  isDiscount && 'bg-amber-50/70 dark:bg-amber-950/20',
                 )}
               >
                 <TableCell className='text-center text-xs text-muted-foreground tabular-nums'>
@@ -115,8 +132,32 @@ export function LedgerStatementTable({
                     {getTypeLabel(entry)}
                   </Badge>
                 </TableCell>
-                <TableCell className='max-w-[240px] truncate text-sm' title={entry.description}>
-                  {entry.description}
+                <TableCell className='max-w-[260px] text-sm' title={entry.description}>
+                  <div className='truncate'>{entry.description}</div>
+                  {isDiscount && (
+                    <div className='mt-0.5 flex flex-wrap items-center gap-1'>
+                      <span className='inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'>
+                        <BadgePercent className='h-3 w-3' />
+                        {discountReasonLabel(entry.discount?.reason, t)}
+                        {entry.discount?.percent ? ` · ${entry.discount.percent}%` : ''}
+                      </span>
+                      {entry.discount?.overLimit && (
+                        <span
+                          className='rounded bg-orange-100 px-1.5 py-0.5 text-[11px] font-medium text-orange-800 dark:bg-orange-900/40 dark:text-orange-300'
+                          title={entry.discount?.approvalNote || ''}
+                        >
+                          {t('Approved over limit')}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {withDiscount && (
+                    <div className='mt-0.5 text-[11px] text-amber-700 dark:text-amber-400'>
+                      + {t('discount')} {formatMoney((Number(withDiscount.credit) || 0) + (Number(withDiscount.debit) || 0))}
+                      {' = '}
+                      {t('settled')} {formatMoney((Number(entry.credit) || 0) + (Number(entry.debit) || 0) + (Number(withDiscount.credit) || 0) + (Number(withDiscount.debit) || 0))}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell className='text-sm'>
                   {renderReference ? renderReference(entry) : entry.reference || '—'}
