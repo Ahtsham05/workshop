@@ -10,7 +10,8 @@ import { useGetWarehouseQuantitiesQuery } from '@/stores/warehouse.api'
 export function useWarehouseQuantities(warehouseId: string | null | undefined, kind: 'sale' | 'receipt' | 'any' = 'sale') {
   const { visible, warehouses, defaultId } = useWarehousePicker(kind)
   const active = Boolean(visible && warehouseId && warehouseId !== defaultId)
-  const { data } = useGetWarehouseQuantitiesQuery(warehouseId || '', { skip: !active, refetchOnMountOrArgChange: 15 })
+  // Refreshed when stock moves (catalog-invalidation.middleware.ts) — no timer.
+  const { data } = useGetWarehouseQuantitiesQuery(warehouseId || '', { skip: !active })
   const warehouse = useMemo(() => warehouses.find((w) => w.id === warehouseId) || null, [warehouses, warehouseId])
   const qtyOf = useCallback(
     (productId?: string | null, variantId?: string | null): number | null => {

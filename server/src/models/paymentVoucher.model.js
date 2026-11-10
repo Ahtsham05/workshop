@@ -13,7 +13,9 @@ const paymentVoucherLineSchema = new mongoose.Schema(
   {
     payeeType: {
       type: String,
-      enum: ['expense', 'supplier', 'other'],
+      // 'customer' = cash handed to a customer (refund of their advance, or money lent/paid out
+      // to them) — posted as a Payment Made (debit) on their Customer Ledger.
+      enum: ['expense', 'supplier', 'customer', 'other'],
       required: true,
     },
     // Expense category name when payeeType === 'expense' (free text — Expense.category
@@ -31,8 +33,17 @@ const paymentVoucherLineSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    // Display name of who was paid: the expense category label, the supplier's name, or the
-    // free-text payee name entered for 'other'.
+    customerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Customer',
+    },
+    // Denormalized customer name so the line stays readable if the customer is later renamed.
+    customerName: {
+      type: String,
+      trim: true,
+    },
+    // Display name of who was paid: the expense category label, the supplier's or customer's
+    // name, or the free-text payee name entered for 'other'.
     payeeName: {
       type: String,
       required: true,
@@ -56,6 +67,27 @@ const paymentVoucherLineSchema = new mongoose.Schema(
     supplierLedgerEntryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'SupplierLedger',
+    },
+    // Set after customerLedgerService.createLedgerEntry succeeds (payeeType === 'customer' only).
+    customerLedgerEntryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'CustomerLedger',
+    },
+    // Advance credit (unapplied CustomerPayment money) this customer payout used up, per source
+    // payment — a payout first returns money the customer had paid us in advance, so that credit
+    // can't later be applied to an invoice too. Given back exactly as drawn when the line is
+    // reversed (edit / delete).
+    creditDraws: {
+      type: [
+        new mongoose.Schema(
+          {
+            paymentId: { type: mongoose.Schema.Types.ObjectId, ref: 'CustomerPayment', required: true },
+            amount: { type: Number, required: true, min: 0 },
+          },
+          { _id: false }
+        ),
+      ],
+      default: undefined,
     },
     // Settlement discount given with this line (supplier lines — Discount Received) — its own ledger row, linked to the
     // payment row (services/ledgerDiscount.service.js). Cash moved = amount; settled = amount +

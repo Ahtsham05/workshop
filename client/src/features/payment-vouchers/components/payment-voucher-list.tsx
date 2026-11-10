@@ -173,7 +173,7 @@ export function PaymentVoucherList({ onCreateVoucher }: Props) {
   const queryArgs = {
     search: search || undefined,
     bankAccountId: bankAccountId === ALL_ACCOUNTS ? undefined : bankAccountId,
-    payeeType: payeeType === ALL_TYPES ? undefined : (payeeType as 'expense' | 'supplier' | 'other'),
+    payeeType: payeeType === ALL_TYPES ? undefined : (payeeType as 'expense' | 'supplier' | 'customer' | 'other'),
     startDate,
     endDate,
     minAmount,
@@ -352,6 +352,7 @@ export function PaymentVoucherList({ onCreateVoucher }: Props) {
                 <SelectItem value={ALL_TYPES}>All types</SelectItem>
                 <SelectItem value='expense'>Expense</SelectItem>
                 <SelectItem value='supplier'>Supplier</SelectItem>
+                <SelectItem value='customer'>Customer</SelectItem>
                 <SelectItem value='other'>Other</SelectItem>
               </SelectContent>
             </Select>

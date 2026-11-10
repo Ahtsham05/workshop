@@ -600,3 +600,76 @@ describe('warehouse reports', () => {
     expect(moves.map((m) => [m.moveType, m.quantity])).toEqual([['adjustment', 10]]);
   });
 });
+
+describe('optimisations keep results identical', () => {
+  const { ProductVariant, Inventory, WarehouseStock, Invoice } = require('../../src/models');
+
+  test('re-saving an unchanged invoice writes nothing; a real change still re-mirrors', async () => {
+    await enable();
+    const shop = await createWh({ name: 'Shop Floor' });
+    const [mainWh] = (await api().get('/v1/warehouses')).body.filter((w) => w.isDefault);
+    await move({ fromWarehouseId: mainWh.id, toWarehouseId: shop.id, lines: [{ productId: String(fan._id), quantity: 10 }] });
+    const inv = await sale([[fan, 3]], { warehouseId: shop.id });
+    const before = await WarehouseMove.find({ refId: inv._id }).lean();
+    const insertSpy = jest.spyOn(WarehouseMove, 'insertMany');
+    const bulkSpy = jest.spyOn(WarehouseStock, 'bulkWrite');
+    await warehouseService.syncInvoice(inv._id);
+    expect(insertSpy).not.toHaveBeenCalled();
+    expect(bulkSpy).not.toHaveBeenCalled();
+    expect((await WarehouseMove.find({ refId: inv._id }).lean()).map((m) => String(m._id))).toEqual(before.map((m) => String(m._id)));
+    insertSpy.mockRestore();
+    bulkSpy.mockRestore();
+    // Quantity 3 → 5 (as an invoice edit would): re-mirrored with the new figure.
+    await Invoice.updateOne({ _id: inv._id }, { $set: { 'items.0.quantity': 5, 'items.0.stockQuantity': 5 } });
+    await Product.updateOne({ _id: fan._id }, { $inc: { stockQuantity: -2 } });
+    await warehouseService.syncInvoice(inv._id);
+    expect(await stockOf(fan._id)).toEqual({ WH: 490, SHO: 5, branch: 495 });
+  });
+
+  test('module off: a new invoice costs no warehouse queries at all', async () => {
+    const findSpy = jest.spyOn(WarehouseMove, 'find');
+    const existsSpy = jest.spyOn(WarehouseMove, 'exists');
+    await sale([[fan, 1]]); // warms the settings cache
+    findSpy.mockClear();
+    existsSpy.mockClear();
+    const inv = await sale([[fan, 1]]);
+    expect(findSpy).not.toHaveBeenCalled();
+    expect(existsSpy).not.toHaveBeenCalled();
+    await invoiceService.deleteInvoiceById(inv._id);
+    expect(existsSpy).toHaveBeenCalledTimes(1); // deleting: one existence check
+    expect(findSpy).not.toHaveBeenCalled();
+    findSpy.mockRestore();
+    existsSpy.mockRestore();
+  });
+
+  test('narrowed stock searches find the same rows (name, SKU, variant colour) and quantities agree', async () => {
+    await enable();
+    const shop = await createWh({ name: 'Shop Floor' });
+    const [mainWh] = (await api().get('/v1/warehouses')).body.filter((w) => w.isDefault);
+    await Product.updateOne({ _id: cable._id }, { $set: { sku: 'CBL-77' } });
+    const shirt = await Product.create({ organizationId: ORG, branchId: main._id, name: 'Shirt', stockQuantity: 0, cost: 5, price: 9, hasVariants: true });
+    const [red] = await ProductVariant.create([{ organizationId: ORG, branchId: main._id, productId: shirt._id, sku: 'SH-R', attributes: { Color: 'Red' }, price: 9, cost: 5 }]);
+    await Inventory.create({ organizationId: ORG, branchId: main._id, productId: shirt._id, variantId: red._id, quantity: 6 });
+    await move({ fromWarehouseId: mainWh.id, toWarehouseId: shop.id, lines: [{ productId: String(fan._id), quantity: 7 }, { productId: String(shirt._id), variantId: String(red._id), quantity: 2 }] });
+    const names = async (q) => (await api().get(`/v1/warehouses/stock?${q}`)).body.results.map((r) => r.name).sort();
+    expect(await names('search=cbl-7&filter=all')).toEqual(['Cable']);
+    expect(await names('search=red&filter=all')).toEqual(['Shirt — Red']);
+    expect(await names(`warehouseId=${shop.id}&filter=in_stock`)).toEqual(['Fan', 'Shirt — Red']);
+    expect(await names('filter=in_stock')).toEqual(['Cable', 'Fan', 'Shirt — Red']);
+    const shopRow = (await api().get(`/v1/warehouses/stock?warehouseId=${shop.id}&search=fan`)).body.results[0];
+    expect(shopRow).toMatchObject({ quantity: 7, positionQty: 7 });
+    const q = (await api().get(`/v1/warehouses/${shop.id}/quantities`)).body;
+    expect(q).toEqual({ [String(fan._id)]: 7, [`v:${red._id}`]: 2 });
+    const qMain = (await api().get(`/v1/warehouses/${mainWh.id}/quantities`)).body;
+    expect(qMain[String(fan._id)]).toBe(493);
+    expect(qMain[`v:${red._id}`]).toBe(4);
+  });
+
+  test('turning the module on takes effect immediately despite the settings cache', async () => {
+    expect((await warehouseService.getSettings(ORG)).enabled).toBe(false);
+    await enable();
+    expect((await warehouseService.getSettings(ORG)).enabled).toBe(true);
+    const inv = await sale([[fan, 1]]);
+    expect(await WarehouseMove.countDocuments({ refId: inv._id })).toBe(1); // default-warehouse history recorded
+  });
+});

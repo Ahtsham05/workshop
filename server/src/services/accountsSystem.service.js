@@ -2165,6 +2165,32 @@ const postCustomerPayment = async (scope, { amount, paymentMethod, walletType, l
 };
 
 /**
+ * Money paid OUT to a customer — a refund of their advance, or cash handed to them on account.
+ * Either way their receivable goes up (or the credit we owed them goes down).
+ *   Dr Accounts Receivable      Cr Cash/Bank/Wallet
+ */
+const postCustomerPaymentOut = async (scope, { amount, paymentMethod, walletType, ledgerId, customerId, description, date }) => {
+  if (!ledgerId) return null;
+  return repostForReference(scope, 'CustomerLedger', ledgerId, 'PAYMENT_OUT', async () => {
+    const amt = round2(amount);
+    if (amt <= 0) return null;
+    const [payAcc, arAcc] = await Promise.all([
+      resolvePaymentAccount(scope, paymentMethod, walletType),
+      getCustomerReceivableAccount(scope, customerId),
+    ]);
+    if (!payAcc || !arAcc) return null;
+    return {
+      date: date || new Date(),
+      narration: description || 'Payment made to customer',
+      lines: [
+        { accountId: arAcc._id, debit: amt, credit: 0, description: 'Paid to customer' },
+        { accountId: payAcc._id, debit: 0, credit: amt, description: 'Payment made' },
+      ],
+    };
+  });
+};
+
+/**
  * Supplier payment made against their account (payable settled).
  *   Dr Accounts Payable      Cr Cash/Bank/Wallet
  */
@@ -2497,6 +2523,7 @@ module.exports = {
   postSaleCogs,
   postPurchase,
   postCustomerPayment,
+  postCustomerPaymentOut,
   postSupplierPayment,
   postCustomerDiscount,
   postSupplierDiscount,

@@ -35,12 +35,13 @@ const VIEW_PERMISSIONS: PermissionKey[] = ['viewWarehouses', 'manageWarehouses',
  * warehouse that accepts this kind of document. When false the form must not send
  * `warehouseId` at all, so the server keeps whatever the document already had.
  */
-export function useWarehousePicker(kind: Kind) {
+export function useWarehousePicker(kind: Kind, { active = true }: { active?: boolean } = {}) {
   const settings = useWarehouseSettings()
   const { hasAnyPermission } = usePermissions()
   const ask = kind === 'sale' ? settings.askOnSales : kind === 'receipt' ? settings.askOnPurchases : true
-  const wanted = settings.enabled && ask && hasAnyPermission(...VIEW_PERMISSIONS)
-  const { data: warehouses = [] } = useGetWarehousesQuery({ includeInactive: false }, { skip: !wanted })
+  const wanted = active && settings.enabled && ask && hasAnyPermission(...VIEW_PERMISSIONS)
+  // The shared list (one cache entry app-wide); archived warehouses are filtered here.
+  const { data: warehouses = [] } = useGetWarehousesQuery(undefined, { skip: !wanted })
   const usable = useMemo(
     () =>
       warehouses.filter(
@@ -49,7 +50,8 @@ export function useWarehousePicker(kind: Kind) {
     [warehouses, kind]
   )
   const defaultId = useMemo(() => warehouses.find((w) => w.isDefault)?.id || '', [warehouses])
-  return { visible: wanted && usable.length > 1, warehouses: usable, defaultId }
+  // `all` (archived included) is for naming warehouses on old documents.
+  return { visible: wanted && usable.length > 1, warehouses: usable, all: warehouses, defaultId }
 }
 
 interface WarehouseFieldProps {

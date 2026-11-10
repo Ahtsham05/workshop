@@ -1,4 +1,4 @@
-import { AlertTriangle, Loader2, PencilLine } from 'lucide-react'
+import { AlertTriangle, Copy, Loader2, PencilLine } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -13,6 +13,7 @@ import { useLanguage } from '@/context/language-context'
 import {
   formatBusinessDate,
   formatBusinessDateTime,
+  getBusinessClockParts,
   toBusinessCalendarDate,
 } from '@/lib/business-timezone'
 import { formatMoney, formatSignedMoney } from '@/lib/pkr-denominations'
@@ -27,6 +28,9 @@ type Props = {
 
 const signedTone = (value: number) =>
   value === 0 ? 'text-muted-foreground' : value > 0 ? 'text-emerald-600' : 'text-red-600'
+
+/** "11:13:51 AM" in Pakistan time — seconds matter when telling two saves apart. */
+const formatBusinessTime = (value: string) => getBusinessClockParts(new Date(value)).time
 
 /** Typed in on one day but dated another — easy to miss when reconciling a day's count. */
 const isDatedOtherDay = (entry: CashMovementEntry) =>
@@ -50,6 +54,9 @@ export function CashMovementsPanel({ data, isLoading, emptyLabel }: Props) {
   if (!data) return null
 
   const unexplained = data.unexplainedChange ?? 0
+  const duplicates = data.possibleDuplicates ?? []
+  const repeatOfById = new Map(duplicates.map((d) => [d.id, d.repeatOf.createdAt]))
+  const duplicateNet = duplicates.reduce((sum, d) => sum + (d.type === 'income' ? d.amount : -d.amount), 0)
 
   return (
     <div className='space-y-4'>
@@ -79,6 +86,36 @@ export function CashMovementsPanel({ data, isLoading, emptyLabel }: Props) {
           <AlertDescription>
             {t('Expected cash moved')} {formatSignedMoney(unexplained)}{' '}
             {t('beyond the entries listed below — an entry recorded before this period was edited or deleted during it.')}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {duplicates.length > 0 ? (
+        <Alert className='border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200'>
+          <Copy className='h-4 w-4 !text-amber-600' />
+          <AlertTitle>
+            {t('Check these first: possible double entries')} ({formatSignedMoney(duplicateNet)})
+          </AlertTitle>
+          <AlertDescription className='space-y-2'>
+            <p>
+              {t('The same amount was saved again a few seconds or minutes after an identical entry. If it really happened only once, delete one copy — it adds to Expected cash without any money in the drawer.')}
+            </p>
+            <ul className='space-y-1'>
+              {duplicates.map((d) => (
+                <li key={d.id} className='flex flex-wrap items-baseline gap-x-2 text-sm'>
+                  <span className='font-medium tabular-nums'>
+                    {formatSignedMoney(d.type === 'income' ? d.amount : -d.amount)}
+                  </span>
+                  <span>
+                    {t(d.module)} · {d.description || '-'}
+                  </span>
+                  <span className='text-xs opacity-80'>
+                    {t('saved at')} {formatBusinessTime(d.repeatOf.createdAt)} {t('and again at')}{' '}
+                    {formatBusinessTime(d.createdAt)}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </AlertDescription>
         </Alert>
       ) : null}
@@ -136,9 +173,17 @@ export function CashMovementsPanel({ data, isLoading, emptyLabel }: Props) {
             </TableHeader>
             <TableBody>
               {data.entries.map((entry) => (
-                <TableRow key={entry.id}>
+                <TableRow
+                  key={entry.id}
+                  className={repeatOfById.has(entry.id) ? 'bg-amber-50 dark:bg-amber-950/30' : undefined}
+                >
                   <TableCell className='whitespace-nowrap'>
                     {formatBusinessDateTime(entry.createdAt)}
+                    {repeatOfById.has(entry.id) ? (
+                      <Badge variant='outline' className='ml-2 border-amber-400 text-amber-700'>
+                        {t('Same as')} {formatBusinessTime(repeatOfById.get(entry.id)!)}
+                      </Badge>
+                    ) : null}
                     {isDatedOtherDay(entry) ? (
                       <Badge variant='outline' className='ml-2 border-amber-300 text-amber-700'>
                         {t('Dated')} {formatBusinessDate(entry.date)}

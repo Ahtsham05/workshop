@@ -95,3 +95,11 @@ export const compactMoney = (formatMoney: (n: number) => string, n: number) => {
   const short = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 2 }).format(n)
   return digits ? exact.replace(digits.trim(), short) : short
 }
+
+/**
+ * Stock views shared by several users (overview, stock lists, transfers, moves) re-check
+ * the server when reopened after this many seconds. Changes made on this device refresh
+ * them right away through catalog-invalidation.middleware.ts; this only catches other
+ * users' work, without polling.
+ */
+export const SHARED_STOCK_REFRESH_S = 120

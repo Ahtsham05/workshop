@@ -17,11 +17,11 @@ export function WarehouseTag({
   /** Detail views: also name the default warehouse (an unset id means the default). */
   showDefault?: boolean
 }) {
-  const { visible, warehouses, defaultId } = useWarehousePicker('any')
+  const { visible, all, defaultId } = useWarehousePicker('any')
   const raw = typeof warehouseId === 'string' ? warehouseId : warehouseId?.id || warehouseId?._id || ''
   const id = raw || (showDefault ? defaultId : '')
   if (!visible || !id || (id === defaultId && !showDefault)) return null
-  const wh = warehouses.find((w) => w.id === id)
+  const wh = all.find((w) => w.id === id)
   if (!wh) return null
   return (
     <span className={cn('inline-flex max-w-[160px] items-center gap-1 truncate rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground', className)} title={wh.name}>

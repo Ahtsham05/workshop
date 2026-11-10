@@ -143,7 +143,8 @@ export function ReorderRulesPanel({ warehouseId, isDefault }: { warehouseId: str
 
 function RuleDialog({ warehouseId, rule, open, onOpenChange }: { warehouseId: string; rule: ReorderRule | null; open: boolean; onOpenChange: (o: boolean) => void }) {
   const { t } = useLanguage()
-  const { data: warehouses = [] } = useGetWarehousesQuery({ includeInactive: false }, { skip: !open })
+  const { data: allWarehouses = [] } = useGetWarehousesQuery(undefined, { skip: !open })
+  const warehouses = useMemo(() => allWarehouses.filter((w) => w.isActive), [allWarehouses])
   const [save, { isLoading }] = useSaveReorderRulesMutation()
   const [product, setProduct] = useState<{ productId: string; variantId: string | null; name: string } | null>(null)
   const [search, setSearch] = useState('')

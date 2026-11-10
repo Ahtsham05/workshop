@@ -9,7 +9,7 @@ import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { cn } from '@/lib/utils'
 import { useGetTransfersQuery, type TransferStatus, type WarehouseTransfer } from '@/stores/warehouse.api'
-import { TRANSFER_STATUS_META, WAREHOUSE_PERMS, fmtDate, fmtQty } from '../lib/labels'
+import { TRANSFER_STATUS_META, WAREHOUSE_PERMS, fmtDate, fmtQty, SHARED_STOCK_REFRESH_S } from '../lib/labels'
 import { TransferDialog, type TransferPreset } from './transfer-dialog'
 import { TransferSheet } from './transfer-sheet'
 
@@ -41,7 +41,7 @@ export function TransfersTab({ warehouseId, preset }: { warehouseId?: string; pr
     return () => clearTimeout(id)
   }, [search])
 
-  const { data, isFetching } = useGetTransfersQuery({ status: status || undefined, warehouseId, search: debounced || undefined, page, limit })
+  const { data, isFetching } = useGetTransfersQuery({ status: status || undefined, warehouseId, search: debounced || undefined, page, limit }, { refetchOnMountOrArgChange: SHARED_STOCK_REFRESH_S })
 
   return (
     <div className='space-y-4'>

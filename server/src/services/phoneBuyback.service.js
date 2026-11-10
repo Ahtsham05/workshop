@@ -497,7 +497,7 @@ const createBuybackWithWarehouse = async (body) => {
   const id = doc && (doc._id || doc.id);
   if (id) {
     if (body && body.warehouseId) await PhoneBuyback.updateOne({ _id: id }, { $set: { warehouseId: body.warehouseId } });
-    await warehouseService.syncBuyback(id);
+    await warehouseService.syncBuyback(id, warehouseService.saveHint(body, { isNew: true }));
   }
   return doc;
 };
@@ -510,7 +510,7 @@ const updateBuybackWithWarehouse = async (id, ...rest) => {
 
 const deleteBuybackWithWarehouse = async (id, ...rest) => {
   const result = await deleteBuyback(id, ...rest);
-  await warehouseService.syncBuyback(id);
+  await warehouseService.syncBuyback(id, { deleted: true });
   return result;
 };
 

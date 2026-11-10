@@ -232,6 +232,51 @@ const getCustomerCreditBalance = async ({ organizationId, branchId, customer }) 
   return Money.roundMoney(result?.credit || 0);
 };
 
+/**
+ * Cash paid out to a customer (a Payment Voucher customer line) first hands back money they
+ * had paid us in advance. Use up to `amount` of their unapplied credit, oldest first, so the
+ * same money can't also be applied to an invoice later. Returns exactly what was taken from
+ * each payment, which `restoreCustomerCredit` gives back.
+ * @returns {Promise<Array<{paymentId: ObjectId, amount: number}>>}
+ */
+const drawCustomerCredit = async ({ organizationId, branchId, customer, amount, source, user }) => {
+  let remainingMinor = Money.toMinorUnits(amount);
+  if (!(remainingMinor > 0)) return [];
+
+  const match = { customer: toObjectId(customer), status: 'posted', direction: 'payment', unappliedAmount: { $gt: 0 } };
+  if (organizationId) match.organizationId = toObjectId(organizationId);
+  if (branchId) match.branchId = toObjectId(branchId);
+  const sources = await CustomerPayment.find(match).sort({ paymentDate: 1, createdAt: 1 });
+
+  const draws = [];
+  for (const payment of sources) {
+    if (remainingMinor <= 0) break;
+    const takeMinor = Math.min(Money.toMinorUnits(payment.unappliedAmount), remainingMinor);
+    if (takeMinor <= 0) continue;
+    const taken = Money.fromMinorUnits(takeMinor);
+    payment.unappliedAmount = Money.fromMinorUnits(Money.toMinorUnits(payment.unappliedAmount) - takeMinor);
+    payment.history.push(historyEntry('refunded', user, `${formatMoney(taken)} paid back via ${source}`, taken));
+    await payment.save();
+    draws.push({ paymentId: payment._id, amount: taken });
+    remainingMinor -= takeMinor;
+  }
+  return draws;
+};
+
+/** Give back credit taken by `drawCustomerCredit`, to the same payments it came from. */
+const restoreCustomerCredit = async (draws = [], { source, user } = {}) => {
+  for (const draw of draws || []) {
+    const amount = Money.roundMoney(draw.amount);
+    if (!(amount > 0)) continue;
+    const payment = await CustomerPayment.findById(draw.paymentId);
+    // A voided payment has no credit to hold any more — nothing to give back to it.
+    if (!payment || payment.status !== 'posted') continue;
+    payment.unappliedAmount = Money.addMoney(payment.unappliedAmount, amount);
+    payment.history.push(historyEntry('voided', user, `Credit restored — ${source} reversed`, amount));
+    await payment.save();
+  }
+};
+
 /** Totals the payment screens lead with: what's owed, what's sitting as credit. */
 const getCustomerAccountSummary = async ({ organizationId, branchId, customer }) => {
   const match = { customerId: { $in: toCustomerIdMatchValues(customer) }, type: { $in: ['cash', 'credit'] } };
@@ -1279,6 +1324,8 @@ module.exports = {
   planAllocation,
   previewAllocation,
   getCustomerCreditBalance,
+  drawCustomerCredit,
+  restoreCustomerCredit,
   getCustomerAccountSummary,
   getCustomerReconciliation,
   repairCustomerAllocations,

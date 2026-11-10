@@ -3,6 +3,7 @@ import { batchApi } from './batch.api'
 import { manufacturingApi } from './manufacturing.api'
 import { productApi } from './product.api'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
+import { WAREHOUSE_STOCK_TAGS, warehouseApi } from './warehouse.api'
 
 // Product writes that change what the Invoice/Purchase/POS pickers show (new product,
 // edited price/stock/active flag, delete, variants, branch sync, price updates, imports).
@@ -29,6 +30,26 @@ const WRITE_APIS = new Set([
 
 const DEBOUNCE_MS = 300
 
+// Multi-warehouse: anything that moves stock (sale, purchase, return, adjustment, branch
+// transfer, count, manufacturing, mobile-shop sale / buyback, product stock edit) makes the
+// warehouse stock views stale. Their caches are refreshed here — once, debounced — instead
+// of polling on a timer: an open warehouse screen refetches, a closed one just drops its
+// cache and fetches fresh next time it opens.
+const STOCK_WRITE_APIS = new Set([
+  'invoiceApi',
+  'purchaseApi',
+  'returnsApi',
+  'stockAdjustmentApi',
+  'inventoryTransferApi',
+  'purchaseOrderApi',
+  'mobileShopApi',
+  'usedPhoneBuybackApi',
+  'newPhonesApi',
+  'manufacturingApi',
+  'stockCountApi',
+  'warrantyClaimApi',
+])
+
 /**
  * Invalidates the purchasable catalog after any product write. Debounced so a burst
  * (bulk import + variants + branch sync) costs one refetch. invalidateTags only
@@ -37,8 +58,16 @@ const DEBOUNCE_MS = 300
  */
 export const catalogInvalidationMiddleware: Middleware = (api) => {
   let timer: ReturnType<typeof setTimeout> | undefined
+  let warehouseTimer: ReturnType<typeof setTimeout> | undefined
+  const staleWarehouseStock = () => {
+    if (warehouseTimer) clearTimeout(warehouseTimer)
+    warehouseTimer = setTimeout(() => {
+      api.dispatch(warehouseApi.util.invalidateTags([...WAREHOUSE_STOCK_TAGS]))
+    }, DEBOUNCE_MS)
+  }
   return (next) => (action) => {
     const result = next(action)
+    if (purchaseCatalogApi.util.invalidateTags.match(action)) staleWarehouseStock()
     // Whatever refreshes the Invoice/Purchase pickers (a sale, purchase, return, stock
     // adjustment or product edit moved stock) refreshes the manufacturing pickers' cached
     // catalog too — and only that entry, not the manufacturing product lists.
@@ -70,6 +99,9 @@ export const catalogInvalidationMiddleware: Middleware = (api) => {
             ])
           )
         }
+      }
+      if (!isQueryResult && (STOCK_WRITE_APIS.has(rtkqApi) || isWrite || WRITE_THUNKS.has(type.replace(/\/fulfilled$/, '')))) {
+        staleWarehouseStock()
       }
       if (isWrite) {
         if (timer) clearTimeout(timer)

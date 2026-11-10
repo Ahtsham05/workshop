@@ -20,7 +20,7 @@ import { StockTab } from './components/stock-tab'
 import { TransferDialog } from './components/transfer-dialog'
 import { TransfersTab } from './components/transfers-tab'
 import { WarehouseFormDialog } from './components/warehouse-form-dialog'
-import { WAREHOUSE_PERMS, WAREHOUSE_TYPE_LABELS, colorOf, compactMoney, fmtQty } from './lib/labels'
+import { WAREHOUSE_PERMS, WAREHOUSE_TYPE_LABELS, colorOf, compactMoney, fmtQty, SHARED_STOCK_REFRESH_S } from './lib/labels'
 
 type Tab = 'stock' | 'locations' | 'rules' | 'transfers' | 'moves'
 
@@ -39,7 +39,7 @@ export default function WarehouseDetail() {
   const canTransfer = hasAnyPermission(...WAREHOUSE_PERMS.transfer)
 
   const { data: wh, isLoading, error } = useGetWarehouseQuery(warehouseId)
-  const { data: overview } = useGetWarehouseOverviewQuery()
+  const { data: overview } = useGetWarehouseOverviewQuery(undefined, { refetchOnMountOrArgChange: SHARED_STOCK_REFRESH_S })
   const card = overview?.warehouses.find((w) => w.id === warehouseId)
   const [editing, setEditing] = useState(false)
   const [moving, setMoving] = useState(false)

@@ -11,7 +11,7 @@ import { usePermissions } from '@/context/permission-context'
 import { useFormatMoney } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
 import { useGetWarehouseStockQuery, useLazyGetWarehouseStockQuery, type StockQuery, type StockRow } from '@/stores/warehouse.api'
-import { WAREHOUSE_PERMS, colorOf, fmtQty } from '../lib/labels'
+import { WAREHOUSE_PERMS, colorOf, fmtQty, SHARED_STOCK_REFRESH_S } from '../lib/labels'
 import { TransferDialog, type TransferPreset } from './transfer-dialog'
 
 type Filter = NonNullable<StockQuery['filter']>
@@ -43,7 +43,7 @@ export function StockTab({ warehouseId }: { warehouseId?: string }) {
   }, [search])
 
   const query: StockQuery = { warehouseId, search: debounced || undefined, filter, sortBy, page, limit }
-  const { data, isFetching } = useGetWarehouseStockQuery(query)
+  const { data, isFetching } = useGetWarehouseStockQuery(query, { refetchOnMountOrArgChange: SHARED_STOCK_REFRESH_S })
   const [fetchAll, { isFetching: exporting }] = useLazyGetWarehouseStockQuery()
   const showCost = data?.totals.value !== undefined
   const warehouses = useMemo(() => (data?.warehouses || []).filter((w) => w.isActive || w.id === warehouseId), [data, warehouseId])

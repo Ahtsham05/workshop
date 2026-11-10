@@ -35,6 +35,24 @@ const postCustomerLedgerToAccounts = (entry) => {
     ).catch(() => {});
     return;
   }
+  // Standalone money paid OUT to a customer (Payment Voucher customer line, customer refund).
+  // Rows tied to a source document (sales return, etc.) are posted by that document.
+  if (entry.transactionType === 'payment_made' && !entry.referenceId) {
+    const amount = Number(entry.debit) || 0;
+    if (amount <= 0 || isCreditLedgerPayment(entry.paymentMethod)) return;
+    runSerial(entry.organizationId, () =>
+      accountsSystemService.postCustomerPaymentOut(scope, {
+        amount,
+        paymentMethod: entry.paymentMethod,
+        walletType: parseWalletType(entry.paymentMethod) || undefined,
+        ledgerId: entry._id,
+        customerId: entry.customer,
+        description: entry.description || 'Payment made to customer',
+        date: entry.transactionDate,
+      })
+    ).catch(() => {});
+    return;
+  }
   const isManualPayment = entry.transactionType === 'payment_received' && !entry.referenceId;
   if (!isManualPayment) return;
   runSerial(entry.organizationId, () =>

@@ -59,7 +59,8 @@ const availKey = (l: { productId: string; variantId: string | null }) => (l.vari
 export function TransferDialog({ open, onOpenChange, transfer, preset, onSaved }: Props) {
   const { t } = useLanguage()
   const settings = useWarehouseSettings()
-  const { data: warehouses = [] } = useGetWarehousesQuery({ includeInactive: false }, { skip: !open })
+  const { data: allWarehouses = [] } = useGetWarehousesQuery(undefined, { skip: !open })
+  const warehouses = useMemo(() => allWarehouses.filter((w) => w.isActive), [allWarehouses])
   const [create, { isLoading: creating }] = useCreateTransferMutation()
   const [update, { isLoading: updating }] = useUpdateTransferMutation()
   const busy = creating || updating
@@ -140,14 +141,46 @@ export function TransferDialog({ open, onOpenChange, transfer, preset, onSaved }
     { skip: !open || !from || !debounced }
   )
 
-  const productIds = useMemo(() => [...new Set(lines.map((l) => l.productId))], [lines])
-  const { data: availability } = useGetAvailabilityQuery(
-    { warehouseId: from, locationId: fromLocId, productIds },
-    { skip: !open || !from || productIds.length === 0 }
+  // Stock at the source, per line. A product picked from the search already arrives with
+  // its quantity at this exact source (the search ran against it), so only lines that came
+  // from elsewhere — a draft being edited, a preset product, a changed source — are looked
+  // up, and only those. Keyed by source so switching back and forth costs nothing.
+  type Avail = { position: number; warehouse: number }
+  const sourceKey = `${from}|${fromLocId || ''}`
+  const [known, setKnown] = useState<Record<string, Record<string, Avail>>>({})
+  // Stock moves while the dialog is closed — start each opening fresh.
+  useEffect(() => {
+    if (open) setKnown({})
+  }, [open])
+  const knownHere = known[sourceKey] || {}
+  const missingIds = useMemo(
+    () => [...new Set(lines.filter((l) => !knownHere[availKey(l)]).map((l) => l.productId))],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lines, sourceKey, known]
   )
+  const { data: fetched } = useGetAvailabilityQuery(
+    { warehouseId: from, locationId: fromLocId, productIds: missingIds },
+    { skip: !open || !from || missingIds.length === 0 }
+  )
+  useEffect(() => {
+    if (!fetched) return
+    setKnown((prev) => {
+      const here = { ...(prev[sourceKey] || {}) }
+      Object.entries(fetched).forEach(([k, v]) => {
+        here[k] = { position: v.position, warehouse: v.warehouse }
+      })
+      return { ...prev, [sourceKey]: here }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetched])
+  const availability = knownHere
 
-  const addProduct = (row: Pick<StockRow, 'productId' | 'variantId' | 'name' | 'sku' | 'unit'>) => {
+  const addProduct = (row: Pick<StockRow, 'productId' | 'variantId' | 'name' | 'sku' | 'unit' | 'positionQty' | 'byWarehouse'>) => {
     const key = lineKey(row.productId, row.variantId)
+    if (row.positionQty !== undefined) {
+      const k = availKey({ productId: row.productId, variantId: row.variantId })
+      setKnown((prev) => ({ ...prev, [sourceKey]: { ...(prev[sourceKey] || {}), [k]: { position: row.positionQty as number, warehouse: row.byWarehouse?.[from] ?? (row.positionQty as number) } } }))
+    }
     setLines((prev) =>
       prev.some((l) => l.key === key)
         ? prev

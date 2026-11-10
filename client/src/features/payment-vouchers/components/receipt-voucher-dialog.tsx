@@ -48,19 +48,8 @@ import { usePartyBalances } from '../hooks/use-party-balances'
 import { PartyLedgerQuickView, type QuickViewParty } from './party-ledger-quick-view'
 import { BalanceAfterCell, LineDiscountCell, PartyBalanceCell, QuickLedgerButton } from './voucher-line-cells'
 import { lineAccountState, type LineAccountState } from '../utils/line-account-state'
+import { normalizeCustomersList } from '../utils/customer-list'
 
-type CustomerLike = { id?: string; _id?: string; name: string; phone?: string; picture?: { url?: string; publicId?: string } }
-
-/** Redux customer slice may store `{ results }` or a plain array — same shape as suppliers. */
-function normalizeCustomersList(data: unknown): CustomerLike[] {
-  if (!data) return []
-  if (Array.isArray(data)) return data as CustomerLike[]
-  if (typeof data === 'object' && data !== null) {
-    const results = (data as { results?: unknown }).results
-    if (Array.isArray(results)) return results as CustomerLike[]
-  }
-  return []
-}
 
 const lineSchema = z
   .object({

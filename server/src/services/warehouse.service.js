@@ -17,6 +17,7 @@
  *   • Turning the module off only hides it. Documents that already name a warehouse keep
  *     syncing, so turning it back on finds everything where it was.
  */
+const { AsyncLocalStorage } = require('async_hooks');
 const mongoose = require('mongoose');
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
@@ -74,16 +75,38 @@ const normalizeSettings = (raw = {}) => {
   return out;
 };
 
+// Settings are read on every invoice / purchase / return save (is the module on?), every
+// quick-links request and every transfer — cached per process for SETTINGS_TTL_MS and
+// replaced the moment they are saved here. Another server process sees a change within
+// the TTL; until then it only decides whether to record default-warehouse history (stock
+// itself never depends on it: the default warehouse is derived).
+const SETTINGS_TTL_MS = 30 * 1000;
+const settingsCache = new Map(); // orgId → { at, value | promise }
+
 const getSettings = async (organizationId) => {
   if (!organizationId) return { ...DEFAULT_SETTINGS };
-  const org = await Organization.findById(organizationId).select('warehouseSettings').lean();
-  return normalizeSettings(org?.warehouseSettings || {});
+  const key = String(organizationId);
+  const hit = settingsCache.get(key);
+  if (hit && Date.now() - hit.at < SETTINGS_TTL_MS) return { ...(await hit.value) };
+  const value = Organization.findById(organizationId)
+    .select('warehouseSettings')
+    .lean()
+    .then((org) => normalizeSettings(org?.warehouseSettings || {}));
+  settingsCache.set(key, { at: Date.now(), value });
+  try {
+    return { ...(await value) };
+  } catch (error) {
+    settingsCache.delete(key);
+    throw error;
+  }
 };
 
 const updateSettings = async (organizationId, body = {}, userId) => {
+  settingsCache.delete(String(organizationId));
   const current = await getSettings(organizationId);
   const next = normalizeSettings({ ...current, ...body });
   await Organization.updateOne({ _id: organizationId }, { $set: { warehouseSettings: next } });
+  settingsCache.set(String(organizationId), { at: Date.now(), value: Promise.resolve(next) });
   // Turning it on: every branch gets its main warehouse right away, holding all its stock.
   if (next.enabled && !current.enabled) {
     const branches = await Branch.find({ organizationId }).select('_id').lean();
@@ -145,17 +168,18 @@ const getWarehouse = async (organizationId, warehouseId) => {
   return wh;
 };
 
+/** One query in the normal case; the default warehouse is created only when missing. */
 const listWarehouses = async ({ organizationId, branchId, includeInactive = true }) => {
   const filter = { organizationId: oid(organizationId) };
-  if (branchId) {
-    filter.branchId = oid(branchId);
-    await ensureDefaultWarehouse(organizationId, branchId);
-  }
+  if (branchId) filter.branchId = oid(branchId);
   if (!includeInactive) filter.isActive = true;
-  return Warehouse.find(filter)
-    .populate('managerId', 'name email')
-    .populate('branchId', 'name')
-    .sort({ isDefault: -1, sortOrder: 1, name: 1 });
+  const find = () => Warehouse.find(filter).sort({ isDefault: -1, sortOrder: 1, name: 1 });
+  const list = await find();
+  if (branchId && !list.some((w) => w.isDefault)) {
+    await ensureDefaultWarehouse(organizationId, branchId);
+    return find();
+  }
+  return list;
 };
 
 const suggestCode = async (organizationId, branchId, name) => {
@@ -434,8 +458,14 @@ const PRODUCT_PROJECTION = 'name sku barcode unit cost price stockQuantity categ
 const computeBranchStock = async ({ organizationId, branchId, includeZero = true, productIds = null }) => {
   const org = oid(organizationId);
   const branch = oid(branchId);
-  const defaultWh = await ensureDefaultWarehouse(organizationId, branchId);
-  const warehouses = await Warehouse.find({ organizationId: org, branchId: branch }).sort({ isDefault: -1, sortOrder: 1, name: 1 }).lean();
+  const listOf = () => Warehouse.find({ organizationId: org, branchId: branch }).sort({ isDefault: -1, sortOrder: 1, name: 1 }).lean();
+  let warehouses = await listOf();
+  let defaultWh = warehouses.find((w) => w.isDefault);
+  if (!defaultWh) {
+    await ensureDefaultWarehouse(organizationId, branchId);
+    warehouses = await listOf();
+    defaultWh = warehouses.find((w) => w.isDefault);
+  }
 
   const quantMatch = { organizationId: org, branchId: branch, quantity: { $ne: 0 } };
   const productFilter = { organizationId: org, branchId: branch };
@@ -551,13 +581,65 @@ const publicWarehouse = (w) => ({
  *                     with a per-bin breakdown.
  *  warehouseId unset → product × warehouse matrix.
  */
+const escapeRegex = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Narrows a stock request to the products that can possibly be in its answer, so a search
+ * keystroke or a non-default warehouse's list doesn't load every product of the branch.
+ * Always a superset of what getStock's own filter keeps; null = no narrowing possible.
+ */
+const candidateProductIds = async ({ organizationId, branchId, term, warehouseId, locationId, filter, defaultWarehouseId }) => {
+  const scope = { organizationId: oid(organizationId), branchId: oid(branchId) };
+  if (term) {
+    // The search must appear inside "name sku barcode". No word of it can span two fields
+    // (they are joined by spaces), so every word sits inside one of them: requiring each word
+    // in some field is a safe superset and far more selective than any single word.
+    // Variant rows also match on their colour / size labels — every variant product stays in.
+    const words = [...new Set(term.split(/\s+/).filter(Boolean))];
+    const fieldsOf = (w) => {
+      const re = new RegExp(escapeRegex(w), 'i');
+      return { $or: [{ name: re }, { sku: re }, { barcode: re }] };
+    };
+    const ids = await Product.find({ ...scope, $or: [{ hasVariants: true }, { $and: words.map(fieldsOf) }] }).distinct('_id');
+    // A huge id list costs more than reading the branch once.
+    return ids.length > 2000 ? null : ids.map(String);
+  }
+  const storedOnly = (filter === 'in_stock' || filter === 'negative') && warehouseId && (locationId || String(warehouseId) !== String(defaultWarehouseId));
+  if (storedOnly) {
+    const match = { ...scope, warehouseId: oid(warehouseId), quantity: { $ne: 0 } };
+    if (locationId) match.locationId = oid(locationId);
+    return (await WarehouseStock.distinct('productId', match)).map(String);
+  }
+  if (filter === 'in_stock' || filter === 'negative' || filter === 'split') {
+    // Default warehouse / all warehouses: a product can only show a non-zero quantity if its
+    // branch total is non-zero, it has variants, or some of it is stored in a warehouse.
+    const [withStock, stored] = await Promise.all([
+      Product.find({ ...scope, $or: [{ stockQuantity: { $ne: 0 } }, { hasVariants: true }] }).distinct('_id'),
+      WarehouseStock.distinct('productId', { ...scope, quantity: { $ne: 0 } }),
+    ]);
+    const ids = [...new Set([...withStock, ...stored].map(String))];
+    // A huge id list costs more than reading the branch once.
+    return ids.length > 2000 ? null : ids;
+  }
+  return null;
+};
+
 const getStock = async ({ organizationId, branchId, query = {}, showCost }) => {
   requireBranch(branchId);
   const { warehouseId, locationId, search = '', filter = 'in_stock', sortBy = 'name', page = 1, limit = 50 } = query;
-  const { warehouses, defaultWarehouseId, rows } = await computeBranchStock({ organizationId, branchId });
-  const locations = await WarehouseLocation.find({ organizationId: oid(organizationId), branchId: oid(branchId) })
-    .select('path warehouseId')
-    .lean();
+  const defaultWh = await Warehouse.findOne({ organizationId: oid(organizationId), branchId: oid(branchId), isDefault: true }).select('_id').lean();
+  const productIds = await candidateProductIds({
+    organizationId,
+    branchId,
+    term: String(search).trim(),
+    warehouseId,
+    locationId,
+    filter,
+    defaultWarehouseId: defaultWh ? String(defaultWh._id) : null,
+  });
+  const { warehouses, defaultWarehouseId, rows } = await computeBranchStock({ organizationId, branchId, productIds });
+  // Bin paths are only shown for one warehouse's list.
+  const locations = warehouseId ? await WarehouseLocation.find({ warehouseId: oid(warehouseId) }).select('path warehouseId').lean() : [];
   const locationPath = new Map(locations.map((l) => [String(l._id), l.path]));
 
   const term = String(search).trim().toLowerCase();
@@ -619,6 +701,9 @@ const getStock = async ({ organizationId, branchId, query = {}, showCost }) => {
       out.value = round(quantity * row.cost);
     }
     if (warehouseId) {
+      // Quantity at the exact position asked for (a bin, or the warehouse's top level) —
+      // what a transfer can take from there; lets the transfer screen skip a lookup.
+      out.positionQty = round(row.byLocation[`${warehouseId}|${locationId || ''}`] || 0);
       out.locations = Object.entries(row.byLocation)
         .filter(([k, v]) => k.startsWith(`${warehouseId}|`) && v !== 0)
         .map(([k, v]) => {
@@ -824,26 +909,32 @@ const quantityReader = async ({ organizationId, branchId, warehouseId }) => {
 
 // ── Moves: apply / sync ──────────────────────────────────────────────────────────────────
 
-/** Applies (sign=+1) or reverses (sign=−1) moves on stored positions. */
-const applyMoves = async (moves, sign) => {
-  if (!moves.length) return;
-  const branchIds = [...new Set(moves.map((m) => String(m.branchId)))];
-  const defaults = await defaultWarehouseByBranch(moves[0].organizationId, branchIds);
+const posKey = (warehouseId, locationId, productId, variantId) => `${warehouseId}|${locationId || ''}|${productId}|${variantId || ''}`;
+
+/**
+ * Applies net quantity changes to stored positions in one bulk write. The default
+ * warehouse's top level is derived (branch total − stored), so changes there are skipped.
+ * `deltas`: Map posKey → { organizationId, branchId, warehouseId, locationId, productId, variantId, qty }.
+ */
+const applyNet = async (deltas) => {
+  const list = [...deltas.values()].filter((d) => round(d.qty) !== 0);
+  if (!list.length) return;
+  const branchIds = [...new Set(list.map((d) => String(d.branchId)))];
+  const defaults = await defaultWarehouseByBranch(list[0].organizationId, branchIds);
   const writes = [];
-  moves.forEach((m) => {
-    const isDerived = !m.locationId && defaults.get(String(m.branchId)) === String(m.warehouseId);
-    if (isDerived || !m.quantity) return;
+  list.forEach((d) => {
+    if (!d.locationId && defaults.get(String(d.branchId)) === String(d.warehouseId)) return;
     writes.push({
       updateOne: {
         filter: {
-          warehouseId: oid(m.warehouseId),
-          locationId: m.locationId ? oid(m.locationId) : null,
-          productId: oid(m.productId),
-          variantId: m.variantId ? oid(m.variantId) : null,
+          warehouseId: oid(d.warehouseId),
+          locationId: d.locationId ? oid(d.locationId) : null,
+          productId: oid(d.productId),
+          variantId: d.variantId ? oid(d.variantId) : null,
         },
         update: {
-          $inc: { quantity: sign * Number(m.quantity) },
-          $setOnInsert: { organizationId: oid(m.organizationId), branchId: oid(m.branchId) },
+          $inc: { quantity: round(d.qty) },
+          $setOnInsert: { organizationId: oid(d.organizationId), branchId: oid(d.branchId) },
         },
         upsert: true,
       },
@@ -852,10 +943,49 @@ const applyMoves = async (moves, sign) => {
   if (writes.length) await WarehouseStock.bulkWrite(writes, { ordered: false });
 };
 
+const addDelta = (deltas, m, sign) => {
+  const k = posKey(m.warehouseId, m.locationId, m.productId, m.variantId);
+  const cur = deltas.get(k) || {
+    organizationId: m.organizationId,
+    branchId: m.branchId,
+    warehouseId: m.warehouseId,
+    locationId: m.locationId || null,
+    productId: m.productId,
+    variantId: m.variantId || null,
+    qty: 0,
+  };
+  cur.qty += sign * Number(m.quantity || 0);
+  deltas.set(k, cur);
+};
+
+/** What makes two moves the same, for "did this document actually change?". */
+const moveSignature = (m) =>
+  [
+    m.warehouseId,
+    m.locationId || '',
+    m.productId,
+    m.variantId || '',
+    m.moveType,
+    round(m.quantity),
+    m.refNumber || '',
+    m.date ? new Date(m.date).getTime() : '',
+    m.counterpartWarehouseId || '',
+    m.counterpartLocationId || '',
+  ]
+    .map(String)
+    .join('|');
+
 /**
- * Replace the moves of one document with `buildMoves()`'s result. Old moves are reversed
- * first so buildMoves sees stock as if the document never existed (it allocates deliveries
- * across bins from that state).
+ * While a document is rebuilt, the stock its own old moves took is "virtually" given back
+ * (position → quantity), so bin allocation sees stock as if the document never existed —
+ * without writing anything first. Async-local: concurrent rebuilds can't see each other's.
+ */
+const virtualStock = new AsyncLocalStorage();
+
+/**
+ * Replace the moves of one document with `buildMoves()`'s result. Nothing is written when
+ * the result is the same as what is stored (an invoice edited for price only, a re-save);
+ * otherwise old moves are replaced and only the net change per position is applied.
  */
 const syncChains = new Map();
 const syncDocumentMoves = (refType, refId, buildMoves) => {
@@ -864,15 +994,21 @@ const syncDocumentMoves = (refType, refId, buildMoves) => {
   const key = `${refType}|${refId}`;
   const run = async () => {
     const existing = await WarehouseMove.find({ refType, refId: oid(refId) }).lean();
-    if (existing.length) {
-      await applyMoves(existing, -1);
-      await WarehouseMove.deleteMany({ refType, refId: oid(refId) });
-    }
-    const next = (await buildMoves()) || [];
-    if (next.length) {
-      await WarehouseMove.insertMany(next, { ordered: false });
-      await applyMoves(next, +1);
-    }
+    const giveBack = new Map();
+    existing.forEach((m) => {
+      const k = posKey(m.warehouseId, m.locationId, m.productId, m.variantId);
+      giveBack.set(k, (giveBack.get(k) || 0) - Number(m.quantity || 0));
+    });
+    const next = (await virtualStock.run(giveBack, () => buildMoves())) || [];
+    const before = existing.map(moveSignature).sort();
+    const after = next.map(moveSignature).sort();
+    if (before.length === after.length && before.every((sig, i) => sig === after[i])) return next.length;
+    const deltas = new Map();
+    existing.forEach((m) => addDelta(deltas, m, -1));
+    next.forEach((m) => addDelta(deltas, m, +1));
+    if (existing.length) await WarehouseMove.deleteMany({ refType, refId: oid(refId) });
+    if (next.length) await WarehouseMove.insertMany(next, { ordered: false });
+    await applyNet(deltas);
     return next.length;
   };
   const prev = syncChains.get(key) || Promise.resolve();
@@ -885,41 +1021,70 @@ const syncDocumentMoves = (refType, refId, buildMoves) => {
 };
 
 /**
- * Split an outgoing quantity across a non-default warehouse's positions: its top level
+ * Split outgoing quantities across a non-default warehouse's positions: its top level
  * first, then bins in path order; whatever is left comes from the top level (may go
  * negative). The default warehouse always delivers from its (derived) top level.
+ * All lines of a document in two queries (positions, bin paths).
+ * Returns Map lineKey → [{ locationId, quantity }].
  */
-const allocateOut = async ({ warehouseId, isDefault, productId, variantId, quantity }) => {
-  if (isDefault || quantity <= 0) return [{ locationId: null, quantity }];
-  const positions = await WarehouseStock.find({
-    warehouseId: oid(warehouseId),
-    productId: oid(productId),
-    variantId: variantId ? oid(variantId) : null,
-    quantity: { $gt: 0 },
-  }).lean();
-  const paths = new Map(
-    (await WarehouseLocation.find({ _id: { $in: positions.filter((p) => p.locationId).map((p) => p.locationId) } }).select('path').lean()).map(
-      (l) => [String(l._id), l.path]
-    )
-  );
-  positions.sort((a, b) => {
-    if (!a.locationId) return -1;
-    if (!b.locationId) return 1;
-    return (paths.get(String(a.locationId)) || '').localeCompare(paths.get(String(b.locationId)) || '');
-  });
-  let left = quantity;
-  const out = [];
-  positions.forEach((p) => {
-    if (left <= 0) return;
-    const take = Math.min(left, Number(p.quantity));
-    out.push({ locationId: p.locationId || null, quantity: take });
-    left = round(left - take);
-  });
-  if (left > 0) {
-    const root = out.find((o) => !o.locationId);
-    if (root) root.quantity = round(root.quantity + left);
-    else out.push({ locationId: null, quantity: left });
+const allocateOutLines = async (wh, lines) => {
+  const out = new Map();
+  const lineKey = (l) => `${l.productId}|${l.variantId || ''}`;
+  if (wh.isDefault) {
+    lines.forEach((l) => out.set(lineKey(l), [{ locationId: null, quantity: l.quantity }]));
+    return out;
   }
+  const giveBack = virtualStock.getStore() || new Map();
+  const productIds = [...new Set(lines.map((l) => String(l.productId)))];
+  const stored = await WarehouseStock.find({ warehouseId: oid(wh._id), productId: { $in: productIds.map(oid) } }).lean();
+  // Current quantity per position, plus whatever this document's old moves took from it.
+  const positions = new Map();
+  stored.forEach((p) => {
+    positions.set(posKey(wh._id, p.locationId, p.productId, p.variantId), {
+      productId: String(p.productId),
+      variantId: p.variantId ? String(p.variantId) : null,
+      locationId: p.locationId || null,
+      quantity: Number(p.quantity || 0),
+    });
+  });
+  giveBack.forEach((qty, k) => {
+    const [w, l, p, v] = k.split('|');
+    if (w !== String(wh._id) || !productIds.includes(p)) return;
+    const cur = positions.get(k) || { productId: p, variantId: v || null, locationId: l || null, quantity: 0 };
+    cur.quantity += qty;
+    positions.set(k, cur);
+  });
+  const binIds = [...new Set([...positions.values()].filter((p) => p.locationId && p.quantity > 0).map((p) => String(p.locationId)))];
+  const paths = new Map(
+    binIds.length ? (await WarehouseLocation.find({ _id: { $in: binIds.map(oid) } }).select('path').lean()).map((l) => [String(l._id), l.path]) : []
+  );
+  lines.forEach((l) => {
+    if (l.quantity <= 0) {
+      out.set(lineKey(l), [{ locationId: null, quantity: l.quantity }]);
+      return;
+    }
+    const mine = [...positions.values()]
+      .filter((p) => p.productId === String(l.productId) && (p.variantId || null) === (l.variantId ? String(l.variantId) : null) && round(p.quantity) > 0)
+      .sort((a, b) => {
+        if (!a.locationId) return -1;
+        if (!b.locationId) return 1;
+        return (paths.get(String(a.locationId)) || '').localeCompare(paths.get(String(b.locationId)) || '');
+      });
+    let left = l.quantity;
+    const parts = [];
+    mine.forEach((p) => {
+      if (left <= 0) return;
+      const take = Math.min(left, round(p.quantity));
+      parts.push({ locationId: p.locationId || null, quantity: take });
+      left = round(left - take);
+    });
+    if (left > 0) {
+      const root = parts.find((o) => !o.locationId);
+      if (root) root.quantity = round(root.quantity + left);
+      else parts.push({ locationId: null, quantity: left });
+    }
+    out.set(lineKey(l), parts);
+  });
   return out;
 };
 
@@ -949,8 +1114,9 @@ const buildDocMoves = async ({ doc, wh, refType, moveType, sign, lines, date, nu
     merged.set(key, { productId: String(l.productId), variantId: l.variantId ? String(l.variantId) : null, quantity: (merged.get(key)?.quantity || 0) + qty });
   });
   const moves = [];
+  const allocations = sign < 0 ? await allocateOutLines(wh, [...merged.values()]) : null;
   for (const line of merged.values()) {
-    const parts = sign < 0 ? await allocateOut({ warehouseId: wh._id, isDefault: wh.isDefault, ...line }) : [{ locationId: null, quantity: line.quantity }];
+    const parts = allocations ? allocations.get(`${line.productId}|${line.variantId || ''}`) : [{ locationId: null, quantity: line.quantity }];
     parts.forEach((part) => {
       if (!part.quantity) return;
       moves.push({
@@ -974,8 +1140,9 @@ const buildDocMoves = async ({ doc, wh, refType, moveType, sign, lines, date, nu
 };
 
 /** Mirror an invoice into warehouse moves. Never throws. */
-const syncInvoice = async (invoiceId) => {
+const syncInvoice = async (invoiceId, hint) => {
   try {
+    if (await nothingToMirror('Invoice', invoiceId, hint)) return;
     await syncDocumentMoves('Invoice', invoiceId, async () => {
       const doc = await Invoice.findById(invoiceId).lean();
       if (!doc || doc.type === 'quotation') return [];
@@ -998,8 +1165,9 @@ const syncInvoice = async (invoiceId) => {
 };
 
 /** Mirror a purchase into warehouse moves. Never throws. */
-const syncPurchase = async (purchaseId) => {
+const syncPurchase = async (purchaseId, hint) => {
   try {
+    if (await nothingToMirror('Purchase', purchaseId, hint)) return;
     await syncDocumentMoves('Purchase', purchaseId, async () => {
       const doc = await Purchase.findById(purchaseId).lean();
       if (!doc) return [];
@@ -1021,9 +1189,36 @@ const syncPurchase = async (purchaseId) => {
   }
 };
 
+/**
+ * Fast exit for the common case of a business that doesn't use warehouses: with the
+ * module off and no warehouse picked, a brand-new document has nothing to mirror (0 DB
+ * reads — settings are cached), and an edited / deleted one only needs work if it was
+ * mirrored before (one indexed existence check). `hint`:
+ *   { organizationId, isNew, hasWarehouse } — from the save that just happened, or
+ *   { deleted: true } — the document is gone; only its old moves (if any) matter.
+ */
+/** Hint from a saved document (or its request body): its organization and picked warehouse. */
+const saveHint = (doc, extra = {}) => {
+  if (!doc) return undefined;
+  const org = doc.organizationId && (doc.organizationId._id || doc.organizationId);
+  if (!org) return undefined;
+  const wh = doc.warehouseId && (doc.warehouseId._id || doc.warehouseId);
+  return { organizationId: String(org), hasWarehouse: Boolean(wh), ...extra };
+};
+
+const nothingToMirror = async (refType, refId, hint) => {
+  if (!hint) return false;
+  if (hint.deleted) return !(await WarehouseMove.exists({ refType, refId: oid(refId) }));
+  if (hint.hasWarehouse || !hint.organizationId) return false;
+  if ((await getSettings(hint.organizationId)).enabled) return false;
+  if (hint.isNew) return true;
+  return !(await WarehouseMove.exists({ refType, refId: oid(refId) }));
+};
+
 /** Runs a document mirror and logs instead of throwing (warehouses never block a flow). */
-const safeSync = async (refType, refId, build) => {
+const safeSync = async (refType, refId, build, hint) => {
   try {
+    if (await nothingToMirror(refType, refId, hint)) return;
     await syncDocumentMoves(refType, refId, build);
   } catch (error) {
     logger.error(`warehouse sync failed for ${refType} ${refId}: ${error.message}`);
@@ -1034,7 +1229,7 @@ const returnLines = (doc) =>
   (doc.items || []).map((i) => ({ productId: i.productId, variantId: i.variantId, quantity: Number(i.stockQuantity || i.quantity || 0) }));
 
 /** Sales return: goods come back in (unless rejected) — by default into the invoice's warehouse. */
-const syncSalesReturn = (returnId) =>
+const syncSalesReturn = (returnId, hint) =>
   safeSync('SalesReturn', returnId, async () => {
     const doc = await SalesReturn.findById(returnId).lean();
     if (!doc || doc.status === 'rejected') return [];
@@ -1042,10 +1237,10 @@ const syncSalesReturn = (returnId) =>
     const wh = await resolveDocWarehouse(doc, invoice?.warehouseId);
     if (!wh) return [];
     return buildDocMoves({ doc, wh, refType: 'SalesReturn', moveType: 'return_in', sign: +1, date: doc.createdAt, number: doc.returnNumber, lines: returnLines(doc) });
-  });
+  }, hint);
 
 /** Purchase return: goods go back to the supplier (unless rejected) — by default from the purchase's warehouse. */
-const syncPurchaseReturn = (returnId) =>
+const syncPurchaseReturn = (returnId, hint) =>
   safeSync('PurchaseReturn', returnId, async () => {
     const doc = await PurchaseReturn.findById(returnId).lean();
     if (!doc || doc.status === 'rejected') return [];
@@ -1053,13 +1248,13 @@ const syncPurchaseReturn = (returnId) =>
     const wh = await resolveDocWarehouse(doc, purchase?.warehouseId);
     if (!wh) return [];
     return buildDocMoves({ doc, wh, refType: 'PurchaseReturn', moveType: 'return_out', sign: -1, date: doc.createdAt, number: doc.returnNumber, lines: returnLines(doc) });
-  });
+  }, hint);
 
 /**
  * Stock adjustment (manual, stock count, warranty, repair part). A reversal is its own
  * adjustment with the opposite direction and lands in the original's warehouse.
  */
-const syncAdjustment = (adjustmentId) =>
+const syncAdjustment = (adjustmentId, hint) =>
   safeSync('StockAdjustment', adjustmentId, async () => {
     const doc = await StockAdjustment.findById(adjustmentId).lean();
     if (!doc) return [];
@@ -1082,7 +1277,7 @@ const syncAdjustment = (adjustmentId) =>
       number: `${doc.reversalOf ? 'Reversal · ' : ''}${String(doc.type || 'adjustment').replace(/_/g, ' ')}`,
       lines: [{ productId: doc.productId, variantId: doc.variantId, quantity: Number(doc.quantity || 0) }],
     });
-  });
+  }, hint);
 
 /**
  * Branch → branch transfer (Stock Transfer page). The sending branch loses the stock while
@@ -1142,7 +1337,7 @@ const MFG_MATERIAL_TYPES = new Set(['production_issue', 'production_return', 'fl
 const MFG_GOODS_TYPES = new Set(['production_receipt', 'production_scrap', 'packing_out', 'packing_in']);
 const MFG_TYPES = new Set([...MFG_MATERIAL_TYPES, ...MFG_GOODS_TYPES]);
 
-const syncManufacturingRef = (refType, refId) =>
+const syncManufacturingRef = (refType, refId, hint) =>
   safeSync(refType, refId, async () => {
     const rows = await InventoryTransaction.find({ refType, refId: oid(refId), stockBucket: 'available', type: { $in: [...MFG_TYPES] } }).lean();
     if (!rows.length) return [];
@@ -1188,7 +1383,7 @@ const syncManufacturingRef = (refType, refId) =>
       );
     }
     return moves;
-  });
+  }, hint);
 
 /**
  * Called from InventoryTransaction's post-save hook. Inside a transaction the mirror waits
@@ -1197,11 +1392,12 @@ const syncManufacturingRef = (refType, refId) =>
  */
 const queueLedgerSync = (txDoc) => {
   if (!txDoc || !MFG_TYPES.has(txDoc.type) || txDoc.stockBucket !== 'available' || !txDoc.refType || !txDoc.refId) return;
-  const key = `${txDoc.refType}|${txDoc.refId}`;
+  const key = `${txDoc.refType}|${txDoc.refId}|${txDoc.organizationId}`;
   const session = typeof txDoc.$session === 'function' ? txDoc.$session() : null;
   const flush = (keys) => keys.forEach((k) => {
-    const [refType, refId] = k.split('|');
-    syncManufacturingRef(refType, refId);
+    const [refType, refId, organizationId] = k.split('|');
+    // Module off: one existence check (was it mirrored before?) instead of a rebuild.
+    syncManufacturingRef(refType, refId, { organizationId, hasWarehouse: false });
   });
   if (session && typeof session.once === 'function' && !session.hasEnded) {
     if (!session.__warehouseKeys) {
@@ -1217,43 +1413,58 @@ const queueLedgerSync = (txDoc) => {
 // ── Small stock documents (mobile shop) ──────────────────────────────────────────────────
 
 /** Installment sale: the product leaves the warehouse while the plan exists. */
-const syncInstallmentPlan = (planId) =>
+const syncInstallmentPlan = (planId, hint) =>
   safeSync('InstallmentPlan', planId, async () => {
     const doc = await InstallmentPlan.findById(planId).lean();
     if (!doc || !doc.productId) return [];
     const wh = await resolveDocWarehouse(doc);
     if (!wh) return [];
     return buildDocMoves({ doc, wh, refType: 'InstallmentPlan', moveType: 'delivery', sign: -1, date: doc.startDate || doc.createdAt, number: doc.planNumber || 'Installment', lines: [{ productId: doc.productId, quantity: Number(doc.quantity || 1) }] });
-  });
+  }, hint);
 
 /** SIM sale: one SIM leaves the warehouse while the sale exists. */
-const syncSimSale = (saleId) =>
+const syncSimSale = (saleId, hint) =>
   safeSync('SimSale', saleId, async () => {
     const doc = await SimSale.findById(saleId).lean();
     if (!doc || !doc.productId) return [];
     const wh = await resolveDocWarehouse(doc);
     if (!wh) return [];
     return buildDocMoves({ doc, wh, refType: 'SimSale', moveType: 'delivery', sign: -1, date: doc.createdAt, number: doc.jobNumber || 'SIM sale', lines: [{ productId: doc.productId, quantity: 1 }] });
-  });
+  }, hint);
 
 /** Used phone bought from a customer: one unit comes in while the buyback exists. */
-const syncBuyback = (buybackId) =>
+const syncBuyback = (buybackId, hint) =>
   safeSync('PhoneBuyback', buybackId, async () => {
     const doc = await PhoneBuyback.findById(buybackId).lean();
     if (!doc || !doc.productId) return [];
     const wh = await resolveDocWarehouse(doc);
     if (!wh) return [];
     return buildDocMoves({ doc, wh, refType: 'PhoneBuyback', moveType: 'receipt', sign: +1, date: doc.purchaseDate || doc.createdAt, number: doc.buybackNumber || 'Buyback', lines: [{ productId: doc.productId, quantity: 1 }] });
-  });
+  }, hint);
 
 /** Quantity of every product (and variant, as `v:<id>`) in one warehouse — for sale pickers. */
 const getWarehouseQuantities = async ({ organizationId, branchId, warehouseId }) => {
   requireBranch(branchId);
-  const read = await quantityReader({ organizationId, branchId, warehouseId });
-  const { rows } = await computeBranchStock({ organizationId, branchId });
+  const wh = await Warehouse.findOne({ _id: warehouseId, organizationId, branchId }).select('isDefault').lean();
+  if (!wh) throw new ApiError(httpStatus.NOT_FOUND, 'Warehouse not found in this branch');
   const out = {};
+  if (!wh.isDefault) {
+    // Everything a non-default warehouse holds is stored: one aggregation, no product scan.
+    // Products absent here hold 0 (the client reads a missing key as 0).
+    const sums = await WarehouseStock.aggregate([
+      { $match: { warehouseId: oid(warehouseId), quantity: { $ne: 0 } } },
+      { $group: { _id: { p: '$productId', v: '$variantId' }, q: { $sum: '$quantity' } } },
+    ]);
+    sums.forEach((r) => {
+      const key = r._id.v ? `v:${r._id.v}` : String(r._id.p);
+      out[key] = round((out[key] || 0) + r.q);
+    });
+    return out;
+  }
+  const { rows } = await computeBranchStock({ organizationId, branchId });
+  const id = String(wh._id);
   rows.forEach((r) => {
-    out[r.variantId ? `v:${r.variantId}` : r.productId] = read(r.productId, r.variantId);
+    out[r.variantId ? `v:${r.variantId}` : r.productId] = round(r.byWarehouse[id] || 0);
   });
   return out;
 };
@@ -1854,6 +2065,7 @@ module.exports = {
   syncBranchTransfer,
   quantityReader,
   queueLedgerSync,
+  saveHint,
   syncManufacturingRef,
   syncInstallmentPlan,
   syncSimSale,

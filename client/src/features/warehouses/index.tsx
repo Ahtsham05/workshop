@@ -32,7 +32,7 @@ import { TransferSheet } from './components/transfer-sheet'
 import { TransfersTab } from './components/transfers-tab'
 import { WarehouseCard } from './components/warehouse-card'
 import { WarehouseFormDialog } from './components/warehouse-form-dialog'
-import { TRANSFER_STATUS_META, WAREHOUSE_PERMS, compactMoney, fmtDate, fmtQty } from './lib/labels'
+import { TRANSFER_STATUS_META, WAREHOUSE_PERMS, compactMoney, fmtDate, fmtQty, SHARED_STOCK_REFRESH_S } from './lib/labels'
 
 type Tab = 'overview' | 'stock' | 'replenishment' | 'transfers' | 'moves' | 'reports'
 
@@ -143,7 +143,7 @@ function Overview() {
   const { hasAnyPermission } = usePermissions()
   const canManage = hasAnyPermission(...WAREHOUSE_PERMS.manage)
   const canTransfer = hasAnyPermission(...WAREHOUSE_PERMS.transfer)
-  const { data, isLoading } = useGetWarehouseOverviewQuery()
+  const { data, isLoading } = useGetWarehouseOverviewQuery(undefined, { refetchOnMountOrArgChange: SHARED_STOCK_REFRESH_S })
   const { data: full = [] } = useGetWarehousesQuery(undefined, { skip: !canManage })
   const [editing, setEditing] = useState<Warehouse | null>(null)
   const [deleting, setDeleting] = useState<CardData | null>(null)

@@ -1,11 +1,12 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { PaymentVoucher, Wallet, Expense, Supplier } = require('../models');
+const { PaymentVoucher, Wallet, Expense, Supplier, Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
 const walletEntryService = require('./walletEntry.service');
 const expenseService = require('./expense.service');
 const supplierLedgerService = require('./supplierLedger.service');
+const customerLedgerService = require('./customerLedger.service');
 const voucherEdit = require('./voucherEdit');
 const ledgerDiscountService = require('./ledgerDiscount.service');
 
@@ -174,6 +175,50 @@ const syncSupplierLine = async (voucher, line, ctx = {}) => {
 };
 
 /**
+ * Cash handed to a customer — a refund of money they paid in advance, or cash paid out to them
+ * on account. Posted as a `payment_made` (debit) row on their Customer Ledger, which owns the
+ * wallet / Cash Book / double-entry sync for it (so, like a supplier line, it must NOT also go
+ * through `syncLineCashEntry`). It settles no invoice; instead it uses up any advance credit the
+ * customer is holding, so that money can't also be applied to a later invoice.
+ */
+const syncCustomerLine = async (voucher, line, ctx = {}) => {
+  // eslint-disable-next-line global-require
+  const customerPaymentService = require('./customerPayment.service');
+  const entry = await customerLedgerService.createLedgerEntry(
+    {
+      organizationId: voucher.organizationId,
+      branchId: voucher.branchId,
+      customer: line.customerId,
+      transactionType: 'payment_made',
+      transactionDate: voucher.date || voucher.createdAt,
+      reference: voucher.voucherNumber,
+      description: lineDescription(voucher, line),
+      debit: line.amount,
+      credit: 0,
+      paymentMethod: `Wallet (${voucher.bankAccountName})`,
+      notes: voucher.notes || '',
+      createdBy: voucher.updatedBy || voucher.createdBy,
+    },
+    { user: ctx.user, skipInvoiceAllocation: true }
+  );
+  try {
+    const draws = await customerPaymentService.drawCustomerCredit({
+      organizationId: voucher.organizationId,
+      branchId: voucher.branchId,
+      customer: line.customerId,
+      amount: line.amount,
+      source: `payment voucher ${voucher.voucherNumber}`,
+      user: ctx.user,
+    });
+    line.creditDraws = draws.length ? draws : undefined;
+  } catch (error) {
+    await customerLedgerService.deleteLedgerEntry(entry._id);
+    throw error;
+  }
+  return entry._id;
+};
+
+/**
  * Post every ledger record one line owns, recording the ids of the ones a later reversal has
  * to find (`expenseId` / `supplierLedgerEntryId`) on the line. `voucher` only needs the header
  * fields (number, date, account name, reference, notes, createdBy...), so an edit can pass the
@@ -190,6 +235,8 @@ const postLine = async (voucher, line, isCashAccount, ctx = {}) => {
     }
   } else if (line.payeeType === 'supplier') {
     line.supplierLedgerEntryId = await syncSupplierLine(voucher, line, ctx);
+  } else if (line.payeeType === 'customer') {
+    line.customerLedgerEntryId = await syncCustomerLine(voucher, line, ctx);
   } else {
     await syncLineCashEntry(voucher, line, isCashAccount);
   }
@@ -208,6 +255,18 @@ const reverseLine = async (voucher, line) => {
   if (line.payeeType === 'supplier') {
     if (line.supplierLedgerEntryId) {
       await supplierLedgerService.deleteLedgerEntry(line.supplierLedgerEntryId);
+    }
+    return;
+  }
+  if (line.payeeType === 'customer') {
+    // eslint-disable-next-line global-require
+    const customerPaymentService = require('./customerPayment.service');
+    await customerPaymentService.restoreCustomerCredit(line.creditDraws, {
+      source: `payment voucher ${voucher.voucherNumber}`,
+    });
+    line.creditDraws = undefined;
+    if (line.customerLedgerEntryId) {
+      await customerLedgerService.deleteLedgerEntry(line.customerLedgerEntryId);
     }
     return;
   }
@@ -251,6 +310,15 @@ const annotateLine = async (voucher, existing, line) => {
     }
     return;
   }
+  if (line.payeeType === 'customer') {
+    if (existing.customerLedgerEntryId) {
+      await customerLedgerService.updateLedgerEntryText(existing.customerLedgerEntryId, {
+        description,
+        notes: voucher.notes || '',
+      });
+    }
+    return;
+  }
 
   await cashBookService.updateDescriptionByReference(line._id, 'PaymentVoucher', description);
   await walletEntryService.updateDescriptionByReference(line._id, 'PaymentVoucher', description);
@@ -263,10 +331,11 @@ const annotateLine = async (voucher, existing, line) => {
 };
 
 /** Where a line's bank-side WalletEntry lives — used to refuse edits to reconciled entries. */
-const paymentLegRef = (line) =>
-  line.payeeType === 'supplier'
-    ? { referenceModel: 'SupplierLedger', referenceId: line.supplierLedgerEntryId }
-    : { referenceModel: 'PaymentVoucher', referenceId: line._id };
+const paymentLegRef = (line) => {
+  if (line.payeeType === 'supplier') return { referenceModel: 'SupplierLedger', referenceId: line.supplierLedgerEntryId };
+  if (line.payeeType === 'customer') return { referenceModel: 'CustomerLedger', referenceId: line.customerLedgerEntryId };
+  return { referenceModel: 'PaymentVoucher', referenceId: line._id };
+};
 
 const reverseVoucherLines = async (voucher) => {
   for (const line of voucher.lines) {
@@ -284,6 +353,14 @@ const resolveLinePayeeName = async (line, orgId, branchId) => {
       throw new ApiError(httpStatus.NOT_FOUND, 'Supplier not found');
     }
     return supplier.name;
+  }
+  if (line.payeeType === 'customer') {
+    // Customers are organization-wide (same lookup as the Receipt Voucher's customer lines).
+    const customer = await Customer.findOne({ _id: line.customerId, organizationId: orgId }).select('name');
+    if (!customer) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Customer not found');
+    }
+    return customer.name;
   }
   return line.payeeName;
 };
@@ -318,6 +395,8 @@ const createVoucher = async (voucherBody, userId, ctx = {}) => {
       category: line.payeeType === 'expense' ? line.category : undefined,
       supplierId: line.payeeType === 'supplier' ? line.supplierId : undefined,
       supplierName: line.payeeType === 'supplier' ? payeeName : undefined,
+      customerId: line.payeeType === 'customer' ? line.customerId : undefined,
+      customerName: line.payeeType === 'customer' ? payeeName : undefined,
       payeeName,
       amount: Number(line.amount),
       description: line.description || undefined,
@@ -411,6 +490,7 @@ const lineMoneyChanged = (existing, line) =>
   !voucherEdit.sameAmount(existing.amount, line.amount) ||
   (line.payeeType === 'expense' && !voucherEdit.sameText(existing.category, line.category)) ||
   (line.payeeType === 'supplier' && !voucherEdit.sameId(existing.supplierId, line.supplierId)) ||
+  (line.payeeType === 'customer' && !voucherEdit.sameId(existing.customerId, line.customerId)) ||
   !voucherEdit.sameAmount(lineDiscountAmount(existing), lineDiscountAmount(line)) ||
   (lineDiscountAmount(line) > 0 && !voucherEdit.sameText(existing.discountReason, line.discountReason));
 
@@ -423,7 +503,13 @@ const resolveEditedLine = async (input, existing, voucher) => {
     existing.payeeType === 'supplier' &&
     voucherEdit.sameId(existing.supplierId, input.supplierId);
 
-  const payeeName = unchangedSupplier
+  const unchangedCustomer =
+    existing &&
+    input.payeeType === 'customer' &&
+    existing.payeeType === 'customer' &&
+    voucherEdit.sameId(existing.customerId, input.customerId);
+
+  const payeeName = unchangedSupplier || unchangedCustomer
     ? existing.payeeName
     : await resolveLinePayeeName(input, voucher.organizationId, voucher.branchId);
 
@@ -433,6 +519,8 @@ const resolveEditedLine = async (input, existing, voucher) => {
     category: input.payeeType === 'expense' ? input.category : undefined,
     supplierId: input.payeeType === 'supplier' ? input.supplierId : undefined,
     supplierName: input.payeeType === 'supplier' ? (unchangedSupplier ? existing.supplierName : payeeName) : undefined,
+    customerId: input.payeeType === 'customer' ? input.customerId : undefined,
+    customerName: input.payeeType === 'customer' ? (unchangedCustomer ? existing.customerName : payeeName) : undefined,
     payeeName,
     amount: Number(input.amount),
     description: input.description || undefined,
@@ -521,6 +609,8 @@ const updateVoucher = async (voucherId, scope, body, userId, ctx = {}) => {
     if (pair.existing && !replaced.has(pair)) {
       pair.line.expenseId = pair.existing.expenseId;
       pair.line.supplierLedgerEntryId = pair.existing.supplierLedgerEntryId;
+      pair.line.customerLedgerEntryId = pair.existing.customerLedgerEntryId;
+      pair.line.creditDraws = pair.existing.creditDraws;
       pair.line.discountLedgerEntryId = pair.existing.discountLedgerEntryId;
     }
   });

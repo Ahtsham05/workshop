@@ -2571,7 +2571,7 @@ const createInvoiceWithWarehouse = async (rawInvoiceBody, userId, options = {}) 
     });
   }
   const invoice = await createInvoice(rawInvoiceBody, userId, options);
-  if (invoice && invoice._id) await warehouseService.syncInvoice(invoice._id);
+  if (invoice && invoice._id) await warehouseService.syncInvoice(invoice._id, warehouseService.saveHint(rawInvoiceBody, { isNew: true }));
   return invoice;
 };
 
@@ -2591,13 +2591,13 @@ const assertInvoiceWarehouseChange = async (invoiceId, body) => {
 const updateInvoiceWithWarehouse = async (invoiceId, rawUpdateBody, userId, options = {}) => {
   await assertInvoiceWarehouseChange(invoiceId, rawUpdateBody);
   const invoice = await updateInvoiceById(invoiceId, rawUpdateBody, userId, options);
-  await warehouseService.syncInvoice(invoiceId);
+  await warehouseService.syncInvoice(invoiceId, warehouseService.saveHint(invoice));
   return invoice;
 };
 
 const deleteInvoiceWithWarehouse = async (invoiceId) => {
   const result = await deleteInvoiceById(invoiceId);
-  await warehouseService.syncInvoice(invoiceId);
+  await warehouseService.syncInvoice(invoiceId, { deleted: true });
   return result;
 };
 

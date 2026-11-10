@@ -2284,13 +2284,13 @@ const createPurchaseWithWarehouse = async (purchaseBody, options = {}) => {
     });
   }
   const purchase = await createPurchase(purchaseBody, options);
-  if (purchase && purchase._id && !options.session) await warehouseService.syncPurchase(purchase._id);
+  if (purchase && purchase._id && !options.session) await warehouseService.syncPurchase(purchase._id, warehouseService.saveHint(purchase, { isNew: true }));
   return purchase;
 };
 
 const runPurchasePostCommitWithWarehouse = async (purchase) => {
   const result = await runPurchasePostCommit(purchase);
-  if (purchase && purchase._id) await warehouseService.syncPurchase(purchase._id);
+  if (purchase && purchase._id) await warehouseService.syncPurchase(purchase._id, warehouseService.saveHint(purchase, { isNew: true }));
   return result;
 };
 
@@ -2308,13 +2308,13 @@ const updatePurchaseWithWarehouse = async (purchaseId, updateBody) => {
     }
   }
   const purchase = await updatePurchaseById(purchaseId, updateBody);
-  await warehouseService.syncPurchase(purchaseId);
+  await warehouseService.syncPurchase(purchaseId, warehouseService.saveHint(purchase));
   return purchase;
 };
 
 const deletePurchaseWithWarehouse = async (purchaseId) => {
   const result = await deletePurchaseById(purchaseId);
-  await warehouseService.syncPurchase(purchaseId);
+  await warehouseService.syncPurchase(purchaseId, { deleted: true });
   return result;
 };
 

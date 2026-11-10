@@ -36,8 +36,9 @@ export function PartyBalanceCell({ side, owing }: { side: 'customer' | 'supplier
   )
 }
 
-/** Balance once this line (payment + discount) is posted. */
-export function BalanceAfterCell({ state, active }: { state: LineAccountState | null; active: boolean }) {
+/** Balance once this line (payment + discount) is posted. `owingLabel` names a positive balance
+ *  left over — "remaining" by default; "receivable" when we've paid a customer out. */
+export function BalanceAfterCell({ state, active, owingLabel }: { state: LineAccountState | null; active: boolean; owingLabel?: string }) {
   const formatMoney = useFormatMoney()
   const { t } = useLanguage()
   if (!state || state.remaining === undefined || !active) {
@@ -60,7 +61,7 @@ export function BalanceAfterCell({ state, active }: { state: LineAccountState | 
       <span className={cn('text-sm font-semibold tabular-nums', advance ? 'text-sky-700 dark:text-sky-400' : 'text-amber-700 dark:text-amber-400')}>
         {formatMoney(Math.abs(remaining))}
       </span>
-      <span className='text-[10px] text-muted-foreground'>{advance ? t('advance') : t('remaining')}</span>
+      <span className='text-[10px] text-muted-foreground'>{advance ? t('advance') : t(owingLabel || 'remaining')}</span>
     </div>
   )
 }

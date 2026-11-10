@@ -421,7 +421,7 @@ const createInstallmentPlanWithWarehouse = async (body) => {
   const id = doc && (doc._id || doc.id);
   if (id) {
     if (body && body.warehouseId) await InstallmentPlan.updateOne({ _id: id }, { $set: { warehouseId: body.warehouseId } });
-    await warehouseService.syncInstallmentPlan(id);
+    await warehouseService.syncInstallmentPlan(id, warehouseService.saveHint(body, { isNew: true }));
   }
   return doc;
 };
@@ -438,7 +438,7 @@ const deleteInstallmentPlanWithWarehouse = async (id, ...rest) => {
   const before = await InstallmentPlan.findById(id).select('status').lean();
   if (before && before.status === 'completed') return deleteInstallmentPlan(id, ...rest);
   const result = await deleteInstallmentPlan(id, ...rest);
-  await warehouseService.syncInstallmentPlan(id);
+  await warehouseService.syncInstallmentPlan(id, { deleted: true });
   return result;
 };
 

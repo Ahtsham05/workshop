@@ -2280,18 +2280,33 @@ const recordStockDiffs = async (before, ids, userId) => {
 };
 
 const updateProductByIdWithWarehouse = async (productId, updateBody, options = {}) => {
-  const touchesStock = updateBody && updateBody.stockQuantity !== undefined;
-  const before = touchesStock ? await stockSnapshot([productId]) : null;
+  if (!updateBody || updateBody.stockQuantity === undefined) return updateProductById(productId, updateBody, options);
+  // eslint-disable-next-line global-require
+  const warehouseService = require('./warehouse.service');
+  // The caller usually hands over the product it already loaded; read its quantity before
+  // the update (which may change that same object). Settings are cached: with warehouses
+  // off this adds no database work at all.
+  const existing = options.existing || (await Product.findById(productId).select('stockQuantity hasVariants organizationId branchId').lean());
+  const enabled = existing ? (await warehouseService.getSettings(existing.organizationId)).enabled : false;
+  const beforeQty = existing ? Number(existing.stockQuantity || 0) : null;
   const result = await updateProductById(productId, updateBody, options);
-  if (touchesStock) await recordStockDiffs(before, [productId], options.updatedBy);
+  if (enabled && result && beforeQty !== null) {
+    const delta = Number(result.stockQuantity || 0) - beforeQty;
+    if (delta) await warehouseService.recordStockEdit({ product: result, delta, userId: options.updatedBy });
+  }
   return result;
 };
 
 const bulkUpdateProductsWithWarehouse = async (productsToUpdate = [], ...rest) => {
   const ids = productsToUpdate.filter((p) => p && p.stockQuantity !== undefined).map((p) => p._id || p.id).filter(Boolean);
-  const before = ids.length ? await stockSnapshot(ids) : null;
+  let before = ids.length ? await stockSnapshot(ids) : null;
+  if (before && before.size) {
+    // eslint-disable-next-line global-require
+    const { enabled } = await require('./warehouse.service').getSettings([...before.values()][0].organizationId);
+    if (!enabled) before = null;
+  }
   const result = await bulkUpdateProducts(productsToUpdate, ...rest);
-  if (ids.length) await recordStockDiffs(before, ids);
+  if (before) await recordStockDiffs(before, ids);
   return result;
 };
 

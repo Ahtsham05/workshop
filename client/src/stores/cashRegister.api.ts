@@ -13,6 +13,7 @@ export interface CashRegisterSinceLastCount {
   net: number
   entryCount: number
   editedCount: number
+  possibleDuplicateCount?: number
   unexplainedChange: number
 }
 
@@ -40,6 +41,8 @@ export interface CashMovementsResponse {
   byModule: Array<{ module: string; income: number; expense: number; net: number; count: number }>
   entries: CashMovementEntry[]
   editedEntries: CashMovementEntry[]
+  /** Lines that repeat an earlier identical line saved separately a few minutes before. */
+  possibleDuplicates?: Array<CashMovementEntry & { repeatOf: { id: string; createdAt: string } }>
   previousCount: {
     id: string
     countedAt: string

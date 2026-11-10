@@ -562,7 +562,7 @@ const createSimSaleWithWarehouse = async (body) => {
   const id = doc && (doc._id || doc.id);
   if (id) {
     if (body && body.warehouseId) await SimSale.updateOne({ _id: id }, { $set: { warehouseId: body.warehouseId } });
-    await warehouseService.syncSimSale(id);
+    await warehouseService.syncSimSale(id, warehouseService.saveHint(body, { isNew: true }));
   }
   return doc;
 };
@@ -575,7 +575,7 @@ const updateSimSaleWithWarehouse = async (id, ...rest) => {
 
 const deleteSimSaleWithWarehouse = async (id, ...rest) => {
   const result = await deleteSimSale(id, ...rest);
-  await warehouseService.syncSimSale(id);
+  await warehouseService.syncSimSale(id, { deleted: true });
   return result;
 };
 

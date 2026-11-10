@@ -146,6 +146,8 @@ export interface StockRow {
   byWarehouse: Record<string, number>
   lowStockThreshold: number | null
   locations?: { locationId: string | null; path: string | null; quantity: number }[]
+  /** With a warehouse asked for: quantity at that exact position (bin or top level). */
+  positionQty?: number
 }
 
 export interface StockResponse {
@@ -312,18 +314,23 @@ export interface Availability {
   [productId: string]: { branch: number; warehouse: number; position: number; byWarehouse: Record<string, number> }
 }
 
+/** Everything that changes when stock moves (catalog-invalidation.middleware.ts refreshes these). */
+export const WAREHOUSE_STOCK_TAGS = ['WarehouseOverview', 'WarehouseStock', 'WarehouseMoves', 'WarehouseRules', 'WarehouseTransfer'] as const
 const STOCK_TAGS = ['WarehouseOverview', 'WarehouseStock', 'WarehouseMoves', 'WarehouseRules'] as const
 
 export const warehouseApi = createApi({
   reducerPath: 'warehouseApi',
   baseQuery,
-  // Stock changes from invoices/purchases happen outside this slice — always re-check.
-  refetchOnMountOrArgChange: 20,
+  // No timer-based refetching: stock moves made from other screens refresh these caches
+  // through catalog-invalidation.middleware.ts (WAREHOUSE_STOCK_TAGS), and warehouse
+  // mutations invalidate their own tags. Data stays cached for 5 minutes once unused.
+  keepUnusedDataFor: 300,
   tagTypes: ['WarehouseSettings', 'Warehouse', 'WarehouseLocation', 'WarehouseTransfer', ...STOCK_TAGS],
   endpoints: (builder) => ({
     getWarehouseSettings: builder.query<WarehouseSettings, void>({
       query: () => '/warehouses/settings',
       providesTags: ['WarehouseSettings'],
+      keepUnusedDataFor: 1800,
     }),
     updateWarehouseSettings: builder.mutation<WarehouseSettings, Partial<WarehouseSettings>>({
       query: (body) => ({ url: '/warehouses/settings', method: 'PATCH', body }),
@@ -338,9 +345,12 @@ export const warehouseApi = createApi({
         }
       },
     }),
-    getWarehouses: builder.query<Warehouse[], { includeInactive?: boolean } | void>({
-      query: (params) => ({ url: '/warehouses', params: params ?? undefined }),
+    // One shared list (archived ones included) for every screen — filter active ones on the
+    // client. Asking with different arguments would cache, and fetch, the list twice.
+    getWarehouses: builder.query<Warehouse[], void>({
+      query: () => '/warehouses',
       providesTags: ['Warehouse'],
+      keepUnusedDataFor: 1800,
     }),
     getWarehouse: builder.query<Warehouse, string>({
       query: (id) => `/warehouses/${id}`,
@@ -369,6 +379,7 @@ export const warehouseApi = createApi({
     getLocations: builder.query<WarehouseLocation[], string>({
       query: (warehouseId) => `/warehouses/${warehouseId}/locations`,
       providesTags: (_r, _e, id) => [{ type: 'WarehouseLocation', id }],
+      keepUnusedDataFor: 1800,
     }),
     createLocation: builder.mutation<WarehouseLocation, { warehouseId: string; body: Partial<WarehouseLocation> }>({
       query: ({ warehouseId, body }) => ({ url: `/warehouses/${warehouseId}/locations`, method: 'POST', body }),

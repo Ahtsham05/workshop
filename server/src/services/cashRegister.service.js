@@ -51,6 +51,43 @@ const serializeMovementEntry = (entry) => ({
   module: moduleLabel(entry.referenceModel),
 });
 
+/** How close together two identical lines must be recorded to be flagged as a possible double entry. */
+const DUPLICATE_WINDOW_MS = 3 * 60 * 1000;
+/** Rows of one bulk save land within a second of each other — those were typed as separate rows on purpose. */
+const SAME_SAVE_GAP_MS = 2000;
+
+const duplicateKey = (entry) =>
+  [entry.referenceModel || entry.source || '', entry.type, Number(entry.amount).toFixed(2), entry.description || ''].join('|');
+
+/**
+ * Lines that repeat an earlier line of the same module, type, amount and description, saved
+ * separately within a few minutes — the usual shape of an entry saved twice (e.g. a bulk
+ * Cash Management batch re-saved), which inflates Expected by that amount without any cash
+ * moving. Only a hint for whoever is reconciling: two customers can genuinely do the same thing.
+ */
+const findPossibleDuplicates = (entries) => {
+  const lastByKey = new Map();
+  const flagged = [];
+  entries.forEach((entry) => {
+    const key = duplicateKey(entry);
+    const at = new Date(entry.createdAt).getTime();
+    const earlier = lastByKey.get(key);
+    if (
+      earlier &&
+      String(earlier.referenceId || '') !== String(entry.referenceId || '') &&
+      at - new Date(earlier.createdAt).getTime() >= SAME_SAVE_GAP_MS &&
+      at - new Date(earlier.createdAt).getTime() <= DUPLICATE_WINDOW_MS
+    ) {
+      flagged.push({
+        ...serializeMovementEntry(entry),
+        repeatOf: { id: String(earlier._id), createdAt: earlier.createdAt },
+      });
+    }
+    lastByKey.set(key, entry);
+  });
+  return flagged;
+};
+
 /** Expected is rounded to whole rupees at both counts, so up to Re 1 of drift is rounding. */
 const computeUnexplainedChange = (expectedAtStart, expectedAtEnd, net) => {
   const raw = expectedAtEnd - expectedAtStart - net;
@@ -112,6 +149,7 @@ const summarizeMovements = async (organizationId, branchId, from, to) => {
       .sort((a, b) => Math.abs(b.net) - Math.abs(a.net)),
     entries: entries.slice(-MOVEMENT_ENTRY_LIMIT).map(serializeMovementEntry),
     editedEntries: editedEntries.map(serializeMovementEntry),
+    possibleDuplicates: findPossibleDuplicates(entries),
   };
 };
 
@@ -143,6 +181,7 @@ const getRegister = async (organizationId, branchId) => {
       net: movement.net,
       entryCount: movement.entryCount,
       editedCount: movement.editedEntries.length,
+      possibleDuplicateCount: movement.possibleDuplicates.length,
       unexplainedChange: computeUnexplainedChange(lastSnapshot.expectedCashAmount, expectedCashAmount, movement.net),
     };
   }
@@ -322,4 +361,5 @@ module.exports = {
   clearRegister,
   queryHistory,
   deleteSnapshot,
+  findPossibleDuplicates,
 };

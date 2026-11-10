@@ -7,6 +7,7 @@ import type { ReceiptVoucherRecord } from '@/stores/receiptVoucher.api'
 export const PAYEE_TYPE_BADGE_CLASS: Record<string, string> = {
   expense: 'bg-orange-100 text-orange-700 hover:bg-orange-100',
   supplier: 'bg-blue-100 text-blue-700 hover:bg-blue-100',
+  customer: 'bg-teal-100 text-teal-700 hover:bg-teal-100',
   other: 'bg-slate-100 text-slate-700 hover:bg-slate-100',
   mixed: 'bg-purple-100 text-purple-700 hover:bg-purple-100',
 }
@@ -14,6 +15,7 @@ export const PAYEE_TYPE_BADGE_CLASS: Record<string, string> = {
 export const PAYEE_TYPE_LABELS: Record<string, string> = {
   expense: 'Expense',
   supplier: 'Supplier',
+  customer: 'Customer',
   other: 'Other',
 }
 

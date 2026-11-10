@@ -11,13 +11,15 @@ const FONT_STACK = `system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Ro
 const PAYEE_TYPE_LABEL: Record<string, string> = {
   expense: 'Expense',
   supplier: 'Supplier',
+  customer: 'Customer',
   other: 'Other',
 }
 
 export interface PrintableVoucherLine {
-  payeeType: 'expense' | 'supplier' | 'other'
+  payeeType: 'expense' | 'supplier' | 'customer' | 'other'
   category?: string
   supplierName?: string
+  customerName?: string
   payeeName: string
   amount: number
   /** Ledger discount given/received with this line (no cash). */

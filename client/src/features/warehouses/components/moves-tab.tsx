@@ -8,7 +8,7 @@ import { SimplePagination } from '@/components/ui/simple-pagination'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
 import { useGetWarehouseMovesQuery, useGetWarehousesQuery, type MoveType } from '@/stores/warehouse.api'
-import { MOVE_TYPE_LABELS, fmtDateTime, fmtQty } from '../lib/labels'
+import { MOVE_TYPE_LABELS, fmtDateTime, fmtQty, SHARED_STOCK_REFRESH_S } from '../lib/labels'
 
 const ALL = '__all__'
 
@@ -38,7 +38,7 @@ export function MovesTab({ warehouseId: fixedWarehouse, productId }: { warehouse
     search: debounced || undefined,
     page,
     limit,
-  })
+  }, { refetchOnMountOrArgChange: SHARED_STOCK_REFRESH_S })
 
   const refLink = (refType: string, number: string) => {
     if (refType === 'Invoice') return { label: t('Invoice'), to: '/invoice' as const, number }

@@ -7,6 +7,7 @@ import { CalendarIcon, Info, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppDispatch, RootState } from '@/stores/store'
 import { fetchSuppliers } from '@/stores/supplier.slice'
+import { fetchCustomers } from '@/stores/customer.slice'
 import { normalizeSuppliersList, resolveEntityId } from '@/features/purchase-invoice/utils/catalog-helpers'
 import {
   useCreatePaymentVoucherMutation,
@@ -43,19 +44,25 @@ import { usePermissions } from '@/context/permission-context'
 import { ledgerDiscountsApi, type LedgerDiscountReason } from '@/stores/ledgerDiscounts.api'
 import { purchaseApi } from '@/stores/purchase.api'
 import { supplierPaymentApi } from '@/stores/supplierPayment.api'
+import { customerPaymentApi } from '@/stores/customerPayment.api'
 import { useLedgerDiscountSettings } from '@/features/ledger-discounts/hooks/use-ledger-discount-settings'
 import { usePartyBalances } from '../hooks/use-party-balances'
 import { PartyLedgerQuickView, type QuickViewParty } from './party-ledger-quick-view'
 import { BalanceAfterCell, LineDiscountCell, PartyBalanceCell, QuickLedgerButton } from './voucher-line-cells'
 import { lineAccountState, type LineAccountState } from '../utils/line-account-state'
+import { normalizeCustomersList } from '../utils/customer-list'
+
+type PayeeType = 'expense' | 'supplier' | 'customer' | 'other'
 
 const lineSchema = z
   .object({
     // Id of the stored line this row edits ('' for a row that is new).
     lineId: z.string(),
-    payeeType: z.enum(['expense', 'supplier', 'other']),
+    payeeType: z.enum(['expense', 'supplier', 'customer', 'other']),
     category: z.string(),
     supplierId: z.string(),
+    // Customer line: cash handed to a customer (refund of their advance / paid on account).
+    customerId: z.string(),
     // Only for a legacy 'other' line (free-text payee) — this dialog never offers to create one.
     payeeName: z.string(),
     // Untouched rows (the default 8) sit at 0 and are silently dropped on submit — only a
@@ -75,6 +82,10 @@ const lineSchema = z
     message: 'Select a supplier',
     path: ['supplierId'],
   })
+  .refine((d) => Number(d.amount) <= 0 || d.payeeType !== 'customer' || !!d.customerId, {
+    message: 'Select a customer',
+    path: ['customerId'],
+  })
   .refine((d) => Number(d.amount) <= 0 || d.payeeType !== 'other' || !!d.payeeName.trim(), {
     message: 'Enter a payee name',
     path: ['payeeName'],
@@ -91,9 +102,10 @@ type VoucherFormValues = z.infer<typeof voucherSchema>
 
 const emptyLine = () => ({
   lineId: '',
-  payeeType: 'supplier' as 'expense' | 'supplier' | 'other',
+  payeeType: 'supplier' as PayeeType,
   category: '',
   supplierId: '',
+  customerId: '',
   payeeName: '',
   amount: 0,
   description: '',
@@ -121,6 +133,7 @@ const valuesFromVoucher = (voucher: PaymentVoucherRecord): VoucherFormValues => 
     payeeType: line.payeeType,
     category: line.category ?? '',
     supplierId: line.supplierId ?? '',
+    customerId: line.customerId ?? '',
     payeeName: line.payeeType === 'other' ? line.payeeName : '',
     amount: line.amount,
     description: line.description ?? '',
@@ -144,6 +157,7 @@ const fingerprint = (values: VoucherFormValues) =>
         line.payeeType,
         line.category,
         line.supplierId,
+        line.customerId,
         line.payeeName,
         Number(line.amount) || 0,
         line.description,
@@ -181,6 +195,9 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
     if (open) dispatch(fetchSuppliers({ page: 1, limit: 1000 }))
   }, [open, dispatch])
 
+  const customersData = useSelector((state: RootState) => state.customer.data)
+  const customers = normalizeCustomersList(customersData)
+
   const form = useForm<VoucherFormValues>({
     resolver: zodResolver(voucherSchema),
     defaultValues: defaultFormValues(),
@@ -200,6 +217,16 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
   const draft = useFormDraft(form, { key: 'payment-voucher', enabled: open && !isEdit, label: 'payment voucher' })
 
   const lines = form.watch('lines')
+  // Customers are only loaded once a row is switched to "Customer" (most vouchers never need them).
+  const needsCustomers = open && lines.some((line) => line.payeeType === 'customer')
+  const customersRequestedRef = useRef(false)
+  useEffect(() => {
+    if (!open) customersRequestedRef.current = false
+    else if (needsCustomers && !customersRequestedRef.current) {
+      customersRequestedRef.current = true
+      dispatch(fetchCustomers({ page: 1, limit: 1000 }))
+    }
+  }, [open, needsCustomers, dispatch])
   const totalAmount = lines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0)
 
   // ── Balances, discounts, quick ledger ──
@@ -219,6 +246,27 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [suppliersData])
   const liveBalances = usePartyBalances('supplier', pickedSupplierIds, open && canQuickView, listBalances)
+  // Customer side (+ = they owe us). Paying a customer out RAISES that figure.
+  const pickedCustomerIds = lines.filter((l) => l.payeeType === 'customer' && l.customerId).map((l) => l.customerId)
+  const customerListBalances = useMemo(() => {
+    const map: Record<string, number | undefined> = {}
+    customers.forEach((party) => {
+      const balance = (party as { balance?: unknown }).balance
+      if (typeof balance === 'number') map[resolveEntityId(party)] = balance
+    })
+    return map
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customersData])
+  const customerBalances = usePartyBalances('customer', pickedCustomerIds, open && canQuickView, customerListBalances)
+  // On edit the live receivable already includes this voucher's own customer lines — take them off.
+  const storedByCustomer = useMemo(() => {
+    const map = new Map<string, number>()
+    voucher?.lines.forEach((line) => {
+      if (line.payeeType !== 'customer' || !line.customerId) return
+      map.set(line.customerId, (map.get(line.customerId) || 0) + Number(line.amount || 0))
+    })
+    return map
+  }, [voucher])
   // On edit the live payable already has this voucher's own lines taken off — add them back.
   const storedBySupplier = useMemo(() => {
     const map = new Map<string, number>()
@@ -231,7 +279,23 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
   const discountColumn = discountRules.available || lines.some((l) => Number(l.discountAmount) > 0)
   const lineStates: (LineAccountState | null)[] = (() => {
     const consumed = new Map<string, number>()
+    const paidToCustomer = new Map<string, number>()
     return lines.map((line) => {
+      if (line.payeeType === 'customer' && line.customerId) {
+        const live = customerBalances[line.customerId]
+        const before =
+          live === undefined
+            ? undefined
+            : live - (storedByCustomer.get(line.customerId) || 0) + (paidToCustomer.get(line.customerId) || 0)
+        const amount = Number(line.amount) || 0
+        paidToCustomer.set(line.customerId, (paidToCustomer.get(line.customerId) || 0) + amount)
+        return {
+          owingBefore: before,
+          remaining: before === undefined ? undefined : Math.round((before + amount) * 100) / 100,
+          overLimit: false,
+          error: null,
+        }
+      }
       if (line.payeeType !== 'supplier' || !line.supplierId) return null
       const live = liveBalances[line.supplierId]
       const before = live === undefined ? undefined : live + (storedBySupplier.get(line.supplierId) || 0) - (consumed.get(line.supplierId) || 0)
@@ -271,6 +335,31 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
       })
     }
   })
+
+  const customerOptions = customers.map((c) => ({
+    value: resolveEntityId(c),
+    label: c.name,
+    sublabel: c.phone,
+    picture: c.picture,
+  }))
+  voucher?.lines.forEach((line) => {
+    if (line.customerId && !customerOptions.some((option) => option.value === line.customerId)) {
+      customerOptions.push({
+        value: line.customerId,
+        label: line.customerName || line.payeeName,
+        sublabel: undefined,
+        picture: undefined,
+      })
+    }
+  })
+  // Cash out to customers on this voucher — and how much of it hands back their advance.
+  const customerPayout = lines.reduce((sum, line) => sum + (line.payeeType === 'customer' ? Number(line.amount) || 0 : 0), 0)
+  const advanceReturned = lines.reduce((sum, line, i) => {
+    const state = lineStates[i]
+    if (line.payeeType !== 'customer' || !state || state.owingBefore === undefined) return sum
+    const advance = Math.max(0, -state.owingBefore)
+    return sum + Math.min(advance, Number(line.amount) || 0)
+  }, 0)
 
   const fieldIds = useMemo(() => {
     const ids = ['voucher-date', 'voucher-bank-account']
@@ -334,6 +423,7 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
         payeeType: line.payeeType,
         category: line.payeeType === 'expense' ? line.category : undefined,
         supplierId: line.payeeType === 'supplier' ? line.supplierId : undefined,
+        customerId: line.payeeType === 'customer' ? line.customerId : undefined,
         payeeName: line.payeeType === 'other' ? line.payeeName.trim() : undefined,
         amount: line.amount,
         description: line.description || undefined,
@@ -365,6 +455,10 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
       dispatch(purchaseApi.util.invalidateTags(['Purchase']))
       dispatch(supplierPaymentApi.util.invalidateTags(['SupplierPayment', 'SupplierAccount']))
       dispatch(ledgerDiscountsApi.util.invalidateTags(['DiscountRegister']))
+      // Customer lines move the customer's balance and use up their advance credit.
+      if (payload.lines.some((line) => line.payeeType === 'customer') || voucher?.lines.some((line) => line.payeeType === 'customer')) {
+        dispatch(customerPaymentApi.util.invalidateTags(['CustomerPayment', 'CustomerAccount']))
+      }
       onOpenChange(false)
     } catch (error: any) {
       toast.error(error?.data?.message || `Failed to ${isEdit ? 'update' : 'create'} payment voucher`)
@@ -398,8 +492,8 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
             <Alert className='shrink-0 border-amber-500/30 bg-amber-500/5'>
               <Info className='h-4 w-4' />
               <AlertDescription>
-                Saving updates the bank balance, Cash Book and any linked expense or supplier ledger entry. Only the lines
-                you change are re-posted.
+                Saving updates the bank balance, Cash Book and any linked expense, supplier or customer ledger entry. Only
+                the lines you change are re-posted.
               </AlertDescription>
             </Alert>
           )}
@@ -492,13 +586,15 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                   const lineState = lineStates[index]
                   const supplierId = form.watch(`lines.${index}.supplierId`)
                   const supplierOption = supplierOptions.find((o) => o.value === supplierId)
+                  const customerId = form.watch(`lines.${index}.customerId`)
+                  const customerOption = customerOptions.find((o) => o.value === customerId)
                   return (
                     <TableRow key={field.id}>
                       <TableCell className='p-1.5 align-top'>
                         <Select
                           value={form.watch(`lines.${index}.payeeType`)}
                           onValueChange={(v) =>
-                            form.setValue(`lines.${index}.payeeType`, v as 'expense' | 'supplier' | 'other', {
+                            form.setValue(`lines.${index}.payeeType`, v as PayeeType, {
                               shouldValidate: true,
                               shouldDirty: true,
                             })
@@ -513,6 +609,7 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value='supplier'>Supplier</SelectItem>
+                            <SelectItem value='customer'>Customer</SelectItem>
                             <SelectItem value='expense'>Expense</SelectItem>
                             {/* Only ever shown for a legacy line that already is one. */}
                             {payeeType === 'other' && <SelectItem value='other'>Other</SelectItem>}
@@ -534,6 +631,32 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                             hideTitle
                             allowManage={false}
                           />
+                        ) : payeeType === 'customer' ? (
+                          <div className='flex gap-1'>
+                            <div className='min-w-0 flex-1'>
+                              <SearchableSelect
+                                options={customerOptions}
+                                value={customerId}
+                                onValueChange={(v) => form.setValue(`lines.${index}.customerId`, v, { shouldValidate: true, shouldDirty: true })}
+                                placeholder={customers.length === 0 && !customersData ? 'Loading customers...' : 'Select a customer...'}
+                                searchPlaceholder='Search customers...'
+                                emptyText='No customers found.'
+                                id={`line-${index}-payee`}
+                                data-enter-field={`line-${index}-payee`}
+                                onKeyDown={payeeEnterProps.onKeyDown}
+                                onKeyDownCapture={payeeEnterProps.onKeyDownCapture}
+                                onSelected={() => voucherEnter.advance(`line-${index}-payee`)}
+                                popoverClassName='w-[320px]'
+                              />
+                            </div>
+                            {canQuickView && customerId && (
+                              <QuickLedgerButton
+                                onClick={() =>
+                                  setQuickParty({ side: 'customer', id: customerId, name: customerOption?.label || 'Customer', phone: customerOption?.sublabel, balance: customerBalances[customerId] })
+                                }
+                              />
+                            )}
+                          </div>
                         ) : payeeType === 'other' ? (
                           <Input
                             placeholder='Payee name'
@@ -568,22 +691,25 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                           )}
                           </div>
                         )}
-                        {(lineError?.category || lineError?.supplierId || lineError?.payeeName) && (
+                        {(lineError?.category || lineError?.supplierId || lineError?.customerId || lineError?.payeeName) && (
                           <p className='mt-1 text-xs text-red-500'>
-                            {lineError.category?.message || lineError.supplierId?.message || lineError.payeeName?.message}
+                            {lineError.category?.message ||
+                              lineError.supplierId?.message ||
+                              lineError.customerId?.message ||
+                              lineError.payeeName?.message}
                           </p>
                         )}
                       </TableCell>
 
                       {canQuickView && (
                         <TableCell className='p-1.5 align-top'>
-                          {lineState ? <PartyBalanceCell side='supplier' owing={lineState.owingBefore} /> : <span className='block pt-2 text-right text-xs text-muted-foreground'>—</span>}
+                          {lineState ? <PartyBalanceCell side={payeeType === 'customer' ? 'customer' : 'supplier'} owing={lineState.owingBefore} /> : <span className='block pt-2 text-right text-xs text-muted-foreground'>—</span>}
                         </TableCell>
                       )}
 
                       <TableCell className='p-1.5 align-top'>
                         <Input
-                          placeholder='e.g., August rent'
+                          placeholder={payeeType === 'customer' ? 'e.g., Advance returned' : 'e.g., August rent'}
                           id={`line-${index}-description`}
                           {...voucherEnter.enterProps(`line-${index}-description`)}
                           {...form.register(`lines.${index}.description`)}
@@ -631,7 +757,12 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                         <TableCell className='p-1.5 align-top'>
                           <BalanceAfterCell
                             state={lineState}
-                            active={(Number(form.watch(`lines.${index}.amount`)) || 0) + (Number(form.watch(`lines.${index}.discountAmount`)) || 0) > 0}
+                            owingLabel={payeeType === 'customer' ? 'receivable' : undefined}
+                            active={
+                              (Number(form.watch(`lines.${index}.amount`)) || 0) +
+                                (payeeType === 'supplier' ? Number(form.watch(`lines.${index}.discountAmount`)) || 0 : 0) >
+                              0
+                            }
                           />
                         </TableCell>
                       )}
@@ -666,6 +797,16 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                   Settled on ledgers: <span className='font-semibold text-foreground'>{formatMoney(totalAmount + totalDiscount)}</span>
                 </span>
               </>
+            )}
+            {customerPayout > 0 && (
+              <span className='text-sm text-muted-foreground' title='Cash paid to customers is posted on their ledger as Payment Made'>
+                Paid to customers: <span className='font-semibold text-foreground'>{formatMoney(customerPayout)}</span>
+                {advanceReturned > 0.005 && (
+                  <span className='ml-1 text-xs text-sky-700 dark:text-sky-400'>
+                    ({formatMoney(advanceReturned)} advance returned)
+                  </span>
+                )}
+              </span>
             )}
             <span className='flex items-center gap-2'>
               <span className='text-sm font-medium text-muted-foreground'>{totalDiscount > 0 ? 'Cash paid:' : 'Total:'}</span>

@@ -508,7 +508,7 @@ const createAdjustmentWithWarehouse = async (params = {}) => {
       await StockAdjustment.updateOne({ _id: adjustment._id }, { $set: { warehouseId } });
       adjustment.warehouseId = warehouseId;
     }
-    await warehouseService.syncAdjustment(adjustment._id);
+    await warehouseService.syncAdjustment(adjustment._id, warehouseService.saveHint({ organizationId: params.organizationId, warehouseId }, { isNew: true }));
   }
   return adjustment;
 };

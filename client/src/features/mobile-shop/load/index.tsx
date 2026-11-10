@@ -93,7 +93,12 @@ import type { RootState } from '@/stores/store'
 import { fetchAllSuppliers } from '@/stores/supplier.slice'
 import { ArrowLeft, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { usePermissions } from '@/context/permission-context'
-import { getBusinessToday, parseBusinessDateTimeLocal, toBusinessCalendarDate } from '@/lib/business-timezone'
+import {
+  getBusinessClockParts,
+  getBusinessToday,
+  parseBusinessDateTimeLocal,
+  toBusinessCalendarDate,
+} from '@/lib/business-timezone'
 import { ListPrintButton } from '@/features/mobile-shop/components/list-print-button'
 import { MobileReceiptPreviewDialog } from '@/features/mobile-shop/components/mobile-receipt-preview-dialog'
 import {
@@ -275,6 +280,34 @@ const resyncUneditedFlatEntries = (entries: BulkWithdrawalEntry[], sharedRatePer
       ? { ...entry, commissionRate: computeFlatCommission(entry.amount, sharedRatePercent) }
       : entry
   )
+
+/** A batch identical to the one just saved, submitted again within this window, asks first. */
+const BULK_REPEAT_WINDOW_MS = 3 * 60 * 1000
+
+/**
+ * What makes a bulk batch "the same": account, direction and every row's amount / commission /
+ * charge / customer. Two separate saves of the same rows (seen in a client's Cash Book as the
+ * same 500 + 4,000 Sends saved 11 seconds apart) put the cash in the Cash Book twice.
+ */
+const bulkBatchSignature = (form: BulkWithdrawalFormState, entries: BulkWithdrawalEntry[]) =>
+  [
+    form.walletId,
+    form.transactionType,
+    ...entries
+      .map((e) =>
+        [
+          Number(e.amount) || 0,
+          roundMoney(bulkEntryCommission(e, form.commissionRate)),
+          Number(e.extraCharge) || 0,
+          e.customerName.trim().toLowerCase(),
+          e.customerNumber.trim(),
+        ].join(':'),
+      )
+      .sort(),
+  ].join('|')
+
+/** Module-level so it survives the page remounting (switching tabs) inside the window. */
+let lastBulkSave: { signature: string; at: number } | null = null
 
 const makeInitialBulkWithdrawalForm = (): BulkWithdrawalFormState => ({
   walletId: '',
@@ -670,6 +703,8 @@ function LoadManagementPage({
   // Bulk selection state
   const [selectedWithdrawalIds, setSelectedWithdrawalIds] = useState<Set<string>>(new Set())
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+  /** Set when the exact batch just saved is submitted again — asks before saving it twice. */
+  const [bulkRepeatSavedAt, setBulkRepeatSavedAt] = useState<number | null>(null)
 
   // Edit state
   const [editingPurchase, setEditingPurchase] = useState<any>(null)
@@ -1459,10 +1494,20 @@ function LoadManagementPage({
     }))
   }
 
-  const handleBulkWithdrawalSubmit = async () => {
+  const handleBulkWithdrawalSubmit = async ({ confirmedRepeat = false }: { confirmedRepeat?: boolean } = {}) => {
     if (!bulkWithdrawalForm.walletId) { toast.error('Please select a wallet'); return }
     const validEntries = bulkWithdrawalForm.entries.filter(e => parseFloat(e.amount) > 0)
     if (validEntries.length === 0) { toast.error('Enter at least one valid amount'); return }
+    const batchSignature = bulkBatchSignature(bulkWithdrawalForm, validEntries)
+    if (
+      !confirmedRepeat &&
+      lastBulkSave &&
+      lastBulkSave.signature === batchSignature &&
+      Date.now() - lastBulkSave.at < BULK_REPEAT_WINDOW_MS
+    ) {
+      setBulkRepeatSavedAt(lastBulkSave.at)
+      return
+    }
     if (bulkWithdrawalForm.transactionType === 'deposit') {
       const selectedWallet = wallets.find(w => resolveWalletId(w) === bulkWithdrawalForm.walletId)
       const totalAmount = validEntries.reduce((sum, e) => sum + Number(e.amount), 0)
@@ -1498,6 +1543,7 @@ function LoadManagementPage({
           notes: e.notes.trim() || undefined,
         })),
       }).unwrap()
+      lastBulkSave = { signature: batchSignature, at: Date.now() }
       toast.success(`${validEntries.length} ${cashTxLabelLower(bulkWithdrawalForm.transactionType)} entries saved!`)
       setSavedReceipt(
         buildBulkCashReceipt({
@@ -2760,7 +2806,7 @@ function LoadManagementPage({
 
                     <Button
                       size='lg'
-                      onClick={handleBulkWithdrawalSubmit}
+                      onClick={() => void handleBulkWithdrawalSubmit()}
                       disabled={isSavingBulk || !bulkWithdrawalForm.walletId || bulkWithdrawalTotals.validCount === 0 || !canManage}
                       className='w-full md:w-auto bg-orange-500 hover:bg-orange-600'
                     >
@@ -3329,6 +3375,31 @@ function LoadManagementPage({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDelete} className='bg-red-600 hover:bg-red-700'>
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkRepeatSavedAt !== null} onOpenChange={(open) => !open && setBulkRepeatSavedAt(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>These entries are already saved</AlertDialogTitle>
+            <AlertDialogDescription>
+              The same {cashTxLabelLower(bulkWithdrawalForm.transactionType)} entries were saved at{' '}
+              {bulkRepeatSavedAt !== null ? getBusinessClockParts(new Date(bulkRepeatSavedAt)).time : ''}. Saving
+              them again adds the cash to the Cash Book a second time, and your drawer count will come out short
+              by that amount. Save again only if these customers really came a second time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Don&apos;t save</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setBulkRepeatSavedAt(null)
+                void handleBulkWithdrawalSubmit({ confirmedRepeat: true })
+              }}
+            >
+              Save again
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

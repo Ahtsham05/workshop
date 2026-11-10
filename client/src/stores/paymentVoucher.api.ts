@@ -44,7 +44,7 @@ interface PaginatedResult<T> {
   totalAmountSum: number
 }
 
-export type PaymentVoucherPayeeType = 'expense' | 'supplier' | 'other'
+export type PaymentVoucherPayeeType = 'expense' | 'supplier' | 'customer' | 'other'
 
 export interface PaymentVoucherLine {
   id?: string
@@ -52,6 +52,9 @@ export interface PaymentVoucherLine {
   category?: string
   supplierId?: string
   supplierName?: string
+  /** Customer lines: cash handed to a customer (refund of their advance / paid on account). */
+  customerId?: string
+  customerName?: string
   payeeName: string
   amount: number
   /** Settlement discount given with this line (no cash) — features/ledger-discounts. */
@@ -63,6 +66,9 @@ export interface PaymentVoucherLine {
   description?: string
   expenseId?: string
   supplierLedgerEntryId?: string
+  customerLedgerEntryId?: string
+  /** Advance credit this customer line used up (per source payment). */
+  creditDraws?: { paymentId: string; amount: number }[]
 }
 
 /** `createdBy` / `updatedBy` come back as a populated user from the single-voucher endpoint,

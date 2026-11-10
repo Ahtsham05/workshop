@@ -10,15 +10,16 @@ import { setWarehousePrintResolver } from '@/features/invoice/utils/print-utils'
  */
 export function WarehousePrintSync() {
   const { showOnPrints } = useWarehouseSettings()
-  const { visible, warehouses, defaultId } = useWarehousePicker('any')
+  // Subscribes to the warehouse list only while printing the warehouse is switched on.
+  const { visible, all, defaultId } = useWarehousePicker('any', { active: showOnPrints })
   useEffect(() => {
     if (!showOnPrints || !visible) {
       setWarehousePrintResolver(null)
       return
     }
-    const names = new Map(warehouses.map((w) => [w.id, w.name]))
+    const names = new Map(all.map((w) => [w.id, w.name]))
     setWarehousePrintResolver((id) => names.get(String(id || defaultId)) || '')
     return () => setWarehousePrintResolver(null)
-  }, [showOnPrints, visible, warehouses, defaultId])
+  }, [showOnPrints, visible, all, defaultId])
   return null
 }
