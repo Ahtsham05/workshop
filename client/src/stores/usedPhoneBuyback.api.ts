@@ -119,6 +119,8 @@ export interface UsedPhoneStats {
 }
 
 export interface CreateBuybackBody {
+  /** Multi-warehouse: unset = the branch's default warehouse. */
+  warehouseId?: string
   sellerType: 'customer' | 'walkin'
   sellerCustomerId?: string
   sellerName: string

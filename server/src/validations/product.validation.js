@@ -40,6 +40,8 @@ const criticalNotAboveLow = (value, helpers) => {
 const createProduct = {
   body: Joi.object().keys({
     productType: productType(),
+    // Multi-warehouse: put the opening stock straight into this warehouse.
+    openingWarehouseId: Joi.string().custom(objectId).allow('', null),
     name: Joi.string().required(),
     nameUrdu: Joi.string().allow('').optional(),
     price: Joi.number().required(),

@@ -2242,6 +2242,59 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}, options = {}) 
   };
 };
 
+
+// ── Multi-warehouse (services/warehouse.service.js) ─────────────────────────────────────
+// A new product's opening stock lands in the default warehouse (the branch total); with
+// `openingWarehouseId` it is then moved to that warehouse by a posted transfer.
+const createProductWithWarehouse = async (productBody = {}, ...rest) => {
+  const { openingWarehouseId, ...body } = productBody;
+  // eslint-disable-next-line global-require
+  const warehouseService = require('./warehouse.service');
+  if (openingWarehouseId) {
+    await warehouseService.assertDocWarehouse({ organizationId: body.organizationId, branchId: body.branchId, warehouseId: openingWarehouseId, kind: 'receipt' });
+  }
+  const product = await createProduct(body, ...rest);
+  if (product && Number(product.stockQuantity) > 0) {
+    await warehouseService.recordStockEdit({ product, delta: Number(product.stockQuantity), reason: 'Opening stock', userId: body.createdBy });
+    if (openingWarehouseId) await warehouseService.placeOpeningStock({ product, warehouseId: openingWarehouseId, userId: body.createdBy });
+  }
+  return product;
+};
+
+// Stock typed on the product form / bulk edit: the change is written to the default
+// warehouse's history (see warehouse.service.js#recordStockEdit).
+const stockSnapshot = async (ids) =>
+  new Map(
+    (await Product.find({ _id: { $in: ids } }).select('stockQuantity hasVariants organizationId branchId').lean()).map((p) => [String(p._id), p])
+  );
+
+const recordStockDiffs = async (before, ids, userId) => {
+  // eslint-disable-next-line global-require
+  const warehouseService = require('./warehouse.service');
+  const after = await stockSnapshot(ids);
+  for (const [id, now] of after) {
+    const was = before.get(id);
+    const delta = Number(now.stockQuantity || 0) - Number((was && was.stockQuantity) || 0);
+    if (was && delta) await warehouseService.recordStockEdit({ product: now, delta, userId });
+  }
+};
+
+const updateProductByIdWithWarehouse = async (productId, updateBody, options = {}) => {
+  const touchesStock = updateBody && updateBody.stockQuantity !== undefined;
+  const before = touchesStock ? await stockSnapshot([productId]) : null;
+  const result = await updateProductById(productId, updateBody, options);
+  if (touchesStock) await recordStockDiffs(before, [productId], options.updatedBy);
+  return result;
+};
+
+const bulkUpdateProductsWithWarehouse = async (productsToUpdate = [], ...rest) => {
+  const ids = productsToUpdate.filter((p) => p && p.stockQuantity !== undefined).map((p) => p._id || p.id).filter(Boolean);
+  const before = ids.length ? await stockSnapshot(ids) : null;
+  const result = await bulkUpdateProducts(productsToUpdate, ...rest);
+  if (ids.length) await recordStockDiffs(before, ids);
+  return result;
+};
+
 module.exports = {
   syncDefaultVariantTracking,
   reconcileTrackedStock,
@@ -2249,19 +2302,19 @@ module.exports = {
   getProductNameIndex,
   getInactiveCatalog,
   ensureProductIndexes,
-  createProduct,
+  createProduct: createProductWithWarehouse,
   queryProducts,
   getProductById,
   getProductForEdit,
   findProductByCode,
-  updateProductById,
+  updateProductById: updateProductByIdWithWarehouse,
   deleteProductById,
   bulkDeleteProductsByIds,
   getAllProducts,
   getProductStats,
   countAddedToday,
   getCategoryBreakdown,
-  bulkUpdateProducts,
+  bulkUpdateProducts: bulkUpdateProductsWithWarehouse,
   bulkSetProductCategories,
   bulkSetProductBrand,
   bulkAddProducts,

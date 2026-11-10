@@ -559,6 +559,137 @@ const removeUnusedCategories = async (organizationId, branchId, { onlyDefaults =
   return { removed: unused.map((c) => c.name), kept: candidates.length - unused.length };
 };
 
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const IMPORT_PALETTE = ['#3b82f6', '#f59e0b', '#10b981', '#6366f1', '#ec4899', '#14b8a6', '#f97316', '#8b5cf6', '#ef4444', '#0891b2'];
+
+/** "Active", "yes", "1" → true; "Inactive", "no", "0", "disabled" → false; else undefined. */
+const parseActive = (value) => {
+  const text = String(value == null ? '' : value).trim().toLowerCase();
+  if (!text) return undefined;
+  if (/^(active|yes|y|true|1|on|enabled?)$/.test(text)) return true;
+  if (/^(inactive|no|n|false|0|off|disabled?|retired)$/.test(text)) return false;
+  return null;
+};
+
+/**
+ * Import a list of business-expense categories (names only, or with type / account /
+ * colour / note / status). Same rules as every other import: a bad row costs that row;
+ * rows already saved are `skipped` ('skip') or have their details updated ('update' —
+ * through updateCategory, so a type or ledger change re-classifies that category's saved
+ * expenses exactly like editing it by hand); notes on imported rows are `warnings`.
+ */
+const bulkImportCategories = async (rows, { organizationId, branchId, createdBy }, { duplicateStrategy = 'skip' } = {}) => {
+  if (!branchId) throw new ApiError(httpStatus.BAD_REQUEST, 'Select a branch first');
+  const strategy = ['skip', 'update', 'error'].includes(duplicateStrategy) ? duplicateStrategy : 'skip';
+  const errors = [];
+  const skipped = [];
+  const warnings = [];
+  let insertedCount = 0;
+  let updatedCount = 0;
+  let reclassifiedExpenses = 0;
+
+  const existing = await ExpenseCategory.find({ organizationId, branchId, transactionType: 'business_expense' }).lean();
+  const byName = new Map(existing.map((c) => [c.name.trim().toLowerCase(), c]));
+  const seenInFile = new Map();
+
+  // eslint-disable-next-line global-require
+  const AccountHead = require('../models/accountHead.model');
+  const expenseAccounts = await AccountHead.find({ organizationId, branchId, rootType: 'EXPENSE', isGroup: false })
+    .select('code')
+    .lean();
+  const validCodes = new Set(expenseAccounts.map((a) => String(a.code)));
+
+  for (const [index, raw] of (Array.isArray(rows) ? rows : []).entries()) {
+    const row = raw || {};
+    const name = String(row.name == null ? '' : row.name).trim().replace(/\s+/g, ' ');
+    if (!name) {
+      errors.push({ index, name: `Row ${index + 1}`, error: 'Category name is empty' });
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+    if (name.length > 80) {
+      errors.push({ index, name, error: 'Category name is longer than 80 characters' });
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+    const key = name.toLowerCase();
+    if (seenInFile.has(key)) {
+      skipped.push({ index, name, reason: `Repeated — same name as row ${seenInFile.get(key) + 1} in this file` });
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+    seenInFile.set(key, index);
+
+    const notes = [];
+    const patch = {};
+    if (row.expenseNature != null && String(row.expenseNature).trim() !== '') {
+      const nature = parseExpenseNature(row.expenseNature);
+      if (nature) patch.expenseNature = nature;
+      else notes.push(`Type "${row.expenseNature}" should be Direct or Indirect — left as ${byName.get(key)?.expenseNature === 'direct' ? 'Direct' : 'Indirect'}`);
+    }
+    const code = String(row.accountCode == null ? '' : row.accountCode).trim();
+    if (code) {
+      if (validCodes.has(code)) patch.accountCode = code;
+      else notes.push(`Account ${code} is not an expense account in your Chart of Accounts — left out`);
+    }
+    const color = String(row.color == null ? '' : row.color).trim();
+    if (color) {
+      if (HEX_COLOR.test(color)) patch.color = color;
+      else notes.push(`Colour "${color}" is not a #RRGGBB colour — a colour was picked for you`);
+    }
+    const description = String(row.description == null ? '' : row.description).trim();
+    if (description) patch.description = description;
+    const active = parseActive(row.isActive);
+    if (active === null) notes.push(`Status "${row.isActive}" should be Active or Inactive — left as is`);
+    else if (active !== undefined) patch.isActive = active;
+
+    const current = byName.get(key);
+    try {
+      if (current) {
+        if (strategy === 'error') {
+          errors.push({ index, name, error: `"${current.name}" already exists` });
+          // eslint-disable-next-line no-continue
+          continue;
+        }
+        if (strategy === 'skip' || Object.keys(patch).length === 0) {
+          skipped.push({ index, name, reason: strategy === 'skip' ? 'Already saved — left unchanged' : 'Already saved — nothing to change' });
+          // eslint-disable-next-line no-continue
+          continue;
+        }
+        // eslint-disable-next-line no-await-in-loop
+        const updated = await updateCategory(current._id, { ...patch, transactionType: 'business_expense' }, organizationId);
+        updatedCount += 1;
+        if (updated.reclassified) {
+          reclassifiedExpenses += updated.reclassified.updated;
+          notes.push(`${updated.reclassified.updated} saved expenses moved to ${updated.expenseNature === 'direct' ? 'Direct' : 'Indirect'}`);
+        }
+      } else {
+        // eslint-disable-next-line no-await-in-loop
+        const created = await ExpenseCategory.create({
+          organizationId,
+          branchId,
+          name,
+          transactionType: 'business_expense',
+          expenseNature: patch.expenseNature || 'indirect',
+          accountCode: patch.accountCode || null,
+          color: patch.color || IMPORT_PALETTE[(existing.length + insertedCount) % IMPORT_PALETTE.length],
+          description: patch.description || '',
+          isActive: patch.isActive !== false,
+          createdBy,
+        });
+        byName.set(key, created.toObject());
+        insertedCount += 1;
+      }
+      if (notes.length) warnings.push({ index, name, message: notes.join('; ') });
+    } catch (err) {
+      errors.push({ index, name, error: err.code === 11000 ? `"${name}" already exists` : err.message || 'Could not save this category' });
+    }
+  }
+
+  return { insertedCount, updatedCount, reclassifiedExpenses, skippedCount: skipped.length, errors, skipped, warnings };
+};
+
 const EMPLOYEE_CATEGORY_COLORS = ['#10b981', '#6366f1', '#f59e0b', '#ec4899', '#14b8a6'];
 
 const renameEmployeeCategory = async (organizationId, branchId, oldName, newName) => {
@@ -653,6 +784,7 @@ module.exports = {
   reclassifyCategoryExpenses,
   getCategoryUsage,
   removeUnusedCategories,
+  bulkImportCategories,
   getCategories,
   createCategory,
   updateCategory,

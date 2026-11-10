@@ -5,6 +5,7 @@ const createSimSale = {
   body: Joi.object().keys({
     date: Joi.date().default(() => new Date()).custom(notFutureDate),
     productId: Joi.string().custom(objectId),
+    warehouseId: Joi.string().custom(objectId).allow('', null),
     productName: Joi.string().trim().allow(''),
     simAmount: Joi.number().min(0).required(),
     walletType: Joi.string().trim().allow(''),

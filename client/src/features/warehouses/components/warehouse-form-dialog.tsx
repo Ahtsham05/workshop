@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useLanguage } from '@/context/language-context'
 import { getErrorMessage } from '@/lib/get-error-message'
+import { useManufacturingAccess } from '@/hooks/use-manufacturing-access'
 import { cn } from '@/lib/utils'
 import { useCreateWarehouseMutation, useUpdateWarehouseMutation, type Warehouse, type WarehouseType } from '@/stores/warehouse.api'
 import { WAREHOUSE_COLORS, WAREHOUSE_TYPE_LABELS } from '../lib/labels'
@@ -34,6 +35,8 @@ const EMPTY = {
   allowSales: true,
   allowReceipts: true,
   isDefault: false,
+  isMaterialsStore: false,
+  isGoodsStore: false,
 }
 
 export function WarehouseFormDialog({ open, onOpenChange, warehouse, onSaved }: Props) {
@@ -42,6 +45,7 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, onSaved }: 
   const [create, { isLoading: creating }] = useCreateWarehouseMutation()
   const [update, { isLoading: updating }] = useUpdateWarehouseMutation()
   const saving = creating || updating
+  const { available: manufacturingOn } = useManufacturingAccess()
 
   useEffect(() => {
     if (!open) return
@@ -59,6 +63,8 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, onSaved }: 
             allowSales: warehouse.allowSales !== false,
             allowReceipts: warehouse.allowReceipts !== false,
             isDefault: warehouse.isDefault,
+            isMaterialsStore: Boolean(warehouse.isMaterialsStore),
+            isGoodsStore: Boolean(warehouse.isGoodsStore),
           }
         : EMPTY
     )
@@ -189,6 +195,22 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, onSaved }: 
               disabled={Boolean(warehouse?.isDefault)}
               onChange={(v) => set('isDefault', v)}
             />
+            {manufacturingOn ? (
+              <>
+                <ToggleRow
+                  label={t('Production: materials store')}
+                  hint={t('Manufacturing issues raw materials from here and returns unused ones here. One per branch.')}
+                  checked={form.isMaterialsStore}
+                  onChange={(v) => set('isMaterialsStore', v)}
+                />
+                <ToggleRow
+                  label={t('Production: finished goods store')}
+                  hint={t('Finished goods, packing and production scrap go through here. One per branch.')}
+                  checked={form.isGoodsStore}
+                  onChange={(v) => set('isGoodsStore', v)}
+                />
+              </>
+            ) : null}
           </div>
         </form>
         <DialogFooter className='shrink-0'>

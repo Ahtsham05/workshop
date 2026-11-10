@@ -86,6 +86,12 @@ export interface ImportBatchOutcome {
   skipped?: Array<{ index?: number; reason?: string; message?: string }>
   /** Free-form notes for the summary, e.g. "Created 3 new categories". */
   notes?: string[]
+  /**
+   * Rows that WERE saved, but not as the dialog's main record — e.g. an expense row with no
+   * amount that only added its category. Counted as success (toast, onImported) and listed
+   * under `alsoSavedLabel`, never as "already saved" or as a problem.
+   */
+  alsoSaved?: Array<{ index?: number; message: string }>
 }
 
 export interface DuplicateKeySpec<T> {
@@ -125,8 +131,10 @@ export interface ExcelImportDialogProps<T> {
   options?: ReactNode
   /** One-line preview of a row, shown for the first few ready rows. */
   renderPreview?: (item: T) => ReactNode
-  /** Called after an import that inserted at least one record. */
+  /** Called after an import that inserted at least one record (or `alsoSaved` row). */
   onImported?: () => void
+  /** Heading for `alsoSaved` rows, e.g. "rows saved as categories only (no amount)". */
+  alsoSavedLabel?: string
 }
 
 interface RowIssue {
@@ -162,6 +170,7 @@ export function ExcelImportDialog<T>({
   options,
   renderPreview,
   onImported,
+  alsoSavedLabel,
 }: ExcelImportDialogProps<T>) {
   const { t } = useLanguage()
 
@@ -188,6 +197,8 @@ export function ExcelImportDialog<T>({
     skipped: RowIssue[]
     /** Rows that imported, with something the user should know about. */
     noted: RowIssue[]
+    /** Rows saved as something other than the main record (see ImportBatchOutcome.alsoSaved). */
+    alsoSaved: RowIssue[]
     /** Rows never sent because they needed fixing first. */
     notSent: number
     notes: string[]
@@ -368,6 +379,7 @@ export function ExcelImportDialog<T>({
     const failed: RowIssue[] = []
     const skippedRows: RowIssue[] = []
     const notedRows: RowIssue[] = []
+    const alsoSavedRows: RowIssue[] = []
     const notes: string[] = []
     let stoppedEarly = false
 
@@ -411,6 +423,14 @@ export function ExcelImportDialog<T>({
             values: source?.values || {},
           })
         })
+        ;(outcome.alsoSaved || []).forEach((row, position) => {
+          const source = slice[row.index ?? position]
+          alsoSavedRows.push({
+            excelRow: source?.excelRow ?? start + position + 1,
+            reason: row.message,
+            values: source?.values || {},
+          })
+        })
         ;(outcome.notes || []).forEach((note) => {
           if (!notes.includes(note)) notes.push(note)
         })
@@ -426,7 +446,7 @@ export function ExcelImportDialog<T>({
     }
 
     const notAttempted = stoppedEarly
-      ? total - Math.min(inserted + failed.length + skippedRows.length, total)
+      ? total - Math.min(inserted + failed.length + skippedRows.length + alsoSavedRows.length, total)
       : 0
     setProgress(null)
     setImporting(false)
@@ -435,14 +455,19 @@ export function ExcelImportDialog<T>({
       failed,
       skipped: skippedRows,
       noted: notedRows,
+      alsoSaved: alsoSavedRows,
       notSent: issues.length + Math.max(notAttempted, 0),
       notes,
       stoppedEarly,
     })
 
-    if (inserted > 0) onImported?.()
+    if (inserted > 0 || alsoSavedRows.length > 0) onImported?.()
 
-    if (inserted === 0 && failed.length === 0 && skippedRows.length > 0) {
+    if (inserted === 0 && alsoSavedRows.length > 0) {
+      const line = t('{{count}} {{label}}', { count: alsoSavedRows.length, label: alsoSavedLabel || t('rows saved') })
+      if (failed.length > 0) toast.warning(`${line} — ${t('{{count}} could not be saved', { count: failed.length })}`)
+      else toast.success(line)
+    } else if (inserted === 0 && failed.length === 0 && skippedRows.length > 0) {
       // Everything in the file was already saved. That's a no-op, not a failure.
       toast.info(
         t('Nothing new to import — all {{count}} rows are already saved', { count: skippedRows.length })
@@ -465,7 +490,7 @@ export function ExcelImportDialog<T>({
     // The rows that succeeded are saved. Clearing the parsed file makes it impossible to
     // press Import a second time and insert them all over again.
     resetFileState()
-  }, [readyRows, batchSize, importBatch, issues.length, entityPlural, onImported, resetFileState, t])
+  }, [readyRows, batchSize, importBatch, issues.length, entityPlural, onImported, alsoSavedLabel, resetFileState, t])
 
   // ─── Rendering ─────────────────────────────────────────────────────────────
 
@@ -780,16 +805,37 @@ export function ExcelImportDialog<T>({
           {/* Step 4 — what happened, with each row in the right bucket: saved, left
               alone on purpose, saved with a note, or genuinely failed. */}
           {summary && (
-            <Alert variant={summary.inserted === 0 && summary.failed.length > 0 ? 'destructive' : undefined}>
+            <Alert variant={summary.inserted === 0 && summary.alsoSaved.length === 0 && summary.failed.length > 0 ? 'destructive' : undefined}>
               {summary.failed.length > 0 ? (
                 <AlertCircle className='h-4 w-4' />
               ) : (
                 <CheckCircle2 className='h-4 w-4 text-green-600' />
               )}
               <AlertDescription className='space-y-2'>
-                <div className={`font-semibold ${summary.inserted > 0 ? 'text-green-600' : ''}`}>
-                  {t('{{count}} {{entity}} imported', { count: summary.inserted, entity: entityPlural })}
-                </div>
+                {(summary.inserted > 0 || summary.alsoSaved.length === 0) && (
+                  <div className={`font-semibold ${summary.inserted > 0 ? 'text-green-600' : ''}`}>
+                    {t('{{count}} {{entity}} imported', { count: summary.inserted, entity: entityPlural })}
+                  </div>
+                )}
+                {summary.alsoSaved.length > 0 && (
+                  <details className='text-xs' open={summary.inserted === 0}>
+                    <summary className='cursor-pointer text-sm font-semibold text-green-600'>
+                      {t('{{count}} {{label}}', { count: summary.alsoSaved.length, label: alsoSavedLabel || t('rows saved') })}
+                    </summary>
+                    <ScrollArea className='mt-1 max-h-32'>
+                      <div className='space-y-1'>
+                        {summary.alsoSaved.slice(0, MAX_LISTED_ISSUES).map((issue) => (
+                          <div key={`also-${issue.excelRow}`}>
+                            {t('Row')} {issue.excelRow}: {issue.reason}
+                          </div>
+                        ))}
+                        {summary.alsoSaved.length > MAX_LISTED_ISSUES && (
+                          <div>{t('…and {{count}} more', { count: summary.alsoSaved.length - MAX_LISTED_ISSUES })}</div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </details>
+                )}
                 {summary.notSent > 0 && (
                   <div className='text-xs'>
                     {t('{{count}} rows were not sent because they need fixing first.', { count: summary.notSent })}

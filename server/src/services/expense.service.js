@@ -620,6 +620,9 @@ const bulkImportExpenses = async (rows, context, options = {}) => {
   const skipped = [];
   const warnings = [];
   const valid = [];
+  // Rows with a category but no amount (blank or 0): a list of expense heads, not expenses.
+  // The category is created (with its Direct/Indirect) and nothing is posted.
+  const categoryOnly = [];
 
   // eslint-disable-next-line global-require
   const Wallet = require('../models/wallet.model');
@@ -638,8 +641,14 @@ const bulkImportExpenses = async (rows, context, options = {}) => {
       errors.push({ index, name, error: 'Category is empty' });
       return;
     }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      errors.push({ index, name, error: `Amount "${row.amount == null ? '' : row.amount}" must be a number above 0` });
+    const amountText = String(row.amount == null ? '' : row.amount).trim();
+    if (amountText === '' || (Number.isFinite(amount) && amount === 0)) {
+      const nature = row.expenseNature ? expenseCategoryService.parseExpenseNature(row.expenseNature) : null;
+      categoryOnly.push({ index, name: category, category, requestedNature: nature, rawNature: row.expenseNature });
+      return;
+    }
+    if (!Number.isFinite(amount) || amount < 0) {
+      errors.push({ index, name, error: `Amount "${amountText}" must be a number above 0 (leave it empty to import only the category)` });
       return;
     }
     // 'YYYY-MM-DD' (what the import dialog sends) → that Pakistan business day, at the
@@ -742,11 +751,14 @@ const bulkImportExpenses = async (rows, context, options = {}) => {
   // ── 3. Categories: create the missing ones (with the file's Direct/Indirect) ─────
   const wanted = [];
   const seenWanted = new Set();
-  toSave.forEach((v) => {
-    const key = textKey(v.body.category);
+  [
+    ...toSave.map((v) => ({ category: v.body.category, requestedNature: v.requestedNature })),
+    ...categoryOnly,
+  ].forEach((v) => {
+    const key = textKey(v.category);
     if (seenWanted.has(key)) return;
     seenWanted.add(key);
-    wanted.push({ name: v.body.category, expenseNature: v.requestedNature });
+    wanted.push({ name: v.category, expenseNature: v.requestedNature });
   });
   const { byName, created: createdCategories } = await expenseCategoryService.ensureCategoriesForImport(
     organizationId,
@@ -789,9 +801,31 @@ const bulkImportExpenses = async (rows, context, options = {}) => {
     }
   }
 
+  // ── 5. Category-only rows: report what happened to each ─────────────────────────
+  const reportedCategory = new Set();
+  categoryOnly.forEach((c) => {
+    const category = byName.get(textKey(c.category));
+    if (!category) {
+      errors.push({ index: c.index, name: c.name, error: `No amount, and category "${c.category}" does not exist (turn on "Create categories")` });
+      return;
+    }
+    const key = textKey(category.name);
+    const createdNow = createdCategories.includes(category.name) && !reportedCategory.has(key);
+    reportedCategory.add(key);
+    let reason = createdNow
+      ? `No amount — category "${category.name}" created (${category.expenseNature === 'direct' ? 'Direct' : 'Indirect'}); no expense recorded`
+      : `No amount — category "${category.name}" already exists; no expense recorded`;
+    if (c.rawNature && !c.requestedNature) reason += `; type "${c.rawNature}" not recognised — set as Indirect`;
+    else if (!createdNow && c.requestedNature && c.requestedNature !== (category.expenseNature || 'indirect')) {
+      reason += `; it stays ${category.expenseNature === 'direct' ? 'Direct' : 'Indirect'} (change it in Categories)`;
+    }
+    skipped.push({ index: c.index, name: c.name, reason, categoryOnly: true });
+  });
+
   errors.sort((a, b) => a.index - b.index);
   skipped.sort((a, b) => a.index - b.index);
   return {
+    categoryOnlyCount: categoryOnly.length,
     insertedCount,
     skippedCount: skipped.length,
     totalAmount: round2(totalAmount),

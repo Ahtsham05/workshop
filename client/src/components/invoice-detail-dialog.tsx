@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useGetInvoiceByIdQuery } from '@/stores/invoice.api'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { WarehouseTag } from '@/components/warehouse-tag'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { expiryBadge } from '@/features/reports/utils/expiry-badge'
@@ -77,6 +78,7 @@ export function InvoiceDetailDialog({ invoiceId, open, onOpenChange, onCloseAuto
               {t('invoice_details') || 'Invoice Details'}
               {invoice?.invoiceNumber && <span className="text-muted-foreground font-normal"> — {invoice.invoiceNumber}</span>}
             </span>
+            {invoice && invoice.type !== 'quotation' ? <WarehouseTag warehouseId={invoice.warehouseId} showDefault /> : null}
             {isFetching && !isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
           </DialogTitle>
         </DialogHeader>

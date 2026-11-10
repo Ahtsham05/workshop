@@ -10,6 +10,7 @@ import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { cn } from '@/lib/utils'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { WarehouseTag } from '@/components/warehouse-tag'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
@@ -204,6 +205,7 @@ export function PurchaseViewDrawer({
                 {purchase.supplier?.name && (
                   <span className='text-sm font-normal text-muted-foreground'>· {purchase.supplier.name}</span>
                 )}
+                <WarehouseTag warehouseId={purchase.warehouseId} showDefault />
                 {isFetching && <Loader2 className='h-4 w-4 animate-spin text-muted-foreground' />}
               </SheetTitle>
               <SheetDescription className='flex flex-wrap items-center gap-2 pt-1'>

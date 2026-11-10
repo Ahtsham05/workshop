@@ -35,6 +35,8 @@ export const MOVE_TYPE_LABELS: Record<MoveType, string> = {
   adjustment: 'Stock adjustment',
   branch_out: 'Sent to another branch',
   branch_in: 'Received from another branch',
+  production_in: 'Production — into stock',
+  production_out: 'Production — used',
 }
 
 /** Accent colours a warehouse can carry (cards, chips, column headers). */
@@ -78,7 +80,7 @@ export const refId = (v: unknown): string => {
 }
 
 export const WAREHOUSE_PERMS = {
-  view: ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers', 'viewProducts'] as const,
+  view: ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers', 'viewProducts', 'viewInventoryReports'] as const,
   manage: ['manageWarehouses', 'editProducts'] as const,
   transfer: ['manageWarehouseTransfers', 'manageWarehouses', 'manageStockTransfers', 'editProducts'] as const,
   settings: ['editSettings', 'manageBusinessProfile', 'manageWarehouses'] as const,

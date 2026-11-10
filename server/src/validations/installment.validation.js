@@ -6,6 +6,7 @@ const PAYMENT_METHODS = ['cash', 'bank', 'wallet', 'jazzcash', 'easypaisa'];
 const createInstallmentPlan = {
   body: Joi.object().keys({
     customerName:      Joi.string().required(),
+    warehouseId: Joi.string().custom(objectId).allow('', null),
     customerPhone:     Joi.string().allow(''),
     customerCNIC:      Joi.string().allow(''),
     customerAddress:   Joi.string().allow(''),

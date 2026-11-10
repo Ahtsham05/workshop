@@ -17,6 +17,8 @@ export type MoveType =
   | 'adjustment'
   | 'branch_out'
   | 'branch_in'
+  | 'production_in'
+  | 'production_out'
 
 export interface WarehouseSettings {
   enabled: boolean
@@ -24,6 +26,7 @@ export interface WarehouseSettings {
   blockNegativeTransfers: boolean
   askOnSales: boolean
   askOnPurchases: boolean
+  showOnPrints: boolean
 }
 
 export const DEFAULT_WAREHOUSE_SETTINGS: WarehouseSettings = {
@@ -32,6 +35,7 @@ export const DEFAULT_WAREHOUSE_SETTINGS: WarehouseSettings = {
   blockNegativeTransfers: true,
   askOnSales: true,
   askOnPurchases: true,
+  showOnPrints: false,
 }
 
 interface Ref {
@@ -56,12 +60,16 @@ export interface Warehouse {
   isActive: boolean
   allowSales: boolean
   allowReceipts: boolean
+  isMaterialsStore?: boolean
+  isGoodsStore?: boolean
   color?: string
   sortOrder?: number
   createdAt?: string
 }
 
 export interface WarehouseCard {
+  isMaterialsStore?: boolean
+  isGoodsStore?: boolean
   id: string
   name: string
   code: string
@@ -224,7 +232,7 @@ export interface WarehouseMove {
   date: string
   moveType: MoveType
   quantity: number
-  refType: 'Invoice' | 'Purchase' | 'WarehouseTransfer' | 'SalesReturn' | 'PurchaseReturn' | 'StockAdjustment' | 'InventoryTransfer'
+  refType: string
   refId: string
   refNumber: string
   productId?: { id: string; name: string; sku?: string; unit?: string } | null
@@ -282,6 +290,8 @@ export interface Replenishment {
   items: ReplenishmentItem[]
   totals: { rules: number; triggered: number; toTransfer: number; toBuy: number }
 }
+
+export type WarehouseReportKey = 'valuation' | 'summary' | 'ledger' | 'transfers' | 'sales' | 'purchases' | 'ageing' | 'bins'
 
 export interface Paged<T> {
   results: T[]
@@ -387,8 +397,11 @@ export const warehouseApi = createApi({
       query: (body) => ({ url: '/warehouses/availability', method: 'POST', body }),
       providesTags: ['WarehouseStock'],
     }),
-    getProductWarehouses: builder.query<ProductBreakdown, string>({
-      query: (productId) => `/warehouses/product/${productId}`,
+    getProductWarehouses: builder.query<ProductBreakdown, string | { productId: string; variantId?: string | null }>({
+      query: (arg) =>
+        typeof arg === 'string'
+          ? `/warehouses/product/${arg}`
+          : { url: `/warehouses/product/${arg.productId}`, params: arg.variantId ? { variantId: arg.variantId } : undefined },
       providesTags: ['WarehouseStock'],
     }),
     getWarehouseMoves: builder.query<
@@ -424,6 +437,20 @@ export const warehouseApi = createApi({
     cancelTransfer: builder.mutation<WarehouseTransfer, string>({
       query: (id) => ({ url: `/warehouses/transfers/${id}/cancel`, method: 'POST' }),
       invalidatesTags: ['WarehouseTransfer', ...STOCK_TAGS],
+    }),
+    // productId → qty, or `v:<variantId>` → qty for variants.
+    getWarehouseQuantities: builder.query<Record<string, number>, string>({
+      query: (warehouseId) => `/warehouses/${warehouseId}/quantities`,
+      providesTags: ['WarehouseStock'],
+    }),
+    // Warehouses → Reports (server: services/warehouseReport.service.js). Shapes per report
+    // live in features/warehouses/reports/report-docs.ts.
+    getWarehouseReport: builder.query<
+      unknown,
+      { report: WarehouseReportKey; from?: string; to?: string; warehouseId?: string; productId?: string; variantId?: string; status?: string; search?: string }
+    >({
+      query: ({ report, ...params }) => ({ url: `/warehouses/reports/${report}`, params }),
+      providesTags: ['WarehouseStock', 'WarehouseMoves', 'WarehouseTransfer'],
     }),
     getReorderRules: builder.query<ReorderRule[], { warehouseId?: string } | void>({
       query: (params) => ({ url: '/warehouses/rules', params: params ?? undefined }),
@@ -471,6 +498,7 @@ export const {
   useLazyGetWarehouseStockQuery,
   useGetAvailabilityQuery,
   useGetProductWarehousesQuery,
+  useLazyGetProductWarehousesQuery,
   useGetWarehouseMovesQuery,
   useGetTransfersQuery,
   useGetTransferQuery,
@@ -479,6 +507,8 @@ export const {
   useValidateTransferMutation,
   useCancelTransferMutation,
   useDeleteTransferMutation,
+  useGetWarehouseQuantitiesQuery,
+  useGetWarehouseReportQuery,
   useGetReorderRulesQuery,
   useSaveReorderRulesMutation,
   useDeleteReorderRuleMutation,

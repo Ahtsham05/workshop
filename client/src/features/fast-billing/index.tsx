@@ -47,6 +47,7 @@ import { computeDiscountAmount, type DiscountType } from '@/lib/discount'
 import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 import { useCreditLimitGuard } from '@/features/customers/credit/credit-limit-guard'
 import { invoiceUnpaidAmount } from '@/features/customers/credit/credit-utils'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 
 const MAX_RECENT_ITEMS = 10
 
@@ -69,6 +70,9 @@ export default function FastBillingPage() {
   const saleFilter = useTradeProductFilter('sale')
   const sellableCatalog = useMemo(() => catalog.filter(saleFilter.isAllowed), [catalog, saleFilter])
   const [createInvoice, { isLoading: charging }] = useCreateInvoiceMutation()
+  // Multi-warehouse: which warehouse the counter sells from.
+  const [posWarehouseId, setPosWarehouseId] = useState('')
+  const posWarehousePicker = useWarehousePicker('sale')
   const { handleError: handleCreditError, element: creditGuardElement } = useCreditLimitGuard()
   const scanInputRef = useRef<BarcodeScanInputHandle>(null)
 
@@ -647,6 +651,8 @@ export default function FastBillingPage() {
         discountValue,
         paidAmount,
       })
+      // Multi-warehouse: the counter sells from the picked warehouse (remembered per device).
+      if (posWarehousePicker.visible && posWarehouseId) Object.assign(payload, { warehouseId: posWarehouseId })
       // No pre-check here (keeps the counter fast); a credit refusal from the server opens
       // the credit dialog, and the sale is retried with whatever was decided.
       let result: Awaited<ReturnType<ReturnType<typeof createInvoice>['unwrap']>>
@@ -919,6 +925,7 @@ export default function FastBillingPage() {
               <Receipt className='h-4 w-4 text-violet-600 dark:text-violet-400' />
               Checkout
             </h2>
+            <WarehouseField kind='sale' id='pos-warehouse' className='mb-2.5 space-y-1' label='Sell from warehouse' value={posWarehouseId} onValueChange={setPosWarehouseId} />
             <PaymentPanel
               subtotal={subtotal}
               itemDiscountTotal={itemDiscountTotal}

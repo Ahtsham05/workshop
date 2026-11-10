@@ -7,7 +7,7 @@ const { toJSON, paginate } = require('./plugins');
  * edited, cancelled or deleted (warehouse.service.js#syncDocumentMoves), so the ledger
  * always matches the documents as they stand now.
  */
-const MOVE_TYPES = ['receipt', 'delivery', 'transfer_in', 'transfer_out', 'return_in', 'return_out', 'adjustment', 'branch_out', 'branch_in'];
+const MOVE_TYPES = ['receipt', 'delivery', 'transfer_in', 'transfer_out', 'return_in', 'return_out', 'adjustment', 'branch_out', 'branch_in', 'production_in', 'production_out'];
 
 const warehouseMoveSchema = new mongoose.Schema(
   {
@@ -19,7 +19,10 @@ const warehouseMoveSchema = new mongoose.Schema(
     variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant', default: null },
     moveType: { type: String, enum: MOVE_TYPES, required: true },
     quantity: { type: Number, required: true }, // signed: + into the position, − out of it
-    refType: { type: String, enum: ['Invoice', 'Purchase', 'WarehouseTransfer', 'SalesReturn', 'PurchaseReturn', 'StockAdjustment', 'InventoryTransfer'], required: true },
+    // Any stock document: Invoice, Purchase, WarehouseTransfer, SalesReturn, PurchaseReturn,
+    // StockAdjustment, InventoryTransfer, InstallmentPlan, SimSale, PhoneBuyback, and the
+    // manufacturing documents (MaterialIssue, ProductionReceipt, PackingVoucher …).
+    refType: { type: String, required: true },
     refId: { type: mongoose.Schema.Types.ObjectId, required: true },
     refNumber: { type: String, trim: true, default: '' },
     // The other side of a transfer (for "from / to" columns).

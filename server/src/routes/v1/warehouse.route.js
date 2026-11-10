@@ -43,8 +43,9 @@ router
 router.get('/overview', auth(...P.view), c.getOverview);
 router.get('/stock', auth(...P.view), validate(v.getStock), c.getStock);
 router.post('/availability', auth(...P.view), validate(v.getAvailability), c.getAvailability);
-router.get('/product/:productId', auth(...P.view), validate(v.productParam), c.getProductBreakdown);
+router.get('/product/:productId', auth(...P.pick), validate(v.productParam), c.getProductBreakdown);
 router.get('/moves', auth(...P.view), validate(v.getMoves), c.getMoves);
+router.get('/reports/:report', auth(...P.view), validate(v.getReport), c.getReport);
 router.get('/rules', auth(...P.view), validate(v.getRules), c.getRules);
 router.delete('/rules/:ruleId', auth(...P.manage), ownRule, validate(v.ruleParam), c.deleteRule);
 router.get('/replenishment', auth(...P.view), c.getReplenishment);
@@ -77,6 +78,8 @@ router
   .get(auth(...P.view), ownWarehouse, validate(v.warehouseParam), c.getWarehouse)
   .patch(auth(...P.manage), ownWarehouse, validate(v.updateWarehouse), c.updateWarehouse)
   .delete(auth(...P.manage), ownWarehouse, validate(v.warehouseParam), c.deleteWarehouse);
+// Quantity per product in one warehouse — read by invoice / POS pickers (cashier roles).
+router.get('/:warehouseId/quantities', auth(...P.pick), ownWarehouse, validate(v.warehouseParam), c.getQuantities);
 router.post('/:warehouseId/default', auth(...P.manage), ownWarehouse, validate(v.warehouseParam), c.setDefaultWarehouse);
 router
   .route('/:warehouseId/locations')

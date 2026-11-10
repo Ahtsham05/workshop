@@ -39,6 +39,8 @@ const getScope = async (req) => {
     email: req.user.email,
     bypassPermissions: req.user.systemRole === 'superAdmin' || req.user.systemRole === 'system_admin',
     manufacturingEnabled: manufacturing.enabled,
+    // eslint-disable-next-line global-require
+    warehousesEnabled: (await require('../services/warehouse.service').getSettings(organizationId)).enabled,
   };
 };
 

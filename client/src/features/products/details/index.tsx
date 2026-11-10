@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { ProductWarehouseCard } from '@/features/warehouses/components/product-warehouse-card'
 import { Link } from '@tanstack/react-router'
 import { useDispatch } from 'react-redux'
 import { AlertTriangle, PackageSearch } from 'lucide-react'
@@ -144,6 +145,8 @@ export default function ProductDetailsPage({
       </div>
 
       <ProductKpis data={analytics} refreshing={refreshing} />
+
+      <ProductWarehouseCard productId={productId} productName={analytics.product.name} unit={analytics.product.unit} hasVariants={hasVariants} />
 
       <div className='grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'>
         <SalesTrendChart

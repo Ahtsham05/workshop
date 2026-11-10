@@ -352,6 +352,7 @@ export interface RepairBillLineInput {
   productId?: string
   variantId?: string
   batchId?: string
+  warehouseId?: string
   name?: string
   quantity: number
   unitPrice?: number
@@ -785,6 +786,8 @@ export interface SimSaleRecord {
 }
 
 export interface CreateSimSaleInput {
+  /** Multi-warehouse: unset = the branch's default warehouse. */
+  warehouseId?: string
   date?: string
   productId?: string
   productName?: string
@@ -1160,6 +1163,7 @@ export const mobileShopApi = createApi({
         productId?: string
         variantId?: string
         batchId?: string
+        warehouseId?: string
         name?: string
         quantity: number
         unitPrice?: number
@@ -1510,7 +1514,7 @@ export const mobileShopApi = createApi({
       query: (id) => `/installments/${id}`,
       providesTags: ['Installments'],
     }),
-    createInstallmentPlan: builder.mutation<InstallmentPlanRecord, Partial<InstallmentPlanRecord> & { paymentMethod?: string; walletType?: string }>({
+    createInstallmentPlan: builder.mutation<InstallmentPlanRecord, Partial<InstallmentPlanRecord> & { paymentMethod?: string; walletType?: string; warehouseId?: string }>({
       query: (body) => ({ url: '/installments', method: 'POST', body }),
       invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],
       onQueryStarted: invalidateCrossSliceWalletCaches,

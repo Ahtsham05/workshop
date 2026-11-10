@@ -116,7 +116,7 @@ const getAvailability = catchAsync(async (req, res) => {
 });
 
 const getProductBreakdown = catchAsync(async (req, res) => {
-  res.send(await warehouseService.getProductBreakdown({ organizationId: req.organizationId, productId: req.params.productId }));
+  res.send(await warehouseService.getProductBreakdown({ organizationId: req.organizationId, productId: req.params.productId, variantId: req.query.variantId }));
 });
 
 const getTransfers = catchAsync(async (req, res) => {
@@ -161,6 +161,20 @@ const getMoves = catchAsync(async (req, res) => {
   res.send(await warehouseService.queryMoves({ organizationId, branchId, query: req.query }));
 });
 
+const getReport = catchAsync(async (req, res) => {
+  const { organizationId, branchId } = await readContext(req);
+  // eslint-disable-next-line global-require
+  const warehouseReportService = require('../services/warehouseReport.service');
+  res.send(
+    await warehouseReportService.runReport({ report: req.params.report, organizationId, branchId, query: req.query, showCost: await canViewCost(req) })
+  );
+});
+
+const getQuantities = catchAsync(async (req, res) => {
+  const { organizationId, branchId } = await readContext(req);
+  res.send(await warehouseService.getWarehouseQuantities({ organizationId, branchId, warehouseId: req.params.warehouseId }));
+});
+
 const getRules = catchAsync(async (req, res) => {
   const { organizationId, branchId } = await readContext(req);
   res.send(await warehouseService.listRules({ organizationId, branchId, warehouseId: req.query.warehouseId }));
@@ -186,6 +200,8 @@ const createReplenishment = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  getReport,
+  getQuantities,
   getRules,
   upsertRules,
   deleteRule,

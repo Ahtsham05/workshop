@@ -32,6 +32,7 @@ import { NotepadWindow } from '@/features/notepad/components/notepad-window'
 import { CalculatorWindow } from '@/features/calculator/components/calculator-window'
 import { ChatLiveProvider } from '@/features/chats/components/chat-live-provider'
 import { PrintColorsSync } from '@/components/print-colors-sync'
+import { WarehousePrintSync } from '@/components/warehouse-print-sync'
 
 /**
  * Authenticated layout component.
@@ -134,6 +135,7 @@ function AuthenticatedLayout() {
             {/* Platform support "Login as user": frame + way back to the admin account. */}
             <ImpersonationBanner />
             <PrintColorsSync />
+            <WarehousePrintSync />
           </NotepadProvider>
         </WhatsAppProvider>
       </PermissionWrapper>

@@ -18,6 +18,8 @@ export interface DraftLine {
   productId?: string | null
   variantId?: string | null
   batchId?: string | null
+  /** Multi-warehouse: which warehouse the part comes out of (unset = default). */
+  warehouseId?: string | null
   name: string
   quantity: number
   unitPrice: number
@@ -158,6 +160,7 @@ export function useBillDraft(job: RepairJobRecord | undefined) {
         productId: l.productId || undefined,
         variantId: l.variantId || undefined,
         batchId: l.batchId || undefined,
+        warehouseId: l.warehouseId || undefined,
         name: l.name,
         quantity: l.quantity,
         unitPrice: l.unitPrice,

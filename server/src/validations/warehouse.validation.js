@@ -15,6 +15,7 @@ const updateSettings = {
     blockNegativeTransfers: Joi.boolean(),
     askOnSales: Joi.boolean(),
     askOnPurchases: Joi.boolean(),
+    showOnPrints: Joi.boolean(),
   }).min(1),
 };
 
@@ -31,6 +32,8 @@ const warehouseBody = {
   isDefault: Joi.boolean(),
   allowSales: Joi.boolean(),
   allowReceipts: Joi.boolean(),
+  isMaterialsStore: Joi.boolean(),
+  isGoodsStore: Joi.boolean(),
   color: Joi.string().trim().max(20).allow(''),
   sortOrder: Joi.number().integer(),
 };
@@ -104,7 +107,7 @@ const getAvailability = {
   }),
 };
 
-const productParam = { params: Joi.object({ productId: id.required() }) };
+const productParam = { params: Joi.object({ productId: id.required() }), query: Joi.object({ variantId: id }) };
 
 const transferLine = Joi.object({
   productId: id.required(),
@@ -172,6 +175,22 @@ const getMoves = {
   }),
 };
 
+const getReport = {
+  params: Joi.object({
+    report: Joi.string().valid('valuation', 'summary', 'ledger', 'transfers', 'sales', 'purchases', 'ageing', 'bins').required(),
+  }),
+  query: Joi.object({
+    from: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}/),
+    to: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}/),
+    warehouseId: id,
+    productId: id,
+    variantId: id,
+    status: Joi.string().valid('all', 'draft', 'done', 'cancelled'),
+    search: Joi.string().allow('').max(200),
+    category: Joi.string().allow('').max(200),
+  }),
+};
+
 const getRules = { query: Joi.object({ warehouseId: id }) };
 
 const upsertRules = {
@@ -207,6 +226,7 @@ const createReplenishment = {
 };
 
 module.exports = {
+  getReport,
   getRules,
   upsertRules,
   ruleParam,

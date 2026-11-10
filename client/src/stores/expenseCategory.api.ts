@@ -160,6 +160,33 @@ export const expenseCategoryApi = createApi({
       // Moving the expenses re-labels them; a plain delete leaves them untouched.
       onQueryStarted: (arg, api) => (arg.moveTo ? refreshExpenseViewsAfter(arg, api) : undefined),
     }),
+    /** Excel import of category names (+ optional type / account / colour / note / status). */
+    importExpenseCategories: builder.mutation<
+      {
+        insertedCount: number
+        updatedCount: number
+        reclassifiedExpenses: number
+        skippedCount: number
+        errors?: Array<{ index?: number; error?: string; name?: string }>
+        skipped?: Array<{ index?: number; reason: string; name?: string }>
+        warnings?: Array<{ index?: number; message: string; name?: string }>
+      },
+      { categories: unknown[]; duplicateStrategy: 'skip' | 'update' | 'error' }
+    >({
+      query: (body) => ({ url: '/expense-categories/bulk', method: 'POST', body }),
+      invalidatesTags: [{ type: 'ExpenseCategory', id: 'business_expense' }, 'ExpenseCategoryUsage'],
+      // An update that changed a type re-labelled saved expenses → list + reports refresh.
+      onQueryStarted: async (_arg, api) => {
+        try {
+          const { data } = await api.queryFulfilled
+          if (data.reclassifiedExpenses > 0) {
+            await refreshExpenseViewsAfter({ transactionType: 'business_expense' }, { ...api, queryFulfilled: Promise.resolve() })
+          }
+        } catch {
+          // failed batch — nothing to refresh
+        }
+      },
+    }),
     getExpenseCategoryUsage: builder.query<ExpenseCategoryUsage, void>({
       query: () => '/expense-categories/usage',
       providesTags: ['ExpenseCategoryUsage'],
@@ -182,4 +209,5 @@ export const {
   useDeleteExpenseCategoryMutation,
   useGetExpenseCategoryUsageQuery,
   useRemoveUnusedExpenseCategoriesMutation,
+  useImportExpenseCategoriesMutation,
 } = expenseCategoryApi

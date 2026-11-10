@@ -224,9 +224,11 @@ describe('Excel import', () => {
     );
 
     expect(result.insertedCount).toBe(2);
-    expect(result.errors.map((e) => e.index)).toEqual([2, 3, 4, 7]);
-    expect(result.skipped.map((e) => e.index)).toEqual([5, 6]);
-    expect(result.createdCategories.sort()).toEqual(['Electricity', 'Freight Inward']);
+    // Row 3 (amount 0) is a category-only row now: it creates "Rent" and posts nothing.
+    expect(result.errors.map((e) => e.index)).toEqual([2, 4, 7]);
+    expect(result.skipped.map((e) => e.index)).toEqual([3, 5, 6]);
+    expect(result.skipped[0].categoryOnly).toBe(true);
+    expect(result.createdCategories.sort()).toEqual(['Electricity', 'Freight Inward', 'Rent']);
     expect(result.directAmount).toBe(2500);
     expect(result.indirectAmount).toBe(8000);
 
@@ -399,5 +401,78 @@ describe('expense voucher (several expenses at once)', () => {
     await expect(
       expenseService.createExpenseVoucher({ paymentMethod: 'Wallet', walletType: 'Ghost Bank', lines: [{ category: 'Rent', amount: 1 }] }, ctx())
     ).rejects.toThrow(/Ghost Bank/);
+  });
+});
+
+describe('importing category names only', () => {
+  test('expense import: rows with no amount (blank or 0) create the category and post nothing', async () => {
+    await expenseCategoryService.createCategory({ name: 'Rent' }, ORG, BRANCH, USER);
+    const result = await expenseService.bulkImportExpenses(
+      [
+        { category: 'Carriage Inward', expenseNature: 'Direct' }, // blank amount
+        { category: 'Office Tea', amount: 0, date: 'garbage', paymentMethod: 'Nowhere Bank' }, // 0 → date/account not checked
+        { category: 'Rent', amount: '' }, // exists already
+        { category: 'carriage inward', amount: '' }, // same category again
+        { category: 'Rent', amount: '-5' }, // negative is still an error
+        { category: 'Rent', amount: 1500, description: 'Real one', date: '2026-11-03' },
+      ],
+      ctx()
+    );
+    expect(result.insertedCount).toBe(1);
+    expect(result.categoryOnlyCount).toBe(4);
+    expect(result.createdCategories.sort()).toEqual(['Carriage Inward', 'Office Tea']);
+    expect(result.errors.map((e) => e.index)).toEqual([4]);
+    expect(result.skipped.map((s) => [s.index, s.categoryOnly])).toEqual([[0, true], [1, true], [2, true], [3, true]]);
+    expect(result.skipped[0].reason).toMatch(/category "Carriage Inward" created \(Direct\)/);
+    expect(result.skipped[2].reason).toMatch(/already exists/);
+    expect(result.skipped[3].reason).toMatch(/already exists/);
+    expect((await ExpenseCategory.findOne({ organizationId: ORG, name: 'Carriage Inward' }).lean()).expenseNature).toBe('direct');
+    expect(await Expense.countDocuments({ organizationId: ORG })).toBe(1);
+    expect(await CashBookEntry.countDocuments({ organizationId: ORG })).toBe(1);
+  });
+
+  test('category-only rows with "create categories" off are errors when the category is missing', async () => {
+    const result = await expenseService.bulkImportExpenses([{ category: 'Ghost', amount: '' }], ctx(), { createMissingCategories: false });
+    expect(result.errors[0].error).toMatch(/does not exist/);
+    expect(await ExpenseCategory.countDocuments({ organizationId: ORG })).toBe(0);
+  });
+
+  test('category import: names only, or with type / colour / status; skip vs update existing', async () => {
+    await addExpense({ category: 'Packing' }); // seeds chart + a saved expense
+    await expenseCategoryService.createCategory({ name: 'Packing' }, ORG, BRANCH, USER);
+    await waitFor(() => AccountHead.findOne({ organizationId: ORG, code: '5201' }), 'chart');
+
+    const first = await expenseCategoryService.bulkImportCategories(
+      [
+        { name: 'Rent' },
+        { name: ' Freight   Inward ', expenseNature: 'Direct', color: '#d97706' },
+        { name: 'Old Head', isActive: 'Inactive' },
+        { name: 'Shop Rent', accountCode: '5201', color: 'red' },
+        { name: 'rent' }, // repeated in file
+        { name: '' },
+        { name: 'Packing', expenseNature: 'Direct' }, // exists → skipped by default
+        { name: 'Weird', expenseNature: 'sometimes', isActive: 'maybe', accountCode: '9999' },
+      ],
+      ctx()
+    );
+    expect(first.insertedCount).toBe(5);
+    expect(first.errors.map((e) => e.index)).toEqual([5]);
+    expect(first.skipped.map((s) => s.index)).toEqual([4, 6]);
+    expect(first.warnings.map((w) => w.index)).toEqual([3, 7]);
+    const cats = Object.fromEntries((await ExpenseCategory.find({ organizationId: ORG }).lean()).map((c) => [c.name, c]));
+    expect(cats['Freight Inward'].expenseNature).toBe('direct');
+    expect(cats['Freight Inward'].color).toBe('#d97706');
+    expect(cats['Old Head'].isActive).toBe(false);
+    expect(cats['Shop Rent'].accountCode).toBe('5201');
+    expect(cats.Weird.expenseNature).toBe('indirect');
+    expect(cats.Weird.accountCode).toBeNull();
+
+    // update: a type change re-classifies that category's saved expenses
+    const second = await expenseCategoryService.bulkImportCategories([{ name: 'packing', expenseNature: 'Direct' }], ctx(), {
+      duplicateStrategy: 'update',
+    });
+    expect(second.updatedCount).toBe(1);
+    expect(second.reclassifiedExpenses).toBe(1);
+    expect((await Expense.findOne({ organizationId: ORG, category: 'Packing' }).lean()).expenseNature).toBe('direct');
   });
 });

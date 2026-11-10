@@ -85,7 +85,79 @@ async function getStockMovements(args, ctx) {
   };
 }
 
+// ── Multi-warehouse (services/warehouse.service.js) ────────────────────────────────────
+const warehouseOff = { enabled: false, message: 'Warehouses are turned off for this business (Settings → Warehouses). Stock is only kept per branch.' };
+
+async function getWarehouseStock(args, ctx) {
+  // eslint-disable-next-line global-require
+  const warehouseService = require('../../warehouse.service');
+  if (!(await warehouseService.getSettings(ctx.organizationId)).enabled) return warehouseOff;
+  if (!ctx.branchId) return { error: 'Select a branch first — warehouses belong to a branch.' };
+  const res = await warehouseService.getStock({
+    organizationId: ctx.organizationId,
+    branchId: ctx.branchId,
+    query: { search: args.product || '', filter: args.product ? 'all' : 'in_stock', limit: Math.min(Number(args.limit) || 15, 50) },
+    showCost: false,
+  });
+  const names = new Map(res.warehouses.map((w) => [w.id, w.name]));
+  const wanted = args.warehouse ? String(args.warehouse).toLowerCase() : '';
+  return {
+    warehouses: res.warehouses.filter((w) => w.isActive).map((w) => ({ name: w.name, code: w.code, isDefault: w.isDefault })),
+    products: res.results.map((r) => ({
+      name: r.name,
+      sku: r.sku,
+      unit: r.unit,
+      branchTotal: r.branchQty,
+      byWarehouse: Object.entries(r.byWarehouse)
+        .filter(([id, q]) => q !== 0 && (!wanted || (names.get(id) || '').toLowerCase().includes(wanted)))
+        .map(([id, q]) => ({ warehouse: names.get(id) || id, quantity: q })),
+    })),
+    totalMatches: res.totalResults,
+  };
+}
+
+async function getWarehouseOverview(args, ctx) {
+  // eslint-disable-next-line global-require
+  const warehouseService = require('../../warehouse.service');
+  if (!(await warehouseService.getSettings(ctx.organizationId)).enabled) return warehouseOff;
+  if (!ctx.branchId) return { error: 'Select a branch first — warehouses belong to a branch.' };
+  const [overview, replenishment] = await Promise.all([
+    warehouseService.getOverview({ organizationId: ctx.organizationId, branchId: ctx.branchId, showCost: false }),
+    warehouseService.getReplenishment({ organizationId: ctx.organizationId, branchId: ctx.branchId }),
+  ]);
+  return {
+    warehouses: overview.warehouses
+      .filter((w) => w.isActive)
+      .map((w) => ({ name: w.name, isDefault: w.isDefault, productsInStock: w.products, units: w.quantity, lowStock: w.low, negative: w.negative, bins: w.locations })),
+    draftTransfers: overview.totals.draftTransfers,
+    needRefilling: replenishment.items.map((i) => ({ product: i.name, warehouse: i.warehouse.name, onHand: i.quantity, need: i.need, moveFrom: i.source?.name || null, move: i.transferQty, toBuy: i.buyQty })),
+  };
+}
+
 const declarations = [
+  {
+    name: 'get_warehouse_stock',
+    description:
+      'How much of a product is in each warehouse of this branch (e.g. "how many fans are in the godown", "where is the Samsung A15 kept"). Without a product, lists products in stock with their split per warehouse.',
+    permission: 'viewProducts',
+    parameters: {
+      type: 'object',
+      properties: {
+        product: { type: 'string', description: 'Product name, SKU or barcode to look up' },
+        warehouse: { type: 'string', description: 'Only this warehouse (name or part of it)' },
+        limit: { type: 'number', description: 'Max products, default 15' },
+      },
+    },
+    handler: getWarehouseStock,
+  },
+  {
+    name: 'get_warehouse_overview',
+    description:
+      'Summary of every warehouse in this branch (products, units, low and negative stock, bins), draft transfers waiting, and which warehouses need refilling from their reorder rules.',
+    permission: 'viewProducts',
+    parameters: { type: 'object', properties: {} },
+    handler: getWarehouseOverview,
+  },
   {
     name: 'get_dead_stock',
     description:

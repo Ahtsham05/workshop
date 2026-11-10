@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { WarehouseTag } from '@/components/warehouse-tag'
 import { toast } from 'sonner'
 import { Plus, Search, Eye, Trash2, CheckCircle, XCircle, ArrowRightLeft, Receipt, Wallet, PackageCheck } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -279,7 +280,10 @@ export default function PurchaseReturnList({ onCreateNew, onConvertSalesReturn }
               ) : (
                 returns.map((ret) => (
                   <TableRow key={ret._id || ret.id}>
-                    <TableCell className='font-medium'>{ret.returnNumber}</TableCell>
+                    <TableCell className='font-medium'>
+                      {ret.returnNumber}
+                      <WarehouseTag warehouseId={ret.warehouseId} showDefault className='mt-0.5 flex w-fit' />
+                    </TableCell>
                     <TableCell>
                       {typeof ret.purchaseId === 'object' ? (
                         <div className='flex items-center gap-1.5'>

@@ -27,7 +27,7 @@ const writeLast = (kind: Kind, id: string) => {
   }
 }
 
-const VIEW_PERMISSIONS: PermissionKey[] = ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers', 'viewProducts', 'viewInvoices', 'createInvoices', 'editInvoices', 'viewPurchases', 'createPurchases', 'editPurchases']
+const VIEW_PERMISSIONS: PermissionKey[] = ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers', 'viewProducts', 'viewInventoryReports', 'viewInvoices', 'createInvoices', 'editInvoices', 'viewPurchases', 'createPurchases', 'editPurchases']
 
 /**
  * Whether invoices (kind 'sale') / purchases (kind 'receipt') should show a warehouse

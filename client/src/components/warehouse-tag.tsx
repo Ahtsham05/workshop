@@ -7,10 +7,20 @@ import { useWarehousePicker } from '@/components/warehouse-field'
  * the document used a warehouse other than the default (the default is the norm, so
  * printing it on every row would just be noise).
  */
-export function WarehouseTag({ warehouseId, className }: { warehouseId?: string | { id?: string; _id?: string } | null; className?: string }) {
+export function WarehouseTag({
+  warehouseId,
+  className,
+  showDefault = false,
+}: {
+  warehouseId?: string | { id?: string; _id?: string } | null
+  className?: string
+  /** Detail views: also name the default warehouse (an unset id means the default). */
+  showDefault?: boolean
+}) {
   const { visible, warehouses, defaultId } = useWarehousePicker('any')
-  const id = typeof warehouseId === 'string' ? warehouseId : warehouseId?.id || warehouseId?._id || ''
-  if (!visible || !id || id === defaultId) return null
+  const raw = typeof warehouseId === 'string' ? warehouseId : warehouseId?.id || warehouseId?._id || ''
+  const id = raw || (showDefault ? defaultId : '')
+  if (!visible || !id || (id === defaultId && !showDefault)) return null
   const wh = warehouses.find((w) => w.id === id)
   if (!wh) return null
   return (

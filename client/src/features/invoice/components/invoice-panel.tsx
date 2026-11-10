@@ -171,6 +171,8 @@ import { formatAppDate } from '@/lib/date-format'
 import { useNativeLanguageName } from '@/hooks/use-native-language-name'
 import { useTransactionLayout } from '@/lib/transaction-layout'
 import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
+import { useWarehouseQuantities } from '@/hooks/use-warehouse-quantities'
+import { WarehouseStockTrigger } from '@/components/warehouse-stock-trigger'
 /** Toggle to show payment source fields on invoice checkout. */
 const SHOW_INVOICE_PAYMENT_METHOD_UI = true
 
@@ -435,6 +437,7 @@ export function InvoicePanel({
 
   // Multi-warehouse: which warehouse the goods leave from (components/warehouse-field.tsx).
   const warehousePicker = useWarehousePicker('sale')
+  const warehouseQty = useWarehouseQuantities(invoice.warehouseId, 'sale')
   const setInvoiceWarehouse = useCallback(
     (value: string) => setInvoice(prev => (prev.warehouseId === value ? prev : { ...prev, warehouseId: value })),
     [setInvoice]
@@ -510,6 +513,7 @@ export function InvoicePanel({
 
       const printData = withCustomerContactForPrint({
         invoiceNumber: invoiceData.invoiceNumber,
+        warehouseId: invoiceData.warehouseId,
         items: invoiceData.items.map((item: any) => ({
           name: item.name,
           nameUrdu: item.nameUrdu,
@@ -609,6 +613,7 @@ export function InvoicePanel({
 
       const printData = withCustomerContactForPrint({
         invoiceNumber: invoiceData.invoiceNumber,
+        warehouseId: invoiceData.warehouseId,
         items: invoiceData.items.map((item: any) => ({
           name: item.name,
           nameUrdu: item.nameUrdu,
@@ -716,6 +721,7 @@ export function InvoicePanel({
     const totalPaidAmountForPreview = (invoice.paidAmount || 0) + splitPaidAmountForPreview
     const draftInvoiceData = {
       invoiceNumber: (isEditing && editingInvoice?.invoiceNumber) || t('Draft Preview'),
+      warehouseId: invoice.warehouseId,
       items: itemsWithProducts,
       customerId: invoice.customerId,
       customerName: invoice.customerName,
@@ -1615,6 +1621,26 @@ export function InvoicePanel({
         }
       }
 
+      // Multi-warehouse: warn (never block — the branch may still have it) when a line sells
+      // more than the chosen warehouse holds.
+      if (!isEditing && warehouseQty.active && warehouseQty.warehouse && invoice.type !== 'quotation') {
+        const need = new Map<string, { name: string; qty: number; have: number }>()
+        validItems.forEach((item) => {
+          const have = warehouseQty.qtyOf(item.productId, item.variantId)
+          if (have === null) return
+          const key = `${item.productId}|${item.variantId || ''}`
+          const prev = need.get(key)
+          need.set(key, { name: item.name, qty: (prev?.qty || 0) + Number(item.stockQuantity || item.quantity || 0), have })
+        })
+        const short = [...need.values()].filter((n) => n.qty > n.have)
+        if (short.length) {
+          toast.warning(
+            `${warehouseQty.warehouse.name} is short: ${short.slice(0, 3).map((n) => `${n.name} (has ${n.have}, selling ${n.qty})`).join(', ')}${short.length > 3 ? '…' : ''} — move stock there or pick another warehouse.`,
+            { duration: 8000 }
+          )
+        }
+      }
+
       // The split leg is an independent amount, not carved out of Paid Amount — the two
       // legs add up to what was actually paid (see split-payment-fields.tsx).
       const splitPaidAmountForSave = invoice.splitPaymentMethod ? Math.max(0, Number(invoice.splitPaidAmount || 0)) : 0
@@ -2179,11 +2205,14 @@ export function InvoicePanel({
     )
 
     const branchTrigger = (
-      <BranchStockTrigger
-        productId={item.productId}
-        variantId={item.variantId}
-        itemName={item.name}
-      />
+      <>
+        <BranchStockTrigger
+          productId={item.productId}
+          variantId={item.variantId}
+          itemName={item.name}
+        />
+        <WarehouseStockTrigger productId={item.productId} variantId={item.variantId} itemName={item.name} iconOnly />
+      </>
     )
 
     const serialTrigger = (currentProduct?.trackImei || currentProduct?.trackSerial) && (
@@ -2438,11 +2467,20 @@ export function InvoicePanel({
                                                 >
                                                   Stock: {catalogItem.stockQuantity}
                                                 </span>
+                                                {warehouseQty.active && warehouseQty.warehouse ? (() => {
+                                                  const q = warehouseQty.qtyOf(catalogItem.productId, catalogItem.variantId)
+                                                  return q === null ? null : (
+                                                    <span className={cn('rounded bg-muted px-1 font-medium', q <= 0 ? 'text-red-600' : 'text-foreground')}>
+                                                      {warehouseQty.warehouse.name}: {q}
+                                                    </span>
+                                                  )
+                                                })() : null}
                                                 <BranchStockTrigger
                                                   productId={catalogItem.productId}
                                                   variantId={catalogItem.variantId}
                                                   itemName={catalogItem.name}
                                                 />
+                                                <WarehouseStockTrigger productId={catalogItem.productId} variantId={catalogItem.variantId} itemName={catalogItem.name} />
                                                 {catalogItem.cost != null && (
                                                   <span
                                                     className={cn(

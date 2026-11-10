@@ -103,6 +103,13 @@ export default function WarehousesSettings() {
               disabled={disabled}
             />
             <SwitchRow
+              label={t('Show warehouse on invoice prints')}
+              hint={t('Adds “Warehouse: …” to printed invoices and receipts. Off by default — customers usually don’t need it.')}
+              checked={form.showOnPrints}
+              onChange={(v) => set('showOnPrints', v)}
+              disabled={disabled}
+            />
+            <SwitchRow
               label={t('Stop transfers that would go below zero')}
               hint={t('A transfer cannot move more than the source warehouse / bin holds.')}
               checked={form.blockNegativeTransfers}

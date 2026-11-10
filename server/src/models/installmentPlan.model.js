@@ -4,6 +4,8 @@ const { toJSON, paginate } = require('./plugins');
 const installmentPlanSchema = new mongoose.Schema(
   {
     organizationId:     { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
+    // Multi-warehouse: unset = the branch's default warehouse (warehouse.service.js).
+    warehouseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', default: null },
     branchId:           { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true, index: true },
     planNumber:         { type: String, trim: true, index: true },
     customerName:       { type: String, required: true, trim: true },

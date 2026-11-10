@@ -155,7 +155,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/stock-transfer', anyPermission: ['viewStockTransfers', 'manageStockTransfers'] },
   { prefix: '/stock-adjustments', anyPermission: ['viewStockAdjustments', 'manageStockAdjustments'] },
   { prefix: '/stock-counts', anyPermission: ['viewProducts', 'countStock', 'approveStockCounts'] },
-  { prefix: '/warehouses', anyPermission: ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers', 'viewProducts'] },
+  { prefix: '/warehouses', anyPermission: ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers', 'viewProducts', 'viewInventoryReports'] },
   { prefix: '/warranty-claims', anyPermission: ['viewWarrantyClaims', 'manageWarrantyClaims', 'viewImeiTracking', 'viewProducts'] },
   { prefix: '/sub-categories', anyPermission: ['viewCategories'] },
   { prefix: '/categories', anyPermission: ['viewCategories'] },

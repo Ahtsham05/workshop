@@ -78,6 +78,8 @@ import { useBranchName } from '@/hooks/use-branch-name'
 import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
 import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { formatAppDate } from '@/lib/date-format'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
+import { WarehouseTag } from '@/components/warehouse-tag'
 
 type SimSaleFormState = {
   date: string
@@ -133,6 +135,9 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
 
   const [form, setForm] = useState<SimSaleFormState>(makeEmptyForm())
   const [editingId, setEditingId] = useState<string | null>(null)
+  // Multi-warehouse: which warehouse the SIM leaves from.
+  const [simWarehouseId, setSimWarehouseId] = useState('')
+  const simWarehousePicker = useWarehousePicker('sale')
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
 
@@ -294,7 +299,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
         record = await updateSimSale({ id: editingId, body: payload }).unwrap()
         toast.success('Sim sale updated')
       } else {
-        record = await createSimSale(payload).unwrap()
+        record = await createSimSale({ ...payload, ...(simWarehousePicker.visible && simWarehouseId ? { warehouseId: simWarehouseId } : {}) }).unwrap()
         toast.success('Sim sale saved')
       }
       dispatch(fetchAllProducts({}) as any)
@@ -441,6 +446,10 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                     <p className='text-sm text-amber-600 dark:text-amber-400'>Low/negative stock for this product — sale is still allowed, stock will go negative until restocked.</p>
                   )}
                 </div>
+
+                {!editingId ? (
+                  <WarehouseField kind='sale' id='sim-warehouse' className='space-y-2' value={simWarehouseId} onValueChange={setSimWarehouseId} />
+                ) : null}
 
                 {/* Load A/C */}
                 <div className='space-y-2'>
@@ -720,7 +729,10 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                     <TableBody>
                       {filteredSales.map(sale => (
                         <TableRow key={sale.id}>
-                          <TableCell className='font-medium'>#{sale.jobNumber}</TableCell>
+                          <TableCell className='font-medium'>
+                            #{sale.jobNumber}
+                            <WarehouseTag warehouseId={(sale as { warehouseId?: string | null }).warehouseId} showDefault={Boolean(sale.productId)} className='mt-0.5 flex w-fit' />
+                          </TableCell>
                           <TableCell>{formatAppDate(new Date(sale.date))}</TableCell>
                           <TableCell className='max-w-[180px] truncate' title={sale.productName || undefined}>{sale.productName || '—'}</TableCell>
                           <TableCell>{sale.walletType || '—'}</TableCell>

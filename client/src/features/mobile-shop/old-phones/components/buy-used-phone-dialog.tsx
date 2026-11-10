@@ -22,6 +22,7 @@ import {
 } from '@/lib/wallet-payment-options'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 import { useCurrencyMeta } from '@/lib/format-money'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 import {
   useCreateBuybackMutation,
   type BuybackAccessory, type BuybackChecklist, type BuybackCondition, type BuybackGrade,
@@ -248,6 +249,9 @@ export function BuyUsedPhoneDialog({
   onSuccess?: () => void
 }) {
   const [form, setForm] = useState<FormState>(makeInitialForm)
+  // Multi-warehouse: which warehouse the bought phone goes into.
+  const [warehouseId, setWarehouseId] = useState('')
+  const warehousePicker = useWarehousePicker('receipt')
   const [sellerIdCardFront, setSellerIdCardFront] = useState<BuybackPhoto | undefined>()
   const [sellerIdCardBack, setSellerIdCardBack] = useState<BuybackPhoto | undefined>()
   const [conditionPhotos, setConditionPhotos] = useState<(BuybackPhoto | undefined)[]>([undefined, undefined, undefined, undefined])
@@ -306,6 +310,7 @@ export function BuyUsedPhoneDialog({
 
     try {
       await createBuyback({
+        ...(warehousePicker.visible && warehouseId ? { warehouseId } : {}),
         sellerType: form.sellerCustomerId ? 'customer' : 'walkin',
         sellerCustomerId: form.sellerCustomerId,
         sellerName: form.sellerName.trim(),
@@ -606,6 +611,7 @@ export function BuyUsedPhoneDialog({
               <Checkbox checked={form.isTradeIn} onCheckedChange={(c) => setField('isTradeIn', Boolean(c))} />
               This is a trade-in toward a new phone sale
             </label>
+            <WarehouseField kind='receipt' id='buyback-warehouse' className='space-y-1' value={warehouseId} onValueChange={setWarehouseId} />
             <div className='space-y-1'>
               <Label>Notes</Label>
               <Textarea className='bg-background' rows={2} placeholder='Optional notes' value={form.notes} onChange={(e) => setField('notes', e.target.value)} />

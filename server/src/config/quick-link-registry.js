@@ -173,6 +173,58 @@ const QUICK_LINK_ACTIONS = [
     synonyms: ['new transfer', 'send stock', 'send stock to branch', 'quick transfer'],
   },
   {
+    // Multi-warehouse (Settings → Warehouses) — hidden while the module is off.
+    actionKey: 'warehouses',
+    anyPermission: ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers', 'viewProducts'],
+    label: 'Warehouses',
+    iconKey: 'Warehouse',
+    route: '/warehouses',
+    category: 'Catalog & Inventory',
+    color: 'bg-indigo-500 hover:bg-indigo-600',
+    excludeBusinessTypes: ['school', 'restaurant'],
+    requiresWarehouses: true,
+    synonyms: ['godown', 'store room', 'stock locations', 'bins'],
+  },
+  {
+    actionKey: 'warehouse_transfers',
+    anyPermission: ['manageWarehouseTransfers', 'manageWarehouses', 'manageStockTransfers', 'editProducts'],
+    label: 'Move Stock (Warehouses)',
+    iconKey: 'ArrowLeftRight',
+    route: '/warehouses',
+    routeSearch: { tab: 'transfers' },
+    category: 'Catalog & Inventory',
+    color: 'bg-indigo-600 hover:bg-indigo-700',
+    excludeBusinessTypes: ['school', 'restaurant'],
+    requiresWarehouses: true,
+    synonyms: ['internal transfer', 'move to godown', 'move to shop', 'put away'],
+  },
+  {
+    actionKey: 'warehouse_reports',
+    anyPermission: ['viewWarehouses', 'manageWarehouses', 'viewProducts', 'viewInventoryReports'],
+    label: 'Warehouse Reports',
+    iconKey: 'Warehouse',
+    route: '/warehouses',
+    routeSearch: { tab: 'reports' },
+    category: 'Catalog & Inventory',
+    color: 'bg-sky-600 hover:bg-sky-700',
+    excludeBusinessTypes: ['school', 'restaurant'],
+    requiresWarehouses: true,
+    synonyms: ['stock valuation', 'stock ledger', 'warehouse wise report', 'godown report', 'stock ageing'],
+  },
+  {
+    actionKey: 'warehouse_replenishment',
+    anyPermission: ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers', 'viewProducts'],
+    label: 'Replenishment',
+    iconKey: 'Warehouse',
+    route: '/warehouses',
+    routeSearch: { tab: 'replenishment' },
+    category: 'Catalog & Inventory',
+    color: 'bg-violet-600 hover:bg-violet-700',
+    excludeBusinessTypes: ['school', 'restaurant'],
+    requiresWarehouses: true,
+    synonyms: ['reorder', 'what to buy', 'refill', 'min max'],
+  },
+  {
     actionKey: 'stock_adjustments',
     anyPermission: ['viewStockAdjustments', 'manageStockAdjustments'],
     label: 'Stock Adjustments',
@@ -2223,7 +2275,7 @@ const resolveExcludeBusinessTypes = (action) => {
  *  registry gate added after the fact) keeps silently showing forever. */
 const matchesScope = (
   action,
-  { permissions, businessType, systemRole, schoolRole, email, bypassPermissions = false, manufacturingEnabled = false } = {}
+  { permissions, businessType, systemRole, schoolRole, email, bypassPermissions = false, manufacturingEnabled = false, warehousesEnabled = false } = {}
 ) => {
   const hasPermission = (key) => bypassPermissions || (!!permissions && permissions[key] === true);
   const hasAny = (keys) => bypassPermissions || keys.some(hasPermission);
@@ -2236,6 +2288,7 @@ const matchesScope = (
   if (action.excludedSchoolRoles && action.excludedSchoolRoles.includes(schoolRole)) return false;
   if (action.allowedEmails && !action.allowedEmails.includes(email)) return false;
   if (action.requiresManufacturing && !manufacturingEnabled) return false;
+  if (action.requiresWarehouses && !warehousesEnabled) return false;
   if (action.permission) return hasPermission(action.permission);
   if (action.anyPermission) return hasAny(action.anyPermission);
   return true;

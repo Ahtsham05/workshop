@@ -104,6 +104,7 @@ import type { ProductNameIndexEntry } from '@/stores/product.api'
 
 import { useNativeLanguageName } from '@/hooks/use-native-language-name'
 import { nativeTextDir } from '@/lib/native-language'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
   nameUrdu: z.string().optional(),
@@ -538,6 +539,9 @@ export function UsersActionDialog({
   const trackedStockWatch = !!(form.watch('trackBatch') || form.watch('trackExpiry'))
   const batchedStock = freshProduct?.trackBatch || freshProduct?.trackExpiry ? Number(freshProduct?.batchedQuantity) || 0 : 0
   const typedStock = Number(form.watch('stockQuantity')) || 0
+  // Multi-warehouse: which warehouse a new product's opening stock goes into.
+  const [openingWarehouseId, setOpeningWarehouseId] = useState('')
+  const openingPicker = useWarehousePicker('receipt')
   const unbatchedStock = trackedStockWatch ? Math.round((typedStock - batchedStock) * 1e6) / 1e6 : 0
   // The batch box opens with a number already in it.
   useEffect(() => {
@@ -782,7 +786,13 @@ export function UsersActionDialog({
         await dispatch(updateProduct({ ...values, _id: productId })).unwrap()
         toast.success(t('product_updated_successfully'))
       } else {
-        const created = await dispatch(addProduct(values)).unwrap()
+        const created = await dispatch(
+          addProduct(
+            (openingPicker.visible && openingWarehouseId && !values.hasVariants && Number(values.stockQuantity) > 0
+              ? { ...values, openingWarehouseId }
+              : values) as typeof values
+          )
+        ).unwrap()
         productId = created?.id || created?._id
         draft.clear()
         toast.success(t('product_created_successfully'))
@@ -1959,6 +1969,9 @@ export function UsersActionDialog({
                   )}
                 />
                 )}
+                {!isEdit && !hasVariantsWatch && typedStock > 0 ? (
+                  <WarehouseField kind='receipt' id='opening-warehouse' className='gap-1.5 sm:col-span-2' label={t('Opening stock goes into')} value={openingWarehouseId} onValueChange={setOpeningWarehouseId} />
+                ) : null}
                 <FormField
                   control={form.control}
                   name='unit'

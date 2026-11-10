@@ -63,7 +63,9 @@ export const EXPENSE_IMPORT_FIELDS: ImportFieldSpec[] = [
     aliases: ['Type', 'Expense Type', 'Nature', 'Direct/Indirect', 'Direct or Indirect', 'Classification', 'Group'],
   },
   { key: 'description', label: 'Description', width: 32, aliases: ['Details', 'Particulars', 'Narration', 'Detail', 'تفصیل'] },
-  { key: 'amount', label: 'Amount', type: 'number', required: true, width: 14, aliases: ['Amount Paid', 'Expense Amount', 'Total', 'Rs', 'PKR', 'Debit', 'Raqam', 'رقم'] },
+  // Not required: a file of category names only (no Amount column, or blank / 0 amounts)
+  // imports just the categories.
+  { key: 'amount', label: 'Amount', type: 'number', width: 14, aliases: ['Amount Paid', 'Expense Amount', 'Total', 'Rs', 'PKR', 'Debit', 'Raqam', 'رقم'] },
   {
     key: 'paymentMethod',
     label: 'Paid From',
@@ -109,9 +111,21 @@ export function ExpenseImportDialog({
       if (!category) return { error: t('Category is empty') }
 
       const amount = parseNumeric(values.amount)
-      if (amount.empty) return { error: t('Amount is empty') }
-      if (!amount.ok) return { error: t('Amount "{{value}}" is not a number', { value: amount.raw }) }
-      if (amount.value <= 0) return { error: t('Amount must be more than 0') }
+      if (!amount.empty && !amount.ok) return { error: t('Amount "{{value}}" is not a number', { value: amount.raw }) }
+      if (!amount.empty && amount.value < 0) return { error: t('Amount cannot be negative') }
+
+      // Blank or 0 amount = just the expense head: its category is saved, nothing is posted,
+      // so the date / paid-from columns don't matter for that row.
+      if (amount.empty || amount.value === 0) {
+        const item: ImportExpense = { category, amount: 0 }
+        const nature = parseText(values.expenseNature)
+        const warnings: string[] = []
+        if (nature) {
+          if (NATURE_WORDS.test(nature)) item.expenseNature = nature
+          else warnings.push(t('Type "{{value}}" should be Direct or Indirect — left out', { value: nature }))
+        }
+        return { value: item, warning: warnings.length ? warnings.join('; ') : undefined }
+      }
 
       const item: ImportExpense = { category, amount: Math.round(amount.value * 100) / 100 }
       const warnings: string[] = []
@@ -173,7 +187,10 @@ export function ExpenseImportDialog({
       return {
         insertedCount: result.insertedCount || 0,
         errors: result.errors,
-        skipped: result.skipped?.map((s) => ({ index: s.index, reason: s.reason })),
+        // Category-only rows (no amount) were saved — as categories. They are their own
+        // bucket, not "already saved" duplicates.
+        skipped: result.skipped?.filter((s) => !s.categoryOnly).map((s) => ({ index: s.index, reason: s.reason })),
+        alsoSaved: result.skipped?.filter((s) => s.categoryOnly).map((s) => ({ index: s.index, message: s.reason })),
         warnings: result.warnings?.map((w) => ({ index: w.index, message: w.message })),
         notes,
       }
@@ -200,7 +217,7 @@ export function ExpenseImportDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={t('Import Expenses from Excel')}
-      description={t('Upload your expense sheet. Columns are matched automatically — you can check and change them before importing.')}
+      description={t('Upload your expense sheet. Columns are matched automatically — you can check and change them before importing. Rows without an amount (or 0) only add their category — a list of category names imports too.')}
       entityPlural={t('expenses')}
       fields={EXPENSE_IMPORT_FIELDS}
       sampleRows={EXPENSE_SAMPLE_ROWS}
@@ -212,6 +229,7 @@ export function ExpenseImportDialog({
       batchSize={100}
       duplicateKeys={duplicateKeys}
       onImported={handleImported}
+      alsoSavedLabel={t('rows saved as categories only (no amount, no expense recorded)')}
       options={
         <div className='grid gap-3 sm:grid-cols-2'>
           <div className='space-y-1.5'>
@@ -273,10 +291,18 @@ export function ExpenseImportDialog({
             <div className='flex flex-wrap items-center gap-1.5 font-medium'>
               <span>{item.category}</span>
               {nature && <ExpenseNatureBadge nature={nature} compact />}
-              <span className='ml-auto tabular-nums'>{formatMoney(item.amount)}</span>
+              {item.amount > 0 ? (
+                <span className='ml-auto tabular-nums'>{formatMoney(item.amount)}</span>
+              ) : (
+                <span className='text-muted-foreground ml-auto rounded-md border border-dashed px-1.5 py-0.5 text-[11px] font-normal'>
+                  {t('Category only')}
+                </span>
+              )}
             </div>
             <div className='text-muted-foreground'>
-              {[item.date, item.description, item.paymentMethod || t('Cash'), item.vendor, item.reference].filter(Boolean).join(' · ')}
+              {item.amount > 0
+                ? [item.date, item.description, item.paymentMethod || t('Cash'), item.vendor, item.reference].filter(Boolean).join(' · ')
+                : t('No amount — the category is saved, no expense is recorded')}
             </div>
           </>
         )

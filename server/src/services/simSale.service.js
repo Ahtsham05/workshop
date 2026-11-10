@@ -547,10 +547,42 @@ const deleteSimSale = async (saleId) => {
   await sale.deleteOne();
 };
 
+
+// ── Multi-warehouse (services/warehouse.service.js) ─────────────────────────────────────
+// The picked warehouse is checked first; the saved document is then mirrored into
+// warehouse moves (never throws). Unset = the branch's default warehouse.
+const warehouseService = require('./warehouse.service');
+
+const createSimSaleWithWarehouse = async (body) => {
+  if (body && 'warehouseId' in body && !body.warehouseId) body.warehouseId = null;
+  if (body && body.warehouseId) {
+    await warehouseService.assertDocWarehouse({ organizationId: body.organizationId, branchId: body.branchId, warehouseId: body.warehouseId, kind: 'sale' });
+  }
+  const doc = await createSimSale(body);
+  const id = doc && (doc._id || doc.id);
+  if (id) {
+    if (body && body.warehouseId) await SimSale.updateOne({ _id: id }, { $set: { warehouseId: body.warehouseId } });
+    await warehouseService.syncSimSale(id);
+  }
+  return doc;
+};
+
+const updateSimSaleWithWarehouse = async (id, ...rest) => {
+  const result = await updateSimSale(id, ...rest);
+  await warehouseService.syncSimSale(id);
+  return result;
+};
+
+const deleteSimSaleWithWarehouse = async (id, ...rest) => {
+  const result = await deleteSimSale(id, ...rest);
+  await warehouseService.syncSimSale(id);
+  return result;
+};
+
 module.exports = {
-  createSimSale,
+  createSimSale: createSimSaleWithWarehouse,
   querySimSales,
   getSimSaleById,
-  updateSimSale,
-  deleteSimSale,
+  updateSimSale: updateSimSaleWithWarehouse,
+  deleteSimSale: deleteSimSaleWithWarehouse,
 };

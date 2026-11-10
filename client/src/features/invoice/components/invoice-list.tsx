@@ -325,6 +325,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
 
       const printData = withCustomerContactForPrint({
         invoiceNumber: invoice.invoiceNumber,
+        warehouseId: invoice.warehouseId,
         items: (invoice.items || []).map((item: any) => ({
           name: item.name,
           nameUrdu: item.nameUrdu || (typeof item.productId === 'object' ? item.productId?.nameUrdu : undefined),
@@ -820,7 +821,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                       <div className="flex items-center gap-2">
                         {invoice.invoiceNumber}
                         <FlagBadge flag={invoice.flag} />
-                        <WarehouseTag warehouseId={invoice.warehouseId} />
+                        <WarehouseTag warehouseId={invoice.warehouseId} showDefault={invoice.type !== 'quotation'} />
                         {invoice.offlinePending && (
                           <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
                             {t('Pending sync') || 'Pending sync'}

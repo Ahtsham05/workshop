@@ -35,6 +35,10 @@ const {
   WarehouseMove,
   WarehouseTransfer,
   WarehouseReorderRule,
+  InventoryTransaction,
+  InstallmentPlan,
+  SimSale,
+  PhoneBuyback,
   SalesReturn,
   PurchaseReturn,
   StockAdjustment,
@@ -58,6 +62,8 @@ const DEFAULT_SETTINGS = Object.freeze({
   // Show a warehouse picker on new invoices / purchases (else the default warehouse is used).
   askOnSales: true,
   askOnPurchases: true,
+  // Print "Warehouse: …" on invoices / receipts (internal info, off by default).
+  showOnPrints: false,
 });
 
 const normalizeSettings = (raw = {}) => {
@@ -178,7 +184,16 @@ const WAREHOUSE_FIELDS = [
   'allowReceipts',
   'color',
   'sortOrder',
+  'isMaterialsStore',
+  'isGoodsStore',
 ];
+
+/** Production stores are one-per-branch: setting the flag on one clears it elsewhere. */
+const enforceSingleFlags = async (wh) => {
+  const others = { organizationId: wh.organizationId, branchId: wh.branchId, _id: { $ne: wh._id } };
+  if (wh.isMaterialsStore) await Warehouse.updateMany({ ...others, isMaterialsStore: true }, { $set: { isMaterialsStore: false } });
+  if (wh.isGoodsStore) await Warehouse.updateMany({ ...others, isGoodsStore: true }, { $set: { isGoodsStore: false } });
+};
 
 const pickFields = (body, fields) =>
   fields.reduce((acc, key) => {
@@ -194,6 +209,7 @@ const createWarehouse = async ({ organizationId, branchId, body, userId }) => {
   data.code = (data.code || '').trim().toUpperCase() || (await suggestCode(organizationId, branchId, data.name));
   try {
     const wh = await Warehouse.create({ ...data, organizationId, branchId, isDefault: false, createdBy: userId });
+    await enforceSingleFlags(wh);
     if (body.isDefault) await setDefaultWarehouse({ organizationId, warehouseId: wh._id, userId });
     return Warehouse.findById(wh._id);
   } catch (error) {
@@ -227,6 +243,7 @@ const updateWarehouse = async ({ organizationId, warehouseId, body, userId }) =>
     }
     throw error;
   }
+  await enforceSingleFlags(wh);
   if (body.isDefault === true && !wh.isDefault) await setDefaultWarehouse({ organizationId, warehouseId: wh._id, userId });
   return Warehouse.findById(wh._id);
 };
@@ -673,6 +690,8 @@ const getOverview = async ({ organizationId, branchId, showCost }) => {
       phone: w.phone || '',
       allowSales: w.allowSales !== false,
       allowReceipts: w.allowReceipts !== false,
+      isMaterialsStore: Boolean(w.isMaterialsStore),
+      isGoodsStore: Boolean(w.isGoodsStore),
       products,
       quantity: round(quantity),
       value: showCost ? round(value) : undefined,
@@ -732,13 +751,16 @@ const getAvailability = async ({ organizationId, branchId, warehouseId, location
 };
 
 /** One product: quantity in each warehouse and bin of its branch. */
-const getProductBreakdown = async ({ organizationId, productId }) => {
+const getProductBreakdown = async ({ organizationId, productId, variantId = null }) => {
   const product = await Product.findOne({ _id: productId, organizationId }).select('branchId name').lean();
   if (!product) throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
   const { warehouses, rows } = await computeBranchStock({ organizationId, branchId: product.branchId, productIds: [productId] });
-  // A product with variants: add its variant rows up.
-  const row = rows.length
-    ? rows.reduce(
+  // One variant when asked for (and it has its own row), else the product — a product
+  // with variants adds its variant rows up.
+  const own = variantId ? rows.find((r) => r.variantId === String(variantId)) : null;
+  const picked = own ? [own] : rows;
+  const row = picked.length
+    ? picked.reduce(
         (acc, r) => {
           acc.branchQty += r.branchQty;
           Object.entries(r.byWarehouse).forEach(([k, v]) => {
@@ -835,18 +857,31 @@ const applyMoves = async (moves, sign) => {
  * first so buildMoves sees stock as if the document never existed (it allocates deliveries
  * across bins from that state).
  */
-const syncDocumentMoves = async (refType, refId, buildMoves) => {
-  const existing = await WarehouseMove.find({ refType, refId: oid(refId) }).lean();
-  if (existing.length) {
-    await applyMoves(existing, -1);
-    await WarehouseMove.deleteMany({ refType, refId: oid(refId) });
-  }
-  const next = (await buildMoves()) || [];
-  if (next.length) {
-    await WarehouseMove.insertMany(next, { ordered: false });
-    await applyMoves(next, +1);
-  }
-  return next.length;
+const syncChains = new Map();
+const syncDocumentMoves = (refType, refId, buildMoves) => {
+  // One rebuild per document at a time (within this process): two overlapping rebuilds
+  // would both reverse the same old moves.
+  const key = `${refType}|${refId}`;
+  const run = async () => {
+    const existing = await WarehouseMove.find({ refType, refId: oid(refId) }).lean();
+    if (existing.length) {
+      await applyMoves(existing, -1);
+      await WarehouseMove.deleteMany({ refType, refId: oid(refId) });
+    }
+    const next = (await buildMoves()) || [];
+    if (next.length) {
+      await WarehouseMove.insertMany(next, { ordered: false });
+      await applyMoves(next, +1);
+    }
+    return next.length;
+  };
+  const prev = syncChains.get(key) || Promise.resolve();
+  const current = prev.catch(() => {}).then(run);
+  syncChains.set(key, current);
+  current.finally(() => {
+    if (syncChains.get(key) === current) syncChains.delete(key);
+  }).catch(() => {});
+  return current;
 };
 
 /**
@@ -1096,6 +1131,186 @@ const syncBranchTransfer = (transferId) =>
     }
     return moves;
   });
+
+// ── Manufacturing (ledger mirror) ────────────────────────────────────────────────────────
+// Manufacturing writes one InventoryTransaction per stock move, tagged with its document.
+// After its transaction ends, the document's "available" rows are mirrored here: material
+// issues / returns through the branch's production materials store, finished goods,
+// scrap and packing through its finished goods store (each: the default when not set).
+
+const MFG_MATERIAL_TYPES = new Set(['production_issue', 'production_return', 'floor_issue', 'floor_restock']);
+const MFG_GOODS_TYPES = new Set(['production_receipt', 'production_scrap', 'packing_out', 'packing_in']);
+const MFG_TYPES = new Set([...MFG_MATERIAL_TYPES, ...MFG_GOODS_TYPES]);
+
+const syncManufacturingRef = (refType, refId) =>
+  safeSync(refType, refId, async () => {
+    const rows = await InventoryTransaction.find({ refType, refId: oid(refId), stockBucket: 'available', type: { $in: [...MFG_TYPES] } }).lean();
+    if (!rows.length) return [];
+    const { organizationId, branchId } = rows[0];
+    const settings = await getSettings(organizationId);
+    if (!settings.enabled) return [];
+    const defaultWh = (await ensureDefaultWarehouse(organizationId, branchId)).toObject();
+    const stores = await Warehouse.find({ organizationId, branchId, isActive: true, $or: [{ isMaterialsStore: true }, { isGoodsStore: true }] }).lean();
+    const materialsWh = stores.find((w) => w.isMaterialsStore) || defaultWh;
+    const goodsWh = stores.find((w) => w.isGoodsStore) || defaultWh;
+    // A product's own default (legacy) variant is the product itself here.
+    const variantIds = [...new Set(rows.filter((r) => r.variantId).map((r) => String(r.variantId)))];
+    const realVariants = new Set(
+      variantIds.length ? (await ProductVariant.find({ _id: { $in: variantIds }, isDefault: { $ne: true } }).select('_id').lean()).map((v) => String(v._id)) : []
+    );
+    // Net per warehouse / product / variant, so an issue and its return cancel out.
+    const net = new Map();
+    rows.forEach((r) => {
+      const wh = MFG_MATERIAL_TYPES.has(r.type) ? materialsWh : goodsWh;
+      const variantId = r.variantId && realVariants.has(String(r.variantId)) ? r.variantId : null;
+      const key = `${wh._id}|${r.productId}|${variantId || ''}`;
+      const cur = net.get(key) || { wh, productId: r.productId, variantId, qty: 0, date: r.createdAt };
+      cur.qty = round(cur.qty + Number(r.quantityDelta || 0));
+      net.set(key, cur);
+    });
+    const doc = { _id: refId, organizationId, branchId, createdBy: rows[0].createdBy, createdAt: rows[0].createdAt };
+    const moves = [];
+    for (const n of net.values()) {
+      if (!n.qty) continue;
+      const { variantId } = n;
+      const sign = n.qty > 0 ? 1 : -1;
+      moves.push(
+        ...(await buildDocMoves({
+          doc,
+          wh: n.wh,
+          refType,
+          moveType: sign > 0 ? 'production_in' : 'production_out',
+          sign,
+          date: n.date,
+          number: refType.replace(/([a-z])([A-Z])/g, '$1 $2'),
+          lines: [{ productId: n.productId, variantId, quantity: Math.abs(n.qty) }],
+        }))
+      );
+    }
+    return moves;
+  });
+
+/**
+ * Called from InventoryTransaction's post-save hook. Inside a transaction the mirror waits
+ * for the session to end (commit or abort — either way the rebuild reads what is really
+ * there); otherwise it runs on the next tick.
+ */
+const queueLedgerSync = (txDoc) => {
+  if (!txDoc || !MFG_TYPES.has(txDoc.type) || txDoc.stockBucket !== 'available' || !txDoc.refType || !txDoc.refId) return;
+  const key = `${txDoc.refType}|${txDoc.refId}`;
+  const session = typeof txDoc.$session === 'function' ? txDoc.$session() : null;
+  const flush = (keys) => keys.forEach((k) => {
+    const [refType, refId] = k.split('|');
+    syncManufacturingRef(refType, refId);
+  });
+  if (session && typeof session.once === 'function' && !session.hasEnded) {
+    if (!session.__warehouseKeys) {
+      session.__warehouseKeys = new Set();
+      session.once('ended', () => flush([...session.__warehouseKeys]));
+    }
+    session.__warehouseKeys.add(key);
+    return;
+  }
+  setImmediate(() => flush([key]));
+};
+
+// ── Small stock documents (mobile shop) ──────────────────────────────────────────────────
+
+/** Installment sale: the product leaves the warehouse while the plan exists. */
+const syncInstallmentPlan = (planId) =>
+  safeSync('InstallmentPlan', planId, async () => {
+    const doc = await InstallmentPlan.findById(planId).lean();
+    if (!doc || !doc.productId) return [];
+    const wh = await resolveDocWarehouse(doc);
+    if (!wh) return [];
+    return buildDocMoves({ doc, wh, refType: 'InstallmentPlan', moveType: 'delivery', sign: -1, date: doc.startDate || doc.createdAt, number: doc.planNumber || 'Installment', lines: [{ productId: doc.productId, quantity: Number(doc.quantity || 1) }] });
+  });
+
+/** SIM sale: one SIM leaves the warehouse while the sale exists. */
+const syncSimSale = (saleId) =>
+  safeSync('SimSale', saleId, async () => {
+    const doc = await SimSale.findById(saleId).lean();
+    if (!doc || !doc.productId) return [];
+    const wh = await resolveDocWarehouse(doc);
+    if (!wh) return [];
+    return buildDocMoves({ doc, wh, refType: 'SimSale', moveType: 'delivery', sign: -1, date: doc.createdAt, number: doc.jobNumber || 'SIM sale', lines: [{ productId: doc.productId, quantity: 1 }] });
+  });
+
+/** Used phone bought from a customer: one unit comes in while the buyback exists. */
+const syncBuyback = (buybackId) =>
+  safeSync('PhoneBuyback', buybackId, async () => {
+    const doc = await PhoneBuyback.findById(buybackId).lean();
+    if (!doc || !doc.productId) return [];
+    const wh = await resolveDocWarehouse(doc);
+    if (!wh) return [];
+    return buildDocMoves({ doc, wh, refType: 'PhoneBuyback', moveType: 'receipt', sign: +1, date: doc.purchaseDate || doc.createdAt, number: doc.buybackNumber || 'Buyback', lines: [{ productId: doc.productId, quantity: 1 }] });
+  });
+
+/** Quantity of every product (and variant, as `v:<id>`) in one warehouse — for sale pickers. */
+const getWarehouseQuantities = async ({ organizationId, branchId, warehouseId }) => {
+  requireBranch(branchId);
+  const read = await quantityReader({ organizationId, branchId, warehouseId });
+  const { rows } = await computeBranchStock({ organizationId, branchId });
+  const out = {};
+  rows.forEach((r) => {
+    out[r.variantId ? `v:${r.variantId}` : r.productId] = read(r.productId, r.variantId);
+  });
+  return out;
+};
+
+/**
+ * Opening stock typed on a new product goes into the default warehouse (the branch total);
+ * when another warehouse was picked, it is moved there with a posted transfer, so the
+ * history shows where it went.
+ */
+const placeOpeningStock = async ({ product, warehouseId, userId }) => {
+  try {
+    const qty = Number(product.stockQuantity || 0);
+    if (!warehouseId || !(qty > 0) || product.hasVariants) return null;
+    const def = await ensureDefaultWarehouse(product.organizationId, product.branchId, userId);
+    if (String(def._id) === String(warehouseId)) return null;
+    return await createTransfer({
+      organizationId: product.organizationId,
+      branchId: product.branchId,
+      userId,
+      body: { fromWarehouseId: def._id, toWarehouseId: warehouseId, reference: 'Opening stock', lines: [{ productId: product._id, quantity: qty }], validate: true },
+    });
+  } catch (error) {
+    logger.error(`opening stock placement failed for product ${product && product._id}: ${error.message}`);
+    return null;
+  }
+};
+
+/**
+ * A product's stock number typed directly (product form, bulk edit, a new product's opening
+ * stock) changes the branch total, so it lands in the default warehouse. It moves no stored
+ * stock — this only writes the history row, so warehouse ledgers and reports reconcile.
+ */
+const recordStockEdit = async ({ product, delta, reason = 'Stock edited on product', userId }) => {
+  try {
+    const qty = round(delta);
+    if (!product || !qty || product.hasVariants) return;
+    const settings = await getSettings(product.organizationId);
+    if (!settings.enabled) return;
+    const wh = await ensureDefaultWarehouse(product.organizationId, product.branchId);
+    await WarehouseMove.create({
+      organizationId: product.organizationId,
+      branchId: product.branchId,
+      warehouseId: wh._id,
+      locationId: null,
+      productId: product._id,
+      moveType: 'adjustment',
+      quantity: qty,
+      refType: 'ProductStockEdit',
+      refId: new ObjectId(),
+      refNumber: reason,
+      date: new Date(),
+      createdBy: userId,
+    });
+  } catch (error) {
+    logger.error(`warehouse stock-edit record failed for product ${product && product._id}: ${error.message}`);
+  }
+};
 
 /** Checks a picked warehouse belongs to the branch and accepts the document type. */
 const assertDocWarehouse = async ({ organizationId, branchId, warehouseId, kind }) => {
@@ -1638,6 +1853,14 @@ module.exports = {
   syncAdjustment,
   syncBranchTransfer,
   quantityReader,
+  queueLedgerSync,
+  syncManufacturingRef,
+  syncInstallmentPlan,
+  syncSimSale,
+  syncBuyback,
+  getWarehouseQuantities,
+  placeOpeningStock,
+  recordStockEdit,
   assertDocWarehouse,
   queryTransfers,
   getTransfer,

@@ -14,6 +14,9 @@ router.route('/usage')
   .get(auth('viewAccounting', 'manageExpenses', 'viewPayments', 'createPayments'), expenseCategoryController.getCategoryUsage);
 
 // Branch-scoped clean-up; needs a concrete branch, like every other write here.
+router.route('/bulk')
+  .post(auth('manageExpenses'), expenseCategoryController.bulkImportCategories);
+
 router.route('/remove-unused')
   .post(auth('manageExpenses'), expenseCategoryController.removeUnusedCategories);
 

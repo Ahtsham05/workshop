@@ -400,6 +400,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
     previousBalance: number,
   ): PrintInvoiceData => withCustomerContactForPrint({
         invoiceNumber: invoiceData.invoiceNumber,
+        warehouseId: invoiceData.warehouseId,
         items: (invoiceData.items || []).map((item: any) => ({
           name: item.name,
           nameUrdu: item.nameUrdu || (typeof item.productId === 'object' ? item.productId?.nameUrdu : undefined),

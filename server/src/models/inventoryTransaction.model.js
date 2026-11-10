@@ -87,6 +87,17 @@ const InventoryTransactionSchema = new mongoose.Schema({
 });
 
 InventoryTransactionSchema.plugin(toJSON);
+
+// Multi-warehouse: manufacturing's stock rows are mirrored into warehouses once their
+// transaction ends (services/warehouse.service.js#queueLedgerSync). Never throws.
+InventoryTransactionSchema.post('save', function queueWarehouseMirror(doc) {
+  try {
+    // eslint-disable-next-line global-require
+    require('../services/warehouse.service').queueLedgerSync(doc);
+  } catch (error) {
+    // the mirror is best-effort; stock itself is already written
+  }
+});
 InventoryTransactionSchema.plugin(paginate);
 
 InventoryTransactionSchema.index({ organizationId: 1, branchId: 1, createdAt: -1 });

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { WarehouseTag } from '@/components/warehouse-tag'
 import { useFormatMoney, useCurrencySymbolPrefix } from '@/lib/format-money'
 import { toast } from 'sonner'
 import { useSearch } from '@tanstack/react-router'
@@ -266,6 +267,7 @@ export default function StockAdjustments() {
                     </TableCell>
                     <TableCell className='font-medium max-w-[200px] truncate' title={adj.productName}>
                       {adj.productName}
+                      <WarehouseTag warehouseId={adj.warehouseId} showDefault className='ml-1.5 align-middle' />
                       {adj.reason && (
                         <p className='text-xs font-normal text-muted-foreground truncate' title={adj.reason}>
                           {adj.reason}

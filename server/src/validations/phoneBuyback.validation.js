@@ -36,6 +36,7 @@ const idCardSchema = Joi.object().keys({
 const createBuyback = {
   body: Joi.object().keys({
     sellerType: Joi.string().valid('customer', 'walkin').default('walkin'),
+    warehouseId: Joi.string().custom(objectId).allow('', null),
     sellerCustomerId: Joi.string().custom(objectId).when('sellerType', {
       is: 'customer',
       then: Joi.required(),

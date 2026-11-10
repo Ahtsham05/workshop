@@ -122,6 +122,8 @@ export function WarehouseCard({ warehouse: w, share, canManage, canTransfer, onE
             </span>
           ) : null}
           {!w.allowSales ? <span className='rounded-md bg-muted px-1.5 py-0.5 text-muted-foreground'>{t('No sales')}</span> : null}
+          {w.isMaterialsStore ? <span className='rounded-md bg-sky-500/10 px-1.5 py-0.5 text-sky-700 dark:text-sky-300'>{t('Materials store')}</span> : null}
+          {w.isGoodsStore ? <span className='rounded-md bg-violet-500/10 px-1.5 py-0.5 text-violet-700 dark:text-violet-300'>{t('Finished goods store')}</span> : null}
         </div>
 
         <div className='flex items-center justify-between gap-2 border-t pt-3'>

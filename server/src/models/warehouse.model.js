@@ -35,6 +35,11 @@ const warehouseSchema = new mongoose.Schema(
     allowSales: { type: Boolean, default: true },
     allowReceipts: { type: Boolean, default: true },
     color: { type: String, trim: true, default: 'blue' },
+    // Manufacturing (one per branch each): materials are issued from / returned to the
+    // materials store; finished goods, scrap and packing go through the goods store.
+    // Unset = the default warehouse. See warehouse.service.js#syncManufacturingRef.
+    isMaterialsStore: { type: Boolean, default: false },
+    isGoodsStore: { type: Boolean, default: false },
     sortOrder: { type: Number, default: 0 },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

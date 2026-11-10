@@ -1345,6 +1345,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
 
       const printData = withCustomerContactForPrint({
         invoiceNumber: invoice.invoiceNumber,
+        warehouseId: invoice.warehouseId,
         items: (invoice.items || []).map((item: any) => ({
           name: item.name,
           nameUrdu: item.nameUrdu || (typeof item.productId === 'object' ? item.productId?.nameUrdu : undefined),

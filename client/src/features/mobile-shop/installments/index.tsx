@@ -72,6 +72,8 @@ import { useStateDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
 import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 import { formatAppDate } from '@/lib/date-format'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
+import { WarehouseTag } from '@/components/warehouse-tag'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -181,6 +183,9 @@ export default function InstallmentsPage() {
   const [productPopoverOpen, setProductPopoverOpen] = useState(false)
   const [productSearch, setProductSearch] = useState('')
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null)
+  // Multi-warehouse: which warehouse the item leaves from.
+  const [warehouseId, setWarehouseId] = useState('')
+  const warehousePicker = useWarehousePicker('sale')
 
   // Detail view (drawer-like dialog)
   const [detailPlanId, setDetailPlanId] = useState<string | null>(null)
@@ -459,6 +464,7 @@ export default function InstallmentsPage() {
           walletType: planForm.paymentMethod === 'wallet' ? planForm.walletType : undefined,
           startDate: planForm.startDate ? new Date(planForm.startDate).toISOString() : new Date().toISOString(),
           notes: planForm.notes.trim() || undefined,
+          ...(warehousePicker.visible && warehouseId ? { warehouseId } : {}),
         }).unwrap()
         toast.success('Installment plan created!')
         draft.clear()
@@ -658,6 +664,7 @@ export default function InstallmentsPage() {
                             {overdue && <Badge className='text-xs bg-red-100 text-red-700'>⚠ Overdue</Badge>}
                             {dueSoon && <Badge className='text-xs bg-orange-100 text-orange-700'>Due Soon</Badge>}
                             <span className='text-xs text-muted-foreground font-mono'>{plan.planNumber}</span>
+                            <WarehouseTag warehouseId={(plan as { warehouseId?: string | null }).warehouseId} showDefault />
                           </div>
                           <p className='text-xs text-muted-foreground truncate mb-2'>{plan.itemDescription}</p>
                           <div className='flex items-center gap-4 flex-wrap text-xs'>
@@ -945,6 +952,8 @@ export default function InstallmentsPage() {
                     </PopoverContent>
                   </Popover>
                 </div>
+
+                {!editingPlan ? <WarehouseField kind='sale' id='installment-warehouse' value={warehouseId} onValueChange={setWarehouseId} /> : null}
 
                 {/* Extra description (e.g. IMEI, color) */}
                 <div className='space-y-1'>

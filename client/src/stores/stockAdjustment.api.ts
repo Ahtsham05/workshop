@@ -37,6 +37,8 @@ export type AdjustmentDirection = 'increase' | 'decrease'
 export type AdjustmentStatus = 'completed' | 'reversed'
 
 export interface StockAdjustment {
+  /** Multi-warehouse: unset = the branch's default warehouse. */
+  warehouseId?: string | null
   id: string
   organizationId: string
   branchId: string

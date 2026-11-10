@@ -9,6 +9,8 @@ const simSaleSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // Multi-warehouse: unset = the branch's default warehouse (warehouse.service.js).
+    warehouseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', default: null },
     branchId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Branch',

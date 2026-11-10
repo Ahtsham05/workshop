@@ -36,6 +36,7 @@ import { Switch } from '@/components/ui/switch'
 import { categoriesOf } from '../lib/repair-meta'
 import type { NewLine } from '../lib/use-bill-draft'
 import { PartCategoriesSetup } from './part-categories-setup'
+import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 import {
   PaymentMethodSelect,
   type PaymentChoice,
@@ -111,6 +112,9 @@ export function AddLineDialog({
   const [addItem, { isLoading }] = useAddRepairItemMutation()
   const [showAll, setShowAll] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
+  // Multi-warehouse: which warehouse the part is taken from.
+  const [partWarehouseId, setPartWarehouseId] = useState('')
+  const partWarehousePicker = useWarehousePicker('any')
   const { data: settings, isLoading: settingsLoading } =
     useGetRepairSettingsQuery(undefined, { skip: !open })
 
@@ -219,6 +223,7 @@ export function AddLineDialog({
         productId: picked.productId,
         variantId: picked.variantId ?? null,
         batchId: batch?.id ?? null,
+        warehouseId: partWarehousePicker.visible && partWarehouseId ? partWarehouseId : null,
         name: picked.name,
         quantity,
         unitPrice,
@@ -253,6 +258,7 @@ export function AddLineDialog({
         productId: line.productId || undefined,
         variantId: line.variantId || undefined,
         batchId: line.batchId || undefined,
+        warehouseId: line.warehouseId || undefined,
         paidOutMethod: line.paidOutMethod || undefined,
       }).unwrap()
       if (line.productId)
@@ -450,6 +456,7 @@ export function AddLineDialog({
                 Change
               </Button>
             </div>
+            <WarehouseField kind='any' id='al-warehouse' className='space-y-1' label='Take from warehouse' value={partWarehouseId} onValueChange={setPartWarehouseId} />
             <div className='grid grid-cols-2 gap-3'>
               <div className='space-y-1'>
                 <Label htmlFor='al-qty'>Quantity</Label>

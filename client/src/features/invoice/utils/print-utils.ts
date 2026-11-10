@@ -69,6 +69,9 @@ export interface PrintInvoiceData {
   paidAmount: number
   balance: number
   dueDate?: string
+  /** Multi-warehouse: printed as "Warehouse: …" when Settings → Warehouses → Show on prints is on. */
+  warehouseId?: string | null
+  warehouseName?: string
   notes?: string
   /** Printed under its own "Terms & Conditions" heading, after the notes. */
   termsAndConditions?: string
@@ -237,6 +240,22 @@ function formatPrintCustomerCell(
   const en = customerName?.trim() || naFallback
   const ur = customerNameUrdu?.trim()
   return escapeHtml(native ? ur || en : en)
+}
+
+/**
+ * Multi-warehouse: components/warehouse-print-sync.tsx registers how a warehouse id is
+ * named on prints (and returns '' while the "show on prints" setting is off).
+ */
+let warehousePrintResolver: ((warehouseId?: string | null) => string) | null = null
+export const setWarehousePrintResolver = (fn: ((warehouseId?: string | null) => string) | null) => {
+  warehousePrintResolver = fn
+}
+const WAREHOUSE_WORD: Record<string, string> = { en: 'Warehouse', ur: 'گودام', ar: 'المستودع', hi: 'गोदाम' }
+const warehouseWord = (data: PrintInvoiceData): string => WAREHOUSE_WORD[String(resolvePrintLanguage(data))] || WAREHOUSE_WORD.en
+const printWarehouseLabel = (data: PrintInvoiceData): string => {
+  if (isQuotationPrint(data)) return ''
+  const name = data.warehouseName || (warehousePrintResolver ? warehousePrintResolver(data.warehouseId) : '')
+  return name ? escapeHtml(name) : ''
 }
 
 export const generateInvoiceHTML = (
@@ -709,6 +728,10 @@ export const generateInvoiceHTML = (
       <span class="info-label">${urduTexts.type}:</span>
       <span>${getTypeText(type)}</span>
     </div>
+    ${printWarehouseLabel(data) ? `<div class="info-row">
+      <span class="info-label">${warehouseWord(data)}:</span>
+      <span>${printWarehouseLabel(data)}</span>
+    </div>` : ''}
     <div class="info-row customer-row">
       <span class="info-label">${urduTexts.customer}:</span>
       <span class="customer-name-highlight">${customerNameHtml}</span>
@@ -1033,6 +1056,10 @@ export const generateA4InvoiceHTML = (
       ${formattedDueDate ? `<div class="info-row detail-row">
         <span class="info-label">${urduTexts.due_date}</span>
         <span class="detail-value">${formattedDueDate}</span>
+      </div>` : ''}
+      ${printWarehouseLabel(data) ? `<div class="info-row detail-row">
+        <span class="info-label">${warehouseWord(data)}</span>
+        <span class="detail-value">${printWarehouseLabel(data)}</span>
       </div>` : ''}
     </div>
   </div>

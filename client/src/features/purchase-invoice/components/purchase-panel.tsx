@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useState, useEffect, useRef, useMemo } from 'react'
 import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
+import { WarehouseStockTrigger } from '@/components/warehouse-stock-trigger'
 import { createPortal } from 'react-dom'
 import { useLanguage } from '@/context/language-context'
 import { useUrduDisplay } from '@/context/urdu-display-context'
@@ -1592,6 +1593,7 @@ export default function PurchasePanel({
                                               <span className={catalogItem.stockQuantity <= 5 ? 'text-red-500 font-medium' : 'text-green-600'}>
                                                 Stock: {catalogItem.stockQuantity}
                                               </span>
+                                              <WarehouseStockTrigger productId={catalogItem.productId} variantId={catalogItem.variantId} itemName={catalogItem.name} />
                                               {catalogItem.trackBatch && (
                                                 <span className="text-blue-600">
                                                   {catalogItem.batches?.length || 0} batch{catalogItem.batches?.length === 1 ? '' : 'es'}

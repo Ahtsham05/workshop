@@ -47,6 +47,10 @@ export function MovesTab({ warehouseId: fixedWarehouse, productId }: { warehouse
     if (refType === 'PurchaseReturn') return { label: t('Purchase return'), to: '/purchase-returns' as const, number }
     if (refType === 'StockAdjustment') return { label: t('Adjustment'), to: '/stock-adjustments' as const, number }
     if (refType === 'InventoryTransfer') return { label: t('Branch transfer'), to: '/stock-transfer' as const, number }
+    if (refType === 'InstallmentPlan') return { label: t('Installment sale'), to: '/mobile-shop/installments' as const, number }
+    if (refType === 'SimSale') return { label: t('SIM sale'), to: '/mobile-shop/sim-sale' as const, number }
+    if (refType === 'PhoneBuyback') return { label: t('Used phone bought'), to: '/mobile-shop/used-phones' as const, number }
+    if (/Issue|Receipt|Packing|Floor|Scrap|Production/.test(refType)) return { label: t('Manufacturing'), to: '/manufacturing/movements' as const, number }
     return { label: t('Transfer'), to: null, number }
   }
 

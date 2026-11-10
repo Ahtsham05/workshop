@@ -23,6 +23,7 @@ import { useExpiringBatchesByProduct, daysUntil } from '../hooks/use-expiring-ba
 import { useFormatMoney } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
 import { SourceBadge } from './similar-products-panel'
+import { WarehouseStockTrigger } from '@/components/warehouse-stock-trigger'
 
 /** Per-product sales over a period, shown as extra columns while a product list is open. */
 export interface ListSalesColumns {
@@ -381,9 +382,12 @@ export const useProductColumns = (
       const unit = product.unit || DEFAULT_UNIT
       const value = product.hasVariants ? (product.variantStockTotal ?? 0) : Number(row.getValue('stockQuantity') ?? 0)
       return (
-        <Badge variant='outline' className={cn('capitalize')}>
-          {value} {getUnitLabel(unit)}
-        </Badge>
+        <span className='inline-flex items-center gap-1'>
+          <Badge variant='outline' className={cn('capitalize')}>
+            {value} {getUnitLabel(unit)}
+          </Badge>
+          <WarehouseStockTrigger productId={product.id || product._id} itemName={product.name} iconOnly />
+        </span>
       )
     },
     // Sorted server-side via product.service.js#queryProductsWithComputedSort, which

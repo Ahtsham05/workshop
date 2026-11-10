@@ -1054,6 +1054,16 @@ export const sidebarData: SidebarData = {
             { title: 'Stock Adjustments Report', url: '/reports?tab=stock-adjustments' as never, icon: ClipboardEdit, permission: 'viewInventoryReports' },
             { title: 'Stock Transfers Report', url: '/reports?tab=stock-transfers' as never, icon: IconTransfer, permission: 'viewInventoryReports' },
             { title: 'Stock Count Accuracy', url: '/stock-counts?tab=reports' as never, icon: ClipboardCheck, anyPermission: ['viewProducts', 'countStock', 'approveStockCounts'] },
+            // Multi-warehouse reports (Warehouses → Reports) — hidden while Settings → Warehouses is off.
+            { title: 'Warehouse Stock Valuation', url: '/warehouses?tab=reports&report=valuation' as never, icon: Warehouse, module: 'warehouses', anyPermission: ['viewWarehouses', 'manageWarehouses', 'viewProducts', 'viewInventoryReports'] },
+            { title: 'Warehouse Stock Summary', url: '/warehouses?tab=reports&report=summary' as never, icon: Warehouse, module: 'warehouses', anyPermission: ['viewWarehouses', 'manageWarehouses', 'viewProducts', 'viewInventoryReports'] },
+            { title: 'Warehouse Stock Ledger', url: '/warehouses?tab=reports&report=ledger' as never, icon: Warehouse, module: 'warehouses', anyPermission: ['viewWarehouses', 'manageWarehouses', 'viewProducts', 'viewInventoryReports'] },
+            { title: 'Warehouse Transfer Register', url: '/warehouses?tab=reports&report=transfers' as never, icon: Warehouse, module: 'warehouses', anyPermission: ['viewWarehouses', 'manageWarehouses', 'viewProducts', 'viewInventoryReports'] },
+            { title: 'Sales by Warehouse', url: '/warehouses?tab=reports&report=sales' as never, icon: Warehouse, module: 'warehouses', anyPermission: ['viewWarehouses', 'manageWarehouses', 'viewProducts', 'viewInventoryReports'] },
+            { title: 'Purchases by Warehouse', url: '/warehouses?tab=reports&report=purchases' as never, icon: Warehouse, module: 'warehouses', anyPermission: ['viewWarehouses', 'manageWarehouses', 'viewProducts', 'viewInventoryReports'] },
+            { title: 'Warehouse Stock Ageing', url: '/warehouses?tab=reports&report=ageing' as never, icon: Warehouse, module: 'warehouses', anyPermission: ['viewWarehouses', 'manageWarehouses', 'viewProducts', 'viewInventoryReports'] },
+            { title: 'Stock by Bin', url: '/warehouses?tab=reports&report=bins' as never, icon: Warehouse, module: 'warehouses', anyPermission: ['viewWarehouses', 'manageWarehouses', 'viewProducts', 'viewInventoryReports'] },
+            { title: 'Replenishment / To Buy', url: '/warehouses?tab=replenishment' as never, icon: Warehouse, module: 'warehouses', anyPermission: ['viewWarehouses', 'manageWarehouses', 'viewProducts', 'viewInventoryReports'] },
           ],
         },
         {

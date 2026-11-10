@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { WarehouseTag } from '@/components/warehouse-tag'
 import { useSelector } from 'react-redux'
 import {
   Smartphone, Search, ShieldCheck, ShieldAlert, PackageCheck, Wallet as WalletIcon,
@@ -411,6 +412,7 @@ export default function OldPhonesPage() {
                         <TableCell>
                           <div className='font-medium whitespace-nowrap'>{[b.brand, b.model].filter(Boolean).join(' ') || '—'}</div>
                           <div className='text-xs text-muted-foreground font-mono flex items-center gap-1'><ScanLine className='h-3 w-3' />{b.imei}</div>
+                          <WarehouseTag warehouseId={(b as { warehouseId?: string | null }).warehouseId} showDefault className='mt-0.5 flex w-fit' />
                         </TableCell>
                         <TableCell>
                           <div className='whitespace-nowrap'>{b.sellerName}</div>

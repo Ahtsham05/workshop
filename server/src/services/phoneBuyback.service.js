@@ -482,13 +482,45 @@ const getUsedPhoneStats = async (organizationId, branchId, { dateFrom, dateTo } 
  */
 const createUsedPhoneSale = async (body, userId) => invoiceService.createInvoice(body, userId);
 
+
+// ── Multi-warehouse (services/warehouse.service.js) ─────────────────────────────────────
+// The picked warehouse is checked first; the saved document is then mirrored into
+// warehouse moves (never throws). Unset = the branch's default warehouse.
+const warehouseService = require('./warehouse.service');
+
+const createBuybackWithWarehouse = async (body) => {
+  if (body && 'warehouseId' in body && !body.warehouseId) body.warehouseId = null;
+  if (body && body.warehouseId) {
+    await warehouseService.assertDocWarehouse({ organizationId: body.organizationId, branchId: body.branchId, warehouseId: body.warehouseId, kind: 'receipt' });
+  }
+  const doc = await createBuyback(body);
+  const id = doc && (doc._id || doc.id);
+  if (id) {
+    if (body && body.warehouseId) await PhoneBuyback.updateOne({ _id: id }, { $set: { warehouseId: body.warehouseId } });
+    await warehouseService.syncBuyback(id);
+  }
+  return doc;
+};
+
+const updateBuybackWithWarehouse = async (id, ...rest) => {
+  const result = await updateBuyback(id, ...rest);
+  await warehouseService.syncBuyback(id);
+  return result;
+};
+
+const deleteBuybackWithWarehouse = async (id, ...rest) => {
+  const result = await deleteBuyback(id, ...rest);
+  await warehouseService.syncBuyback(id);
+  return result;
+};
+
 module.exports = {
   getOrCreateUsedPhonesProduct,
-  createBuyback,
+  createBuyback: createBuybackWithWarehouse,
   queryBuybacks,
   getBuybackById,
-  updateBuyback,
-  deleteBuyback,
+  updateBuyback: updateBuybackWithWarehouse,
+  deleteBuyback: deleteBuybackWithWarehouse,
   getUsedPhoneStats,
   createUsedPhoneSale,
 };

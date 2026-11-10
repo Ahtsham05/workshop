@@ -12,8 +12,11 @@ import { useMemo, useState } from 'react'
 import {
   Building2,
   Check,
+  Download,
   Eraser,
   Factory,
+  FileSpreadsheet,
+  Upload,
   Loader2,
   Pencil,
   Plus,
@@ -22,6 +25,13 @@ import {
   Wallet,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import * as XLSX from 'xlsx'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -58,6 +68,7 @@ import {
 import { ExpenseCategoryEditorDialog } from './expense-category-editor-dialog'
 import { DeleteExpenseCategoryDialog } from './delete-expense-category-dialog'
 import { ExpenseCategoryIcon } from './expense-category-icon'
+import { ExpenseCategoryListImportDialog, EXPENSE_CATEGORY_IMPORT_FIELDS } from './expense-category-list-import-dialog'
 import {
   ExpenseNatureBadge,
   EXPENSE_NATURE_HELP,
@@ -109,6 +120,35 @@ export function ExpenseCategoriesDialog({
   const [adding, setAdding] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
   const [confirmCleanup, setConfirmCleanup] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+
+  /** Same columns the category import reads, so an export can be edited and imported back. */
+  const exportCategories = () => {
+    if (categories.length === 0) {
+      toast.error(t('No data available to export'))
+      return
+    }
+    const label = (key: string) => EXPENSE_CATEGORY_IMPORT_FIELDS.find((f) => f.key === key)?.label || key
+    const rows = categories.map((c) => {
+      const u = usage ? usageOf(usage, c.name) : null
+      return {
+        [label('name')]: c.name,
+        [label('expenseNature')]: expenseNatureOf(c) === 'direct' ? 'Direct' : 'Indirect',
+        [label('accountCode')]: c.accountCode || '',
+        [label('color')]: c.color || '',
+        [label('description')]: c.description || '',
+        [label('isActive')]: c.isActive === false ? 'Inactive' : 'Active',
+        Expenses: u ? u.expenses : '',
+        'Total Amount': u ? u.total : '',
+      }
+    })
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [{ wch: 28 }, { wch: 20 }, { wch: 14 }, { wch: 12 }, { wch: 32 }, { wch: 12 }, { wch: 10 }, { wch: 14 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Categories')
+    XLSX.writeFile(wb, `expense-categories-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    toast.success(t('Data exported successfully'))
+  }
 
   const counts = useMemo(() => {
     const direct = categories.filter((c) => expenseNatureOf(c) === 'direct').length
@@ -259,6 +299,31 @@ export function ExpenseCategoriesDialog({
                 </button>
               ))}
             </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant='outline'
+                  className='order-2 h-10 shrink-0 rounded-xl sm:order-3 sm:h-9'
+                  aria-label={t('Import or export categories')}
+                  title={t('Import or export categories')}
+                >
+                  <FileSpreadsheet className='h-4 w-4 sm:mr-1.5' />
+                  <span className='max-sm:hidden'>{t('Excel')}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align='end'>
+                {canManage && (
+                  <DropdownMenuItem onSelect={() => setImportOpen(true)}>
+                    <Upload className='mr-2 h-4 w-4' />
+                    {t('Import categories')}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onSelect={exportCategories}>
+                  <Download className='mr-2 h-4 w-4' />
+                  {t('Export to Excel')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {canManage && (
               <Button
                 className='order-2 h-10 shrink-0 rounded-xl sm:order-3 sm:h-9'
@@ -492,6 +557,10 @@ export function ExpenseCategoriesDialog({
         initialName={editor?.name}
         onSaved={() => onChanged?.()}
       />
+
+      {canManage && (
+        <ExpenseCategoryListImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={() => onChanged?.()} />
+      )}
 
       <DeleteExpenseCategoryDialog
         category={toDelete}

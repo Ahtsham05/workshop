@@ -406,12 +406,48 @@ const getInstallmentSummary = async (scope) => {
   };
 };
 
+
+// ── Multi-warehouse (services/warehouse.service.js) ─────────────────────────────────────
+// The picked warehouse is checked first; the saved document is then mirrored into
+// warehouse moves (never throws). Unset = the branch's default warehouse.
+const warehouseService = require('./warehouse.service');
+
+const createInstallmentPlanWithWarehouse = async (body) => {
+  if (body && 'warehouseId' in body && !body.warehouseId) body.warehouseId = null;
+  if (body && body.warehouseId) {
+    await warehouseService.assertDocWarehouse({ organizationId: body.organizationId, branchId: body.branchId, warehouseId: body.warehouseId, kind: 'sale' });
+  }
+  const doc = await createInstallmentPlan(body);
+  const id = doc && (doc._id || doc.id);
+  if (id) {
+    if (body && body.warehouseId) await InstallmentPlan.updateOne({ _id: id }, { $set: { warehouseId: body.warehouseId } });
+    await warehouseService.syncInstallmentPlan(id);
+  }
+  return doc;
+};
+
+const updateInstallmentPlanWithWarehouse = async (id, ...rest) => {
+  const result = await updateInstallmentPlan(id, ...rest);
+  await warehouseService.syncInstallmentPlan(id);
+  return result;
+};
+
+const deleteInstallmentPlanWithWarehouse = async (id, ...rest) => {
+  // Deleting a completed plan keeps the product sold (no stock comes back), so its
+  // warehouse move must stay as well.
+  const before = await InstallmentPlan.findById(id).select('status').lean();
+  if (before && before.status === 'completed') return deleteInstallmentPlan(id, ...rest);
+  const result = await deleteInstallmentPlan(id, ...rest);
+  await warehouseService.syncInstallmentPlan(id);
+  return result;
+};
+
 module.exports = {
-  createInstallmentPlan,
+  createInstallmentPlan: createInstallmentPlanWithWarehouse,
   queryInstallmentPlans,
   getInstallmentPlanById,
-  updateInstallmentPlan,
-  deleteInstallmentPlan,
+  updateInstallmentPlan: updateInstallmentPlanWithWarehouse,
+  deleteInstallmentPlan: deleteInstallmentPlanWithWarehouse,
   recordPayment,
   getPaymentsByPlan,
   deletePayment,

@@ -25,6 +25,7 @@ import {
 } from '@/stores/warehouse.api'
 import { MovesTab } from './components/moves-tab'
 import { ReplenishmentTab } from './components/replenishment-tab'
+import { ReportsTab } from './components/reports-tab'
 import { StockTab } from './components/stock-tab'
 import { TransferDialog, type TransferPreset } from './components/transfer-dialog'
 import { TransferSheet } from './components/transfer-sheet'
@@ -33,7 +34,7 @@ import { WarehouseCard } from './components/warehouse-card'
 import { WarehouseFormDialog } from './components/warehouse-form-dialog'
 import { TRANSFER_STATUS_META, WAREHOUSE_PERMS, compactMoney, fmtDate, fmtQty } from './lib/labels'
 
-type Tab = 'overview' | 'stock' | 'replenishment' | 'transfers' | 'moves'
+type Tab = 'overview' | 'stock' | 'replenishment' | 'transfers' | 'moves' | 'reports'
 
 /**
  * Warehouses hub: every warehouse of the branch, stock by warehouse, internal transfers and
@@ -65,6 +66,7 @@ export default function Warehouses() {
           </TabsTrigger>
           <TabsTrigger value='transfers'>{t('Transfers')}</TabsTrigger>
           <TabsTrigger value='moves'>{t('Moves')}</TabsTrigger>
+          <TabsTrigger value='reports'>{t('Reports')}</TabsTrigger>
         </TabsList>
         <TabsContent value='overview' className='mt-4'>
           <Overview />
@@ -77,6 +79,9 @@ export default function Warehouses() {
         </TabsContent>
         <TabsContent value='transfers' className='mt-4'>
           <TransfersTab />
+        </TabsContent>
+        <TabsContent value='reports' className='mt-4'>
+          <ReportsTab />
         </TabsContent>
         <TabsContent value='moves' className='mt-4'>
           <MovesTab />

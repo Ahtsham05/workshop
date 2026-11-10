@@ -46,6 +46,7 @@ import {
 } from './lib/transfer-period'
 import { useFormatMoney } from '@/lib/format-money'
 import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
+import { WarehouseTag } from '@/components/warehouse-tag'
 
 
 import { toPrintLanguage } from '@/features/invoice/utils/language'
@@ -366,8 +367,16 @@ export default function StockTransfer() {
                           </div>
                         )}
                       </TableCell>
-                      <TableCell className='text-sm text-muted-foreground'>{branchName(tr.fromBranchId)}</TableCell>
-                      <TableCell className='text-sm text-muted-foreground'>{branchName(tr.toBranchId)}</TableCell>
+                      <TableCell className='text-sm text-muted-foreground'>
+                        {branchName(tr.fromBranchId)}
+                        <WarehouseTag warehouseId={tr.fromWarehouseId} showDefault={branchId(tr.fromBranchId) === activeBranchId} className='mt-0.5 flex w-fit' />
+                      </TableCell>
+                      <TableCell className='text-sm text-muted-foreground'>
+                        {branchName(tr.toBranchId)}
+                        {tr.status === 'completed' ? (
+                          <WarehouseTag warehouseId={tr.toWarehouseId} showDefault={branchId(tr.toBranchId) === activeBranchId} className='mt-0.5 flex w-fit' />
+                        ) : null}
+                      </TableCell>
                       <TableCell className='text-right tabular-nums'>{tr.totalQuantity}</TableCell>
                       {canViewCost && (
                         <>

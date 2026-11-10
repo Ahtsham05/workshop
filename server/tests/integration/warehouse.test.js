@@ -461,3 +461,142 @@ describe('phase 2: reorder rules, replenishment, variants', () => {
     expect(avail.body[`v:${blue._id}`].warehouse).toBe(7);
   });
 });
+
+describe('phase 3: manufacturing, mobile shop, opening stock, AI', () => {
+  const { InventoryTransaction, InstallmentPlan, SimSale, PhoneBuyback, Warehouse } = require('../../src/models');
+  const flush = () => new Promise((r) => setTimeout(r, 300));
+
+  test('manufacturing ledger rows are mirrored: materials via the materials store, goods via the goods store', async () => {
+    await enable();
+    const rm = await createWh({ name: 'Raw Store', code: 'RM', isMaterialsStore: true });
+    const fg = await createWh({ name: 'FG Store', code: 'FG', isGoodsStore: true });
+    const [mainWh] = (await api().get('/v1/warehouses')).body.filter((w) => w.isDefault);
+    await move({ fromWarehouseId: mainWh.id, toWarehouseId: rm.id, lines: [{ productId: String(cable._id), quantity: 30 }] });
+    // Only one materials store per branch.
+    const rm2 = await createWh({ name: 'Raw Store 2', code: 'RM2', isMaterialsStore: true });
+    expect((await Warehouse.findById(rm.id).lean()).isMaterialsStore).toBe(false);
+    await api().patch(`/v1/warehouses/${rm.id}`).send({ isMaterialsStore: true });
+    expect((await Warehouse.findById(rm2.id).lean()).isMaterialsStore).toBe(false);
+
+    // An issue voucher takes 12 cables, returns 2; a receipt makes 3 fans.
+    const issueId = new mongoose.Types.ObjectId();
+    const receiptId = new mongoose.Types.ObjectId();
+    const row = (product, type, delta, refType, refId) => ({
+      organizationId: ORG, branchId: main._id, inventoryId: new mongoose.Types.ObjectId(), variantId: new mongoose.Types.ObjectId(),
+      productId: product._id, type, stockBucket: 'available', quantityDelta: delta, balanceAfter: 0, refType, refId,
+    });
+    await Product.updateOne({ _id: cable._id }, { $inc: { stockQuantity: -10 } });
+    await InventoryTransaction.create(row(cable, 'production_issue', -12, 'MaterialIssue', issueId));
+    await InventoryTransaction.create(row(cable, 'production_return', 2, 'MaterialIssue', issueId));
+    await InventoryTransaction.create({ ...row(cable, 'wip_in', 12, 'MaterialIssue', issueId), stockBucket: 'wip' }); // not stock
+    await Product.updateOne({ _id: fan._id }, { $inc: { stockQuantity: 3 } });
+    await InventoryTransaction.create(row(fan, 'production_receipt', 3, 'ProductionReceipt', receiptId));
+    await flush();
+    expect(await stockOf(cable._id)).toMatchObject({ WH: 10, RM: 20, FG: 0, branch: 30 });
+    expect(await stockOf(fan._id)).toMatchObject({ WH: 500, FG: 3, branch: 503 });
+    const issueMoves = await WarehouseMove.find({ refId: issueId }).lean();
+    expect(issueMoves.map((m) => [m.moveType, m.quantity])).toEqual([['production_out', -10]]);
+  });
+
+  test('installment, SIM sale and used-phone buyback follow their warehouse; completed installment keeps its move', async () => {
+    await enable();
+    const shop = await createWh({ name: 'Shop Floor' });
+    const [mainWh] = (await api().get('/v1/warehouses')).body.filter((w) => w.isDefault);
+    await move({ fromWarehouseId: mainWh.id, toWarehouseId: shop.id, lines: [{ productId: String(fan._id), quantity: 10 }] });
+    const base = { organizationId: ORG, branchId: main._id, warehouseId: shop.id };
+    // Writes as the services do (create runs the stock change, the mirror follows).
+    const plan = await InstallmentPlan.collection.insertOne({ ...base, warehouseId: new mongoose.Types.ObjectId(shop.id), productId: fan._id, quantity: 2, status: 'active', customerName: 'Ali' });
+    await Product.updateOne({ _id: fan._id }, { $inc: { stockQuantity: -2 } });
+    await warehouseService.syncInstallmentPlan(plan.insertedId);
+    expect(await stockOf(fan._id)).toMatchObject({ WH: 490, SHO: 8, branch: 498 });
+
+    const sim = await SimSale.collection.insertOne({ organizationId: ORG, branchId: main._id, warehouseId: new mongoose.Types.ObjectId(shop.id), productId: cable._id, jobNumber: 'S-1' });
+    await Product.updateOne({ _id: cable._id }, { $inc: { stockQuantity: -1 } });
+    await warehouseService.syncSimSale(sim.insertedId);
+    expect(await stockOf(cable._id)).toMatchObject({ WH: 40, SHO: -1, branch: 39 });
+
+    const bb = await PhoneBuyback.collection.insertOne({ organizationId: ORG, branchId: main._id, warehouseId: new mongoose.Types.ObjectId(shop.id), productId: cable._id });
+    await Product.updateOne({ _id: cable._id }, { $inc: { stockQuantity: 1 } });
+    await warehouseService.syncBuyback(bb.insertedId);
+    expect(await stockOf(cable._id)).toMatchObject({ WH: 40, SHO: 0, branch: 40 });
+
+    // Deleting a completed plan: stock stays sold, so the move stays (the wrapper skips the mirror).
+    const installmentService = require('../../src/services/installment.service');
+    await InstallmentPlan.updateOne({ _id: plan.insertedId }, { $set: { status: 'completed' } });
+    await installmentService.deleteInstallmentPlan(plan.insertedId).catch(() => {});
+    expect(await WarehouseMove.countDocuments({ refId: plan.insertedId })).toBe(1);
+  });
+
+  test('opening stock goes to the picked warehouse; quantities endpoint and AI tool see it', async () => {
+    await enable();
+    const shop = await createWh({ name: 'Shop Floor' });
+    // createProduct runs in a transaction (not available here) — create the product, then
+    // run the step its wrapper runs for `openingWarehouseId`.
+    const lamp = await Product.create({ organizationId: ORG, branchId: main._id, name: 'Desk Lamp', price: 2000, cost: 1200, stockQuantity: 9 });
+    await warehouseService.placeOpeningStock({ product: lamp, warehouseId: shop.id, userId: owner._id });
+    expect(await stockOf(lamp._id)).toMatchObject({ WH: 0, SHO: 9, branch: 9 });
+    const qty = await api().get(`/v1/warehouses/${shop.id}/quantities`);
+    expect(qty.body[String(lamp._id)]).toBe(9);
+
+    const tools = require('../../src/services/aiAssistant/tools');
+    const { TOOL_HANDLERS } = tools.buildToolset({ permissions: new Proxy({}, { get: () => true }), user: { systemRole: 'superAdmin' } });
+    const ai = await TOOL_HANDLERS.get_warehouse_stock({ product: 'Lamp' }, { organizationId: String(ORG), branchId: String(main._id) });
+    expect(ai.products[0]).toMatchObject({ name: 'Desk Lamp', branchTotal: 9, byWarehouse: [{ warehouse: 'Shop Floor', quantity: 9 }] });
+  });
+});
+
+describe('warehouse reports', () => {
+  const day = (offset = 0) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
+
+  test('summary reconciles opening + in − out = closing; ledger runs a balance; sales, valuation, bins, ageing, register', async () => {
+    await enable();
+    const shop = await createWh({ name: 'Shop Floor' });
+    const [mainWh] = (await api().get('/v1/warehouses')).body.filter((w) => w.isDefault);
+    // A product stock edit is written to the default warehouse's history.
+    const productService = require('../../src/services/product.service');
+    await productService.updateProductById(String(fan._id), { stockQuantity: 520 }, { updatedBy: owner._id }).catch(() => Product.updateOne({ _id: fan._id }, { stockQuantity: 520 }));
+    await move({ fromWarehouseId: mainWh.id, toWarehouseId: shop.id, lines: [{ productId: String(fan._id), quantity: 30 }] });
+    await sale([[fan, 4]], { warehouseId: shop.id });
+    await sale([[fan, 6]]);
+    const bins = await api().post(`/v1/warehouses/${shop.id}/locations/bulk`).send({ prefix: 'R-', from: 1, to: 1, pad: 1 });
+    await move({ fromWarehouseId: shop.id, toWarehouseId: shop.id, toLocationId: bins.body[0].id, lines: [{ productId: String(fan._id), quantity: 5 }] });
+
+    const q = `from=${day(0)}&to=${day(0)}`;
+    const sum = await api().get(`/v1/warehouses/reports/summary?${q}&search=Fan`);
+    expect(sum.status).toBe(200);
+    const byWh = Object.fromEntries(sum.body.rows.map((r) => [r.warehouse.name, r]));
+    for (const r of sum.body.rows) expect(r.opening + r.totalIn - r.totalOut).toBeCloseTo(r.closing, 6);
+    expect(byWh['Shop Floor']).toMatchObject({ opening: 0, transfersIn: 35, sales: 4, transfersOut: 5, closing: 26 });
+    expect(byWh['Main Warehouse']).toMatchObject({ closing: 484, sales: 6, transfersOut: 30 });
+
+    const led = await api().get(`/v1/warehouses/reports/ledger?${q}&productId=${fan._id}&warehouseId=${shop.id}`);
+    expect(led.status).toBe(200);
+    const s = led.body.sections[0];
+    expect(s.entries.map((e) => e.balance)).toEqual([30, 26, 21, 26]);
+    expect(s.closing).toBe(26);
+
+    const sales = await api().get(`/v1/warehouses/reports/sales?${q}`);
+    const salesBy = Object.fromEntries(sales.body.warehouses.map((w) => [w.warehouse.name, [w.invoices, w.quantity, w.sales]]));
+    expect(salesBy).toEqual({ 'Shop Floor': [1, 4, 4000], 'Main Warehouse': [1, 6, 6000] });
+
+    const val = await api().get('/v1/warehouses/reports/valuation');
+    const shopVal = val.body.warehouses.find((w) => w.warehouse.name === 'Shop Floor');
+    expect(shopVal).toMatchObject({ products: 1, quantity: 26, costValue: 26 * 600, retailValue: 26000 });
+
+    const binRep = await api().get(`/v1/warehouses/reports/bins?warehouseId=${shop.id}`);
+    expect(binRep.body.bins.map((b) => [b.path, b.quantity])).toEqual([[null, 21], ['R-1', 5]]);
+
+    const age = await api().get(`/v1/warehouses/reports/ageing?warehouseId=${shop.id}`);
+    expect(age.body.rows[0]).toMatchObject({ name: 'Fan', quantity: 26, bucket: 'd30', estimated: false });
+
+    const reg = await api().get(`/v1/warehouses/reports/transfers?${q}`);
+    expect(reg.body.rows.map((r) => [r.from, r.to, r.totalQuantity])).toEqual([['Main Warehouse', 'Shop Floor', 30], ['Shop Floor', 'Shop Floor / R-1', 5]]);
+  });
+
+  test('a stock edit typed on the product shows in the default warehouse history', async () => {
+    await enable();
+    await warehouseService.recordStockEdit({ product: { ...fan.toObject(), stockQuantity: 510 }, delta: 10, userId: owner._id });
+    const moves = await WarehouseMove.find({ refType: 'ProductStockEdit', productId: fan._id }).lean();
+    expect(moves.map((m) => [m.moveType, m.quantity])).toEqual([['adjustment', 10]]);
+  });
+});

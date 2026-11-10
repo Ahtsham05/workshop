@@ -57,4 +57,17 @@ const removeUnusedCategories = catchAsync(async (req, res) => {
   res.send(result);
 });
 
-module.exports = { getCategories, createCategory, updateCategory, deleteCategory, getCategoryUsage, removeUnusedCategories };
+const bulkImportCategories = catchAsync(async (req, res) => {
+  const organizationId = req.organizationId || req.user?.organizationId;
+  const rows = Array.isArray(req.body?.categories) ? req.body.categories : [];
+  if (!rows.length) return res.status(httpStatus.BAD_REQUEST).send({ message: 'No categories to import' });
+  if (rows.length > 1000) return res.status(httpStatus.BAD_REQUEST).send({ message: 'Import at most 1000 categories at a time' });
+  const result = await expenseCategoryService.bulkImportCategories(
+    rows,
+    { organizationId, branchId: await branchOf(req), createdBy: req.user?.id },
+    { duplicateStrategy: req.body?.duplicateStrategy }
+  );
+  res.status(httpStatus.CREATED).send(result);
+});
+
+module.exports = { bulkImportCategories, getCategories, createCategory, updateCategory, deleteCategory, getCategoryUsage, removeUnusedCategories };

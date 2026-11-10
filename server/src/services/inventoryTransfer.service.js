@@ -1202,6 +1202,8 @@ const queryTransfers = async (
         transferNumber: { $first: '$transferNumber' },
         fromBranchId: { $first: '$fromBranchId' },
         toBranchId: { $first: '$toBranchId' },
+        fromWarehouseId: { $first: '$fromWarehouseId' },
+        toWarehouseId: { $first: '$toWarehouseId' },
         reason: { $first: '$reason' },
         notes: { $first: '$notes' },
         suggestedAt: { $min: '$suggestedAt' },

@@ -4,12 +4,12 @@
  * before warehouses existed work without being edited.
  */
 const WAREHOUSE_PERMISSIONS = {
-  view: ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers', 'viewProducts'],
+  view: ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers', 'viewProducts', 'viewInventoryReports'],
   manage: ['manageWarehouses', 'editProducts'],
   transfer: ['manageWarehouseTransfers', 'manageWarehouses', 'manageStockTransfers', 'editProducts'],
   settings: ['editSettings', 'manageBusinessProfile', 'manageWarehouses'],
   // Reading the warehouse list (names only) — what the picker on invoices / purchases needs.
-  pick: ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers', 'viewProducts', 'viewInvoices', 'createInvoices', 'editInvoices', 'viewPurchases', 'createPurchases', 'editPurchases'],
+  pick: ['viewWarehouses', 'manageWarehouses', 'manageWarehouseTransfers', 'viewProducts', 'viewInventoryReports', 'viewInvoices', 'createInvoices', 'editInvoices', 'viewPurchases', 'createPurchases', 'editPurchases'],
 };
 
 module.exports = { WAREHOUSE_PERMISSIONS };

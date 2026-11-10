@@ -89,6 +89,9 @@ export interface TransfersResponse {
  *  into a single row (the same way an invoice list shows one row per invoice, not one per
  *  line item). See inventoryTransfer.service.js#queryTransfers. */
 export interface GroupedTransferRow {
+  /** Multi-warehouse: sending / receiving warehouse (unset = that branch's default). */
+  fromWarehouseId?: string | null
+  toWarehouseId?: string | null
   groupId: string
   transferNumber?: string
   fromBranchId: BranchRef | string

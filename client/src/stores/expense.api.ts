@@ -106,6 +106,8 @@ export interface ExpenseVoucherResult {
 }
 
 export interface BulkExpenseImportResult {
+  /** Rows with a category but no amount — only the category was kept. */
+  categoryOnlyCount?: number
   insertedCount?: number
   skippedCount?: number
   totalAmount?: number
@@ -113,7 +115,8 @@ export interface BulkExpenseImportResult {
   indirectAmount?: number
   createdCategories?: string[]
   errors?: Array<{ index?: number; error?: string; name?: string }>
-  skipped?: Array<{ index?: number; reason: string; name?: string }>
+  /** `categoryOnly`: a row with no amount — only its category was saved. */
+  skipped?: Array<{ index?: number; reason: string; name?: string; categoryOnly?: boolean }>
   warnings?: Array<{ index?: number; message: string; name?: string }>
 }
 

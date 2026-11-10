@@ -523,7 +523,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate 
                         <TableCell>
                           <div className='flex items-center gap-1.5'>
                             <span className='font-medium'>{purchase.invoiceNumber}</span>
-                            <WarehouseTag warehouseId={purchase.warehouseId} />
+                            <WarehouseTag warehouseId={purchase.warehouseId} showDefault />
                             {purchase.attachments?.length > 0 && (
                               <Paperclip className='h-3 w-3 text-muted-foreground' aria-label={t('Has attachments')} />
                             )}
