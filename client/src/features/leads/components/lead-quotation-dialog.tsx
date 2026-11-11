@@ -32,6 +32,7 @@ import {
   openPrintWindowForFormat,
   type PrintInvoiceData,
 } from '@/features/invoice/utils/print-utils'
+import { prepareSheetPrintData } from '@/features/invoice/utils/distributor-print-details'
 import {
   PAPER_FORMATS,
   resolveThermalSize,
@@ -134,7 +135,8 @@ export function LeadQuotationDialog({ invoiceId, onOpenChange, leadName, leadPho
         openPrintWindowForFormat(htmlContent, paperSize)
       } else {
         const sheetSize = resolveSheetFormat(paperSize, printOrientation)
-        const htmlContent = generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate)
+        const sheetData = await prepareSheetPrintData(printData, null, invoiceTemplate)
+        const htmlContent = generateA4InvoiceHTML(sheetData, sheetSize, invoiceTemplate)
         openPrintWindowForFormat(htmlContent, sheetSize)
       }
       toast.success(t('Printing quotation'))

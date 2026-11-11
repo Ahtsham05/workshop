@@ -20,6 +20,7 @@ import type { ImeiEntryInput, ImeiRecord } from '@/stores/imei.api'
 import { autoAllocateBatches, type BatchAllocation } from '@/lib/batch-allocation'
 import { entryImei, SerialNumberDialog } from '@/components/serial-batch-line-controls'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '@/features/invoice/utils/print-utils'
+import { prepareSheetPrintData } from '@/features/invoice/utils/distributor-print-details'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetFormat } from '@/features/invoice/utils/paper-format'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 import { resolveBranchCompanyName } from '@/utils/branch-company-name'
@@ -701,7 +702,8 @@ export default function FastBillingPage() {
         openPrintWindowForFormat(generateInvoiceHTML(receiptData, resolveThermalSize(paperSize)), paperSize)
       } else {
         const sheetSize = resolveSheetFormat(paperSize, printOrientation)
-        openPrintWindowForFormat(generateA4InvoiceHTML(receiptData, sheetSize, invoiceTemplate), sheetSize)
+        const sheetData = await prepareSheetPrintData(receiptData, null, invoiceTemplate)
+        openPrintWindowForFormat(generateA4InvoiceHTML(sheetData, sheetSize, invoiceTemplate), sheetSize)
       }
 
       resetSale()

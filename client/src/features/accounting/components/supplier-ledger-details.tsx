@@ -46,6 +46,7 @@ import { returnsApi, useGetPurchaseReturnByIdQuery } from '@/stores/returns.api'
 import { PaymentReceipt } from './payment-receipt';
 import { mobileShopApi, useGetLoadPurchaseByIdQuery } from '@/stores/mobile-shop.api';
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '@/features/invoice/utils/print-utils';
+import { prepareSheetPrintData } from '@/features/invoice/utils/distributor-print-details';
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences';
 import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils';
 import { supplierBalanceBeforeFromLedgerEntry, fetchBalanceBeforeInvoice } from '@/features/invoice/utils/invoice-print-balance';
@@ -1133,7 +1134,8 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
         openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(paperSize)), paperSize, printContact);
       } else {
         const sheetSize = resolveSheetFormat(paperSize, printOrientation);
-        openPrintWindowForFormat(generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate), sheetSize, printContact);
+        const sheetData = await prepareSheetPrintData(printData, invoice, invoiceTemplate);
+        openPrintWindowForFormat(generateA4InvoiceHTML(sheetData, sheetSize, invoiceTemplate), sheetSize, printContact);
       }
       toast.success(t('print_invoice_btn'));
     } catch (error) {

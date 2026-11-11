@@ -1,4 +1,5 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
+import type { DistributorSettings } from '@/features/invoice/utils/distributor-settings';
 import type { PrintColors } from '@/lib/print-colors';
 import type { PrintDesign } from '@/lib/print-design';
 import { baseQuery } from './base-query';
@@ -20,7 +21,7 @@ export type PaperSize = 'thermal80' | 'thermal58' | 'a4' | 'a5' | 'a4-half-left'
 /** A4/A5 invoice layout/design template */
 export type InvoiceTemplate =
   | 'standard' | 'compact' | 'modern' | 'classic' | 'bold' | 'ledger'
-  | 'banking' | 'corporate' | 'statement' | 'executive' | 'challan' | 'minimal';
+  | 'banking' | 'corporate' | 'statement' | 'executive' | 'challan' | 'minimal' | 'distributor';
 
 /** Print orientation for the A5 paper size (ignored for other sizes) */
 export type PrintOrientation = 'portrait' | 'landscape';
@@ -33,6 +34,8 @@ export interface BranchPrintSettings {
   colors?: PrintColors;
   /** Invoice designer settings (see lib/print-design.ts); null = template as designed. */
   design?: Partial<PrintDesign> | null;
+  /** Distributor template's licence numbers + policy texts (features/invoice/utils/distributor-settings.ts). */
+  distributor?: Partial<DistributorSettings> | null;
 }
 
 export interface Branch {

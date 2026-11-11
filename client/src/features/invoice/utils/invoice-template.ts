@@ -2,6 +2,7 @@ import { useSelector } from 'react-redux'
 import { useGetBranchQuery, type InvoiceTemplate } from '@/stores/branch.api'
 import { RootState } from '@/stores/store'
 import { DOC_EXTRAS_BASE, getActivePrintDesign } from '@/lib/print-design'
+import { DISTRIBUTOR_OVERLAY_CSS } from './distributor-invoice'
 
 import type { PrintLanguage } from '@/lib/native-language'
 export type { InvoiceTemplate }
@@ -19,6 +20,7 @@ export const INVOICE_TEMPLATE_OPTIONS: Array<{ value: InvoiceTemplate; label: st
   { value: 'executive', label: 'Executive', description: 'Premium serif design in charcoal and gold, centred letterhead' },
   { value: 'challan', label: 'Challan', description: 'Bank deposit-slip style: green ruled boxes and a tear-off line' },
   { value: 'minimal', label: 'Minimal', description: 'Swiss-style whitespace, thin lines, no fills — saves ink' },
+  { value: 'distributor', label: 'Distributor', description: 'Wholesale sales order: centred logo, barcode, Sold To / Ship To, Terms · Rep band, UPC / SO / IO columns, grey balance band' },
 ]
 
 /** Default line-items-per-page for A4/A5 sheet invoices, per template. Explicit `a4ItemsPerPage` on print data always wins. */
@@ -35,6 +37,9 @@ export const INVOICE_TEMPLATE_ITEMS_PER_PAGE: Record<InvoiceTemplate, { a4: numb
   executive: { a4: 12, a5: 6, 'a5-landscape': 4 },
   challan: { a4: 12, a5: 6, 'a5-landscape': 4 },
   minimal: { a4: 14, a5: 7, 'a5-landscape': 5 },
+  // Not used by the Distributor sales layout itself (it splits pages by measured row height);
+  // applies to purchase invoices / receipts that borrow its look via DISTRIBUTOR_OVERLAY_CSS.
+  distributor: { a4: 14, a5: 7, 'a5-landscape': 5 },
 }
 
 const DEFAULT_TEMPLATE: InvoiceTemplate = 'standard'
@@ -437,5 +442,6 @@ export const INVOICE_TEMPLATE_CSS: Record<InvoiceTemplate, string> = {
   executive: EXECUTIVE_A4_CSS,
   challan: CHALLAN_A4_CSS,
   minimal: MINIMAL_A4_CSS,
+  distributor: DISTRIBUTOR_OVERLAY_CSS,
 }
 

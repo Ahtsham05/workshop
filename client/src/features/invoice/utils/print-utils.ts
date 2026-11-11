@@ -19,6 +19,7 @@ import { ensureInvoicePrintPdfBridge } from './invoice-print-pdf-bridge'
 import { ensureInvoiceSmsSendBridge } from './invoice-print-sms-bridge'
 import { PAPER_FORMATS, type PaperSize, type SheetSize, type PaperFormatKey } from './paper-format'
 import { INVOICE_TEMPLATE_ITEMS_PER_PAGE, INVOICE_TEMPLATE_CSS, invoiceTemplateExtrasHtml, type InvoiceTemplate } from './invoice-template'
+import { generateDistributorInvoiceHTML, generateDistributorTwoUpHTML, type DistributorPrintContext } from './distributor-invoice'
 import { printColorsCss } from '@/lib/print-colors'
 import { getActivePrintDesign, printDesignCss, printDesignHeadHtml, sheetKindOf } from '@/lib/print-design'
 import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
@@ -52,6 +53,10 @@ export interface PrintInvoiceData {
     subtotal: number
     discountAmount?: number
     imeis?: ImeiEntryInput[]
+    /** Product barcode / SKU — printed in the Distributor layout's UPC column. */
+    code?: string
+    /** Line tax — printed in the Distributor layout's Tax column. */
+    taxAmount?: number
   }>
   customerId?: string | { name: string; id: string; _id?: string }
   customerName?: string
@@ -115,6 +120,20 @@ export interface PrintInvoiceData {
   printAsQuotation?: boolean
   /** Organization's configured currency (symbol/decimals) — omit to fall back to PKR. */
   currencyMeta?: CurrencyOption
+  /* Document details printed by the Distributor layout; see distributor-print-details.ts. */
+  /** Saved invoice's creation time (ISO) — printed as the document date + time. */
+  invoiceDateTime?: string
+  /** User who created the invoice. */
+  invoicedBy?: string
+  /** Salesman credited with the sale. */
+  salesRep?: string
+  /** Customer postal address (newline-separated lines). */
+  customerAddress?: string
+  customerEmail?: string
+  customerTaxNumber?: string
+  /** Customer payment terms code: cash | due_on_receipt | net_15 | net_30 | net_60. */
+  customerPaymentTerms?: string
+  companyWebsite?: string
 }
 
 /** INV-202605-000195 → QUO-202605-000195 when printing as quotation. */
@@ -899,11 +918,33 @@ export const generateInvoiceHTML = (
 }
 
 // Generate A4/A5 Invoice HTML with table layout
+/** Everything the Distributor layout needs that the shared generator resolves for every print. */
+function distributorContext(data: PrintInvoiceData): DistributorPrintContext {
+  const language = resolvePrintLanguage(data)
+  const isQuotation = isQuotationPrint(data)
+  return {
+    nativeNames: resolvePrintNativeNames(data, language),
+    printNumber: resolvePrintDocumentNumber(data.invoiceNumber, isQuotation),
+    documentDate: resolvePrintDocumentDate(data),
+    isQuotation,
+    warehouseLabel: printWarehouseLabel(data),
+    warehouseWord: WAREHOUSE_WORD.en,
+    printActionsHtml: buildPrintWindowActionsBlock(
+      data,
+      buildPrintActionsLabels('en', 'a4', a4Labels.en.print_invoice, a4Labels.en.print_invoice),
+    ),
+    printActionsCss: printActionsBarStyles,
+  }
+}
+
 export const generateA4InvoiceHTML = (
   data: PrintInvoiceData,
   sheetSize: SheetSize = 'a4',
   template: InvoiceTemplate = 'standard',
 ): string => {
+  if (template === 'distributor') {
+    return generateDistributorInvoiceHTML(data, sheetSize, distributorContext(data))
+  }
   if (sheetSize === 'a4-half-left' || sheetSize === 'a4-half-right') {
     return generateA4HalfLandscapeInvoiceHTML(data, sheetSize === 'a4-half-left' ? 'left' : 'right', template)
   }
@@ -2140,6 +2181,12 @@ export function generateA4LandscapeTwoInvoicesHTML(
   right: PrintInvoiceData,
   template: InvoiceTemplate = 'standard',
 ): string {
+  if (template === 'distributor') {
+    return generateDistributorTwoUpHTML(
+      { data: left, ctx: distributorContext(left) },
+      { data: right, ctx: distributorContext(right) },
+    )
+  }
   const leftFull = generateA4InvoiceHTML(left, 'a4', template)
   const bodyLeft = extractA4PrintBodyInner(leftFull)
   const bodyRight = extractA4PrintBodyInner(generateA4InvoiceHTML(right, 'a4', template))

@@ -48,6 +48,7 @@ import {
   useGetPendingInvoiceSummaryByCustomerQuery,
 } from '@/stores/invoice.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat, type PrintInvoiceData } from '../utils/print-utils'
+import { prepareSheetPrintData } from '@/features/invoice/utils/distributor-print-details'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetFormat, type PaperSize, type PrintOrientation } from '../utils/paper-format'
 import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
@@ -462,7 +463,8 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(paperSize)), paperSize, printContact)
       } else {
         const sheetSize = resolveSheetFormat(paperSize, printOrientation)
-        openPrintWindowForFormat(generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate), sheetSize, printContact)
+        const sheetData = await prepareSheetPrintData(printData, invoiceData, invoiceTemplate)
+        openPrintWindowForFormat(generateA4InvoiceHTML(sheetData, sheetSize, invoiceTemplate), sheetSize, printContact)
       }
     } catch (error) {
       console.error('Print error:', error)
@@ -518,7 +520,8 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(paperSize)), paperSize, printContact)
       } else {
         const sheetSize = resolveSheetFormat(paperSize, printOrientation)
-        openPrintWindowForFormat(generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate), sheetSize, printContact)
+        const sheetData = await prepareSheetPrintData(printData, { items: billGroup.items, customerId: selectedCustomerId }, invoiceTemplate)
+        openPrintWindowForFormat(generateA4InvoiceHTML(sheetData, sheetSize, invoiceTemplate), sheetSize, printContact)
       }
     } catch (error) {
       console.error('Print error:', error)

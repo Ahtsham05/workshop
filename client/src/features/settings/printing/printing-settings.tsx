@@ -6,6 +6,8 @@ import ContentSection from '../components/content-section'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useGetBranchQuery, useUpdateBranchMutation } from '@/stores/branch.api'
 import type { RootState } from '@/stores/store'
@@ -15,6 +17,16 @@ import { generateA4InvoiceHTML, type PrintInvoiceData } from '@/features/invoice
 import { useCurrencyMeta } from '@/lib/format-money'
 import { hasPrintColors, normalizePrintColors, withPrintColors, type PrintColors } from '@/lib/print-colors'
 import { compactPrintDesign, isDesignCustomised, normalizePrintDesign, withPrintDesign } from '@/lib/print-design'
+import {
+  DEFAULT_GENERAL_POLICY,
+  DEFAULT_RETURN_POLICY,
+  DISTRIBUTOR_LICENSE_FIELDS,
+  DISTRIBUTOR_POLICY_FIELDS,
+  normalizeDistributorSettings,
+  withDemoLicenses,
+  withDistributorSettings,
+  type DistributorSettings,
+} from '@/features/invoice/utils/distributor-settings'
 import { InvoiceDesigner, type DesignerValue } from './invoice-designer'
 
 const ORIENTATION_OPTIONS: Array<{ value: PrintOrientation; label: string; description: string; icon: typeof RectangleVertical }> = [
@@ -42,6 +54,17 @@ const SAMPLE_INVOICE_DATA: PrintInvoiceData = {
   companyName: 'Your Business Name',
   companyAddress: '123 Business Street, City',
   companyPhone: '0300-1234567',
+  // Only the Distributor layout prints these; every other template ignores them.
+  invoiceAddress: '123 Business Street, City',
+  companyWebsite: 'www.yourbusiness.com',
+  companyEmail: 'sales@yourbusiness.com',
+  customerAddress: '45 Market Road\nCity 54000',
+  customerPhone: '0300-7654321',
+  customerTaxNumber: '000741472',
+  invoicedBy: 'Mary',
+  salesRep: 'Ali Khan',
+  previousBalance: 25,
+  newBalance: 25,
 }
 
 const THUMB_WIDTH = 200
@@ -63,6 +86,9 @@ function toPreviewOnlyHtml(html: string): string {
     <style>
       .no-print { display: none !important; }
       body { max-width: none !important; margin: 0 !important; box-shadow: none !important; border-radius: 0 !important; }
+      /* Distributor layout: its on-screen grey backdrop and page shadow are for the print window only */
+      body:has(.ds-page) { padding: 0 !important; background: #fff !important; }
+      .ds-page { box-shadow: none !important; }
     </style>
   `
   return html.replace('</head>', `${chromeReset}</head>`)
@@ -82,6 +108,13 @@ export default function PrintingSettings() {
   const colors: PrintColors = useMemo(() => normalizePrintColors(branchData?.printSettings?.colors), [branchData?.printSettings?.colors])
   const design = useMemo(() => normalizePrintDesign(branchData?.printSettings?.design), [branchData?.printSettings?.design])
   const [designerOpen, setDesignerOpen] = useState(false)
+  const savedDistributor = useMemo(
+    () => normalizeDistributorSettings(branchData?.printSettings?.distributor),
+    [branchData?.printSettings?.distributor],
+  )
+  const [distributor, setDistributor] = useState<DistributorSettings>(savedDistributor)
+  useEffect(() => setDistributor(savedDistributor), [savedDistributor])
+  const setDistributorField = (key: keyof DistributorSettings, value: string) => setDistributor((d) => ({ ...d, [key]: value }))
 
   useEffect(() => {
     if (branchData?.printSettings?.paperSize) {
@@ -96,11 +129,16 @@ export default function PrintingSettings() {
     const map: Partial<Record<InvoiceTemplate, string>> = {}
     for (const option of INVOICE_TEMPLATE_OPTIONS) {
       map[option.value] = toPreviewOnlyHtml(
-        withPrintColors(colors, () => withPrintDesign(design, () => generateA4InvoiceHTML(sampleData, 'a4', option.value)))
+        withPrintColors(colors, () =>
+          withPrintDesign(design, () =>
+            // Sample licence numbers fill any empty field in the preview only — real prints show "N/A".
+            withDistributorSettings(withDemoLicenses(distributor), () => generateA4InvoiceHTML(sampleData, 'a4', option.value)),
+          ),
+        )
       )
     }
     return map
-  }, [currencyMeta, colors, design])
+  }, [currencyMeta, colors, design, distributor])
 
   /** Saves everything printSettings holds (the server replaces the object as a whole). */
   const handleSave = async (fromDesigner?: DesignerValue): Promise<boolean> => {
@@ -116,6 +154,7 @@ export default function PrintingSettings() {
             printOrientation: orientation,
             colors: normalizePrintColors(next.colors),
             design: compactPrintDesign(next.design),
+            distributor: normalizeDistributorSettings(distributor),
           },
         },
       }).unwrap()
@@ -131,7 +170,8 @@ export default function PrintingSettings() {
   const hasChanges =
     paperSize !== (branchData?.printSettings?.paperSize ?? 'thermal80') ||
     template !== (branchData?.printSettings?.template ?? 'standard') ||
-    orientation !== (branchData?.printSettings?.printOrientation ?? 'portrait')
+    orientation !== (branchData?.printSettings?.printOrientation ?? 'portrait') ||
+    JSON.stringify(normalizeDistributorSettings(distributor)) !== JSON.stringify(savedDistributor)
   const customised = isDesignCustomised(design) || hasPrintColors(colors)
 
   return (
@@ -258,6 +298,53 @@ export default function PrintingSettings() {
                   ))}
                 </RadioGroup>
               </div>
+
+              {template === 'distributor' && (
+                <div className="mt-8 rounded-lg border p-4">
+                  <div className="text-sm font-medium">Distributor details</div>
+                  <p className="text-xs text-muted-foreground mt-1 mb-4">
+                    Printed in the top-right of every Distributor invoice. Leave a number empty and its line prints as &quot;N/A&quot;.
+                    State Tax Id falls back to your organisation&apos;s tax number.
+                  </p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {DISTRIBUTOR_LICENSE_FIELDS.map(({ key, label }) => (
+                      <div key={key} className="space-y-1.5 min-w-0">
+                        <Label htmlFor={`distributor-${key}`} className="text-xs">{label}</Label>
+                        <Input
+                          id={`distributor-${key}`}
+                          value={distributor[key]}
+                          maxLength={60}
+                          onChange={(e) => setDistributorField(key, e.target.value)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-5 space-y-4">
+                    {DISTRIBUTOR_POLICY_FIELDS.map(({ key, label }) => {
+                      const defaultText = key === 'generalPolicy' ? DEFAULT_GENERAL_POLICY : key === 'returnPolicy' ? DEFAULT_RETURN_POLICY : ''
+                      return (
+                        <div key={key} className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label htmlFor={`distributor-${key}`} className="text-xs">{label}</Label>
+                            {defaultText && distributor[key] !== defaultText && (
+                              <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setDistributorField(key, defaultText)}>
+                                Use default wording
+                              </Button>
+                            )}
+                          </div>
+                          <Textarea
+                            id={`distributor-${key}`}
+                            value={distributor[key]}
+                            rows={key === 'returnPolicy' ? 4 : 2}
+                            maxLength={key === 'returnPolicy' ? 4000 : 2000}
+                            onChange={(e) => setDistributorField(key, e.target.value)}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-8 flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 sm:flex-row sm:items-center">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">

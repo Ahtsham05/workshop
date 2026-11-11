@@ -41,6 +41,7 @@ import { invoiceUnpaidAmount } from '@/features/customers/credit/credit-utils'
 import { useGetAllSalesmanProfilesQuery } from '@/stores/salesmanProfile.api'
 import { useSendSmsMutation } from '@/stores/smsGateway.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '../utils/print-utils'
+import { prepareSheetPrintData } from '@/features/invoice/utils/distributor-print-details'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, resolveSheetFormat, type PaperSize, type SheetSize, type PrintOrientation } from '../utils/paper-format'
 import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
@@ -692,7 +693,8 @@ export function InvoicePanel({
   const printA4Invoice = useCallback(async (invoiceData: any, sheetSize: SheetSize = 'a4') => {
     try {
       const { printData, printContact } = await buildPrintData(invoiceData)
-      const htmlContent = generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate)
+      const sheetData = await prepareSheetPrintData(printData, invoiceData, invoiceTemplate)
+      const htmlContent = generateA4InvoiceHTML(sheetData, sheetSize, invoiceTemplate)
       openPrintWindowForFormat(htmlContent, sheetSize, printContact)
       // Don't show success toast - let the print dialog speak for itself
     } catch (error: any) {
@@ -750,7 +752,8 @@ export function InvoicePanel({
         openPrintWindowForFormat(htmlContent, thermalSize, printContact)
       } else {
         const sheetSize = resolveSheetFormat(defaultPaperSize, printOrientation)
-        const htmlContent = generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate)
+        const sheetData = await prepareSheetPrintData(printData, draftInvoiceData, invoiceTemplate)
+        const htmlContent = generateA4InvoiceHTML(sheetData, sheetSize, invoiceTemplate)
         openPrintWindowForFormat(htmlContent, sheetSize, printContact)
       }
     } catch (error: any) {
@@ -2047,7 +2050,7 @@ export function InvoicePanel({
             }
             setIsWhatsAppSending(true)
             try {
-              const res = await sendInvoiceReceiptWhatsApp({ printData, phone: wpPhone, template: invoiceTemplate })
+              const res = await sendInvoiceReceiptWhatsApp({ printData, phone: wpPhone, template: invoiceTemplate, source: savedInvoicePayload })
               if (res.success) toast.success('Invoice sent on WhatsApp')
               else toast.error(res.error || 'Failed to send on WhatsApp')
             } finally {

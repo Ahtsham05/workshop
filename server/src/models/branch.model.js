@@ -82,7 +82,7 @@ const branchSchema = mongoose.Schema(
       /** A4/A5 invoice layout/design template */
       template: {
         type: String,
-        enum: ['standard', 'compact', 'modern', 'classic', 'bold', 'ledger', 'banking', 'corporate', 'statement', 'executive', 'challan', 'minimal'],
+        enum: ['standard', 'compact', 'modern', 'classic', 'bold', 'ledger', 'banking', 'corporate', 'statement', 'executive', 'challan', 'minimal', 'distributor'],
         default: 'standard',
       },
       /** Print orientation for the A5 paper size (ignored for other sizes) */
@@ -108,6 +108,24 @@ const branchSchema = mongoose.Schema(
        * before it reaches CSS and escapes the wording. Size-capped in branch.service.
        */
       design: { type: mongoose.Schema.Types.Mixed, default: null },
+      /**
+       * Distributor invoice template only: licence / registration numbers printed in the
+       * header and the policy texts printed at the bottom (client/src/features/invoice/utils/
+       * distributor-settings.ts). Empty licence fields print as "N/A"; unset policies use
+       * the template's default wording.
+       */
+      distributor: {
+        stateTaxId: { type: String, trim: true, maxlength: 60 },
+        tobaccoLicenseId: { type: String, trim: true, maxlength: 60 },
+        resaleCertificateId: { type: String, trim: true, maxlength: 60 },
+        msaDidId: { type: String, trim: true, maxlength: 60 },
+        feinId: { type: String, trim: true, maxlength: 60 },
+        hempLicense: { type: String, trim: true, maxlength: 60 },
+        foodDrugLicense: { type: String, trim: true, maxlength: 60 },
+        generalPolicy: { type: String, trim: true, maxlength: 2000 },
+        returnPolicy: { type: String, trim: true, maxlength: 4000 },
+        buyersGuarantee: { type: String, trim: true, maxlength: 2000 },
+      },
     },
     /**
      * Optional per-branch tax overrides. Currency stays strictly org-level (see

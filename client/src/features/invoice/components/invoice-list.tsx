@@ -59,6 +59,7 @@ import { RootState } from '@/stores/store'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { generateInvoiceHTML, generateA4InvoiceHTML, generateA4LandscapeTwoInvoicesHTML, openPrintWindowForFormat } from '../utils/print-utils'
+import { prepareSheetPrintData } from '@/features/invoice/utils/distributor-print-details'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetFormat, type PaperSize, type PrintOrientation } from '../utils/paper-format'
 import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
@@ -415,7 +416,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         openPrintWindowForFormat(htmlContent, paperSize, printContact)
       } else {
         const sheetSize = resolveSheetFormat(paperSize, printOrientation)
-        const htmlContent = generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate)
+        const sheetData = await prepareSheetPrintData(printData, invoice, invoiceTemplate)
+        const htmlContent = generateA4InvoiceHTML(sheetData, sheetSize, invoiceTemplate)
         openPrintWindowForFormat(htmlContent, sheetSize, printContact)
       }
 
@@ -438,9 +440,9 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
     try {
       setPrintingTwoUp(true)
       const [left, right] = twoUpSelection
-      const [{ printData: leftData }, { printData: rightData }] = await Promise.all([
-        buildInvoicePrintData(left),
-        buildInvoicePrintData(right),
+      const [leftData, rightData] = await Promise.all([
+        buildInvoicePrintData(left).then(({ printData }) => prepareSheetPrintData(printData, left, invoiceTemplate)),
+        buildInvoicePrintData(right).then(({ printData }) => prepareSheetPrintData(printData, right, invoiceTemplate)),
       ])
       const htmlContent = generateA4LandscapeTwoInvoicesHTML(leftData, rightData, invoiceTemplate)
       openPrintWindowForFormat(htmlContent, 'a4')

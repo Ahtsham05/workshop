@@ -9,6 +9,7 @@ import { ColorField } from '@/components/color-field'
 import { useCurrencyMeta } from '@/lib/format-money'
 import { INVOICE_TEMPLATE_OPTIONS, type InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { generateA4InvoiceHTML, type PrintInvoiceData } from '@/features/invoice/utils/print-utils'
+import { getActiveDistributorSettings, withDemoLicenses, withDistributorSettings } from '@/features/invoice/utils/distributor-settings'
 import { PRINT_COLOR_KEYS, PRINT_COLOR_PRESETS, withPrintColors, type PrintColors } from '@/lib/print-colors'
 import {
   EMPTY_DESIGN,
@@ -55,7 +56,7 @@ const PAGE = { a4: { w: 794, h: 1123 }, a5: { w: 559, h: 794 } } as const
 const previewOnly = (html: string) =>
   html.replace(
     '</head>',
-    '<style>.no-print{display:none!important}body{max-width:none!important;margin:0!important;box-shadow:none!important;border-radius:0!important}</style></head>'
+    '<style>.no-print{display:none!important}body{max-width:none!important;margin:0!important;box-shadow:none!important;border-radius:0!important}body:has(.ds-page){padding:0!important;background:#fff!important}.ds-page{box-shadow:none!important}</style></head>'
   )
 
 /* ── Small controls ──────────────────────────────────────────────────────── */
@@ -389,7 +390,11 @@ export function InvoiceDesigner({ open, onOpenChange, initial, saving, onSave }:
     () =>
       previewOnly(
         withPrintColors(draft.colors, () =>
-          withPrintDesign(draft.design, () => generateA4InvoiceHTML({ ...SAMPLE, currencyMeta }, sheet, draft.template))
+          withPrintDesign(draft.design, () =>
+            withDistributorSettings(withDemoLicenses(getActiveDistributorSettings()), () =>
+              generateA4InvoiceHTML({ ...SAMPLE, currencyMeta }, sheet, draft.template)
+            )
+          )
         )
       ),
     [draft, sheet, currencyMeta]
@@ -494,6 +499,13 @@ export function InvoiceDesigner({ open, onOpenChange, initial, saving, onSave }:
             </div>
 
             <div className='min-h-0 flex-1 space-y-6 overflow-y-auto p-4'>
+              {draft.template === 'distributor' && (
+                <p className='rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200'>
+                  The Distributor layout has fixed fonts, sizes and sections to match its wholesale sales-order design. Only the
+                  wording (title, thank-you line, footer line) and the colours (table heading band, balance band, page) apply to it.
+                  Its licence numbers and policies are set under Settings → Printing → Distributor details.
+                </p>
+              )}
               {tab === 'text' && (
                 <>
                   <Group title='Typography'>

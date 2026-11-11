@@ -4,6 +4,7 @@ import { store } from '@/stores/store'
 import { buildInvoicePdfInOpener } from './invoice-print-pdf-bridge'
 import { buildInvoicePdfDownloadFilename } from './invoice-print-whatsapp'
 import { generateA4InvoiceHTML, type PrintInvoiceData } from './print-utils'
+import { prepareSheetPrintData, type InvoicePrintSource } from './distributor-print-details'
 import type { InvoiceTemplate } from './invoice-template'
 
 import { isNativePrintOn } from '@/lib/native-language'
@@ -62,13 +63,17 @@ export async function sendInvoiceReceiptWhatsApp(params: {
    * quotation (e.g. from the CRM Leads module) so the approved fallback template, once
    * created, uses quotation wording instead of invoice wording. */
   templateCategory?: string
+  /** Invoice the print data was built from — lets the Distributor layout look up its extra details. */
+  source?: InvoicePrintSource | null
 }): Promise<{ success: boolean; message?: string; error?: string }> {
   const phone = params.phone.trim()
   if (!phone) {
     return { success: false, error: 'No phone or WhatsApp number' }
   }
 
-  const html = generateA4InvoiceHTML(params.printData, 'a4', params.template ?? 'standard')
+  const template = params.template ?? 'standard'
+  const printData = await prepareSheetPrintData(params.printData, params.source ?? null, template)
+  const html = generateA4InvoiceHTML(printData, 'a4', template)
   const rootHtml = extractPrintRootHtml(html)
   const blob = await buildInvoicePdfInOpener(rootHtml)
   const pdfBase64 = await blobToBase64(blob)

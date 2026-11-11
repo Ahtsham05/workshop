@@ -1,6 +1,7 @@
 import {
   generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat, type PrintInvoiceData,
 } from '@/features/invoice/utils/print-utils'
+import { prepareSheetPrintData } from '@/features/invoice/utils/distributor-print-details'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetFormat, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format'
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
@@ -79,6 +80,8 @@ export function printPhoneSaleInvoice(
     openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(defaultPaperSize)), defaultPaperSize)
   } else {
     const sheetSize = resolveSheetFormat(defaultPaperSize, printOrientation)
-    openPrintWindowForFormat(generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate), sheetSize)
+    void prepareSheetPrintData(printData, invoiceRecord, invoiceTemplate).then((sheetData) =>
+      openPrintWindowForFormat(generateA4InvoiceHTML(sheetData, sheetSize, invoiceTemplate), sheetSize),
+    )
   }
 }
