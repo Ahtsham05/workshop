@@ -73,7 +73,11 @@ export function PersonalInformationCard({ profile, isLoading }: Props) {
     const emailChanged =
       profile?.email && values.email.toLowerCase() !== profile.email.toLowerCase()
     try {
-      const updated = await updateProfile(values).unwrap()
+      // Only send the email when it changed — an unchanged one is not an edit (and a
+      // support session refuses any email change).
+      const updated = await updateProfile(
+        emailChanged ? values : { name: values.name, preferredLanguage: values.preferredLanguage }
+      ).unwrap()
 
       // Keep the cached session in step so the header, sidebar and next reload all
       // show the new details.

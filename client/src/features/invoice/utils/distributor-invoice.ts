@@ -1,7 +1,7 @@
 /**
  * "Distributor" invoice layout — a US wholesale invoice: centred logo, "INVOICE : number"
  * with a Code 39 barcode, date / due date and any licence numbers the branch entered, Sold To,
- * a Terms · Status · Invoiced By · Rep · Tax ID band, SKU / Qty / Unit Price / Sold Price
+ * a Terms · Status · Invoiced By · Tax ID band, SKU / Qty / Unit Price / Sold Price
  * (+ Tax when charged) / Amount columns, totals, a grey balance band, the policies and terms
  * that have text, a signature line and a page footer. Anything not entered is left out.
  *
@@ -12,6 +12,7 @@
  *
  * All sizes are written in `--u` units (1pt on A4) so the same layout scales down for A5.
  */
+import JsBarcode from 'jsbarcode'
 import { escapeHtml } from '@/lib/escape-html'
 import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 import { invoiceTermsToSafeHtml } from '@/lib/rich-text-utils'
@@ -222,9 +223,9 @@ function metaLines(data: PrintInvoiceData, ctx: DistributorPrintContext): string
   ].filter((l): l is string => Boolean(l))
 }
 
-/** Printed lines of the meta block once it wraps in its 190u column (~39 SemiBold 8pt chars). */
+/** Printed lines of the meta block once it wraps in its 205u column (~42 SemiBold 8pt chars). */
 const metaLineCount = (lines: string[]) =>
-  lines.reduce((n, l) => n + Math.max(1, Math.ceil(l.replace(/&[a-z#0-9]+;/gi, '_').length / 39)), 0)
+  lines.reduce((n, l) => n + Math.max(1, Math.ceil(l.replace(/&[a-z#0-9]+;/gi, '_').length / 42)), 0)
 
 function partyLines(data: PrintInvoiceData, native: boolean): string[] {
   const address = (data.customerAddress || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
@@ -238,21 +239,60 @@ function partyLines(data: PrintInvoiceData, native: boolean): string[] {
 }
 
 const hasLogo = (data: PrintInvoiceData) => Boolean(data.companyLogo || data.isTrial)
-const barcodeFontU = (value: string) => Math.min(14, 260 / Math.max(1, value.length + 2))
+/* ── Barcode ──────────────────────────────────────────────────────────────
+ * A real Code 39 drawn as SVG bars (JsBarcode), sized like the reference: about 8u of width per
+ * character (start/stop * included) and a fixed bar height, so a short number gets a compact
+ * barcode and a long one a wider (never taller) one. Vector bars stay sharp in print and PDF.
+ * Falls back to the Libre Barcode 39 font when there is no DOM to draw into.
+ */
+const BARCODE_H_U = 18
+const BARCODE_U_PER_CHAR = 8
+const barcodeWidthU = (value: string, maxU: number) => Math.min(maxU, (value.length + 2) * BARCODE_U_PER_CHAR)
 
-/* "INVOICE : 4406" is one 16u line; a long number drops under the title (Poppins SemiBold
- * is ~0.64em per character, the column is 190u wide). */
-const DOC_COL_U = 190
+function barcodeHtml(value: string, maxWidthU: number, heightU = BARCODE_H_U): string {
+  if (!value) return ''
+  const width = `calc(${barcodeWidthU(value, maxWidthU).toFixed(2)} * var(--u))`
+  const height = `calc(${heightU} * var(--u))`
+  if (typeof document !== 'undefined') {
+    try {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      JsBarcode(svg, value, { format: 'CODE39', width: 1, height: 40, margin: 0, displayValue: false, background: '#ffffff', lineColor: '#000000' })
+      // Drop JsBarcode's background <rect>: the page is already white, and a background some print
+      // pipelines cannot read (e.g. fill="transparent" in Chrome's black-and-white printing) is
+      // painted black over every bar. Only the bar group (explicit black fill) is kept.
+      svg.querySelectorAll(':scope > rect').forEach((r) => r.remove())
+      const w = parseFloat(svg.getAttribute('width') || '0')
+      if (w > 0) {
+        svg.setAttribute('viewBox', `0 0 ${w} 40`)
+        svg.setAttribute('preserveAspectRatio', 'none')
+        svg.removeAttribute('width')
+        svg.removeAttribute('height')
+        svg.removeAttribute('style')
+        svg.setAttribute('class', 'ds-barcode-svg')
+        svg.setAttribute('aria-hidden', 'true')
+        svg.setAttribute('style', `width:${width};height:${height}`)
+        return svg.outerHTML
+      }
+    } catch {
+      /* fall through to the font */
+    }
+  }
+  const fontU = Math.min(heightU / 1.15, maxWidthU / Math.max(1, (value.length + 2) * 0.57))
+  return `<div class="ds-barcode" style="font-size:calc(${fontU.toFixed(2)} * var(--u))" aria-hidden="true">*${esc(value)}*</div>`
+}
+
+/* "INVOICE :" on one 16u line and the number on the line below it; a very long number shrinks
+ * to fit (Poppins SemiBold capitals/digits average ~0.62em, the column is at most 205u wide). */
+const DOC_COL_U = 205
 const HEADING_U = 16
-const headingFits = (title: string, number: string) => (title.length + 3 + number.length) * 0.64 * HEADING_U <= DOC_COL_U
-const numberSizeU = (number: string) => Math.min(HEADING_U, DOC_COL_U / Math.max(1, number.length * 0.64))
+const numberSizeU = (number: string) => Math.min(HEADING_U, DOC_COL_U / Math.max(1, number.length * 0.62))
 
 /** Height (u) of everything above the first item row on page 1 — mirrors the CSS below. */
 function firstPageTopU(data: PrintInvoiceData, ctx: DistributorPrintContext): number {
   const co = companyLines(data, ctx.nativeNames).length * 13.2
   const logo = hasLogo(data) ? 97 : 0
-  const heading = headingFits(documentTitle(ctx.isQuotation), ctx.printNumber) ? 24 : 48
-  const doc = heading + barcodeFontU(barcodeSafe(ctx.printNumber)) * 1.15 + 1 + metaLineCount(metaLines(data, ctx)) * 12
+  const heading = 48 // "INVOICE :" line + number line
+  const doc = heading + (barcodeSafe(ctx.printNumber) ? BARCODE_H_U + 4 : 0) + metaLineCount(metaLines(data, ctx)) * 12
   const parties = 14 + 15 + partyLines(data, ctx.nativeNames).length * 12
   const terms = 4 + 19.5 + 13
   return PAGE_TOP_PAD_U + Math.max(co, logo, doc) + parties + terms + TABLE_HEAD_U
@@ -269,12 +309,8 @@ function letterhead(data: PrintInvoiceData, ctx: DistributorPrintContext, title:
       : ''
 
   const barcodeValue = barcodeSafe(ctx.printNumber)
-  // The barcode font is ~0.57em per character: shrink long numbers so they stay in the column.
-  const barcodeSize = barcodeFontU(barcodeValue)
-  const oneLine = headingFits(title, ctx.printNumber)
-  const heading = oneLine
-    ? `<div class="ds-title">${esc(title)} : ${esc(ctx.printNumber)}</div>`
-    : `<div class="ds-title">${esc(title)} :</div>
+  // Title on its own line, the number below it (then the barcode).
+  const heading = `<div class="ds-title">${esc(title)} :</div>
       <div class="ds-title ds-number" style="font-size:calc(${numberSizeU(ctx.printNumber).toFixed(2)} * var(--u))">${esc(ctx.printNumber)}</div>`
 
   const meta = metaLines(data, ctx)
@@ -285,7 +321,7 @@ function letterhead(data: PrintInvoiceData, ctx: DistributorPrintContext, title:
     <div class="ds-logo-slot">${logo}</div>
     <div class="ds-doc">
       ${heading}
-      ${barcodeValue ? `<div class="ds-barcode" style="font-size:calc(${barcodeSize.toFixed(2)} * var(--u))" aria-hidden="true">*${esc(barcodeValue)}*</div>` : ''}
+      ${barcodeValue ? `<div class="ds-barcode-row">${barcodeHtml(barcodeValue, DOC_COL_U)}</div>` : ''}
       <div class="ds-meta">${meta.map((m) => `<div>${m}</div>`).join('')}</div>
     </div>
   </header>`
@@ -300,7 +336,6 @@ function termsBand(data: PrintInvoiceData, ctx: DistributorPrintContext): string
     ['Terms', termsText(data, ctx.isQuotation)],
     ['Status', statusText(data, ctx.isQuotation)],
     ['Invoiced By', data.invoicedBy?.trim() || '-'],
-    ['Rep', data.salesRep?.trim() || '-'],
     ['Tax ID/Hemp', `${data.customerTaxNumber?.trim() || '-'}/-`],
   ]
   return `
@@ -466,6 +501,15 @@ function pageFooter(page: number, total: number): string {
   </footer>`
 }
 
+/* Page 2+ header: barcode then ": number" on one line. The barcode keeps page 1's size (any
+ * narrower and its bars get too thin to scan); the number shrinks to the room left. */
+const CONT_BARCODE_MAX_U = DOC_COL_U
+const CONT_COL_U = 320
+const contNumberSizeU = (barcodeValue: string, number: string) => {
+  const room = CONT_COL_U - (barcodeValue ? barcodeWidthU(barcodeValue, CONT_BARCODE_MAX_U) + 3 : 0)
+  return Math.min(14, room / Math.max(1, (number.length + 2) * 0.62))
+}
+
 /** Top of every page after the first: business, customer and address | barcode, number and dates. */
 function continuationHead(data: PrintInvoiceData, ctx: DistributorPrintContext): string {
   const native = ctx.nativeNames
@@ -481,7 +525,7 @@ function continuationHead(data: PrintInvoiceData, ctx: DistributorPrintContext):
       ${address ? `<div dir="auto">Address: ${esc(address)}</div>` : ''}
     </div>
     <div class="ds-cont-r">
-      <div class="ds-cont-no">${barcodeValue ? `<span class="ds-barcode" aria-hidden="true">*${esc(barcodeValue)}*</span>` : ''}<span>: ${esc(ctx.printNumber)}</span></div>
+      <div class="ds-cont-no">${barcodeHtml(barcodeValue, CONT_BARCODE_MAX_U, 16)}<span style="font-size:calc(${contNumberSizeU(barcodeValue, ctx.printNumber).toFixed(2)} * var(--u))">: ${esc(ctx.printNumber)}</span></div>
       <div>Date: ${esc(dateText(data, ctx))}</div>
       ${due ? `<div>Due Date: ${esc(due)}</div>` : ''}
     </div>
@@ -551,7 +595,12 @@ function distributorCss(sheet: SheetKey, layout: Layout): string {
     .ds-co-name { font-weight: 600; }
     .ds-logo-slot { display: flex; justify-content: center; }
     .ds-logo { max-width: ${u(120)}; max-height: ${u(97)}; object-fit: contain; display: block; }
-    .ds-doc { justify-self: end; width: ${u(DOC_COL_U)}; font-weight: 600; }
+    /* Pinned to the right margin (mirroring the business details on the left); its lines are
+       left-aligned inside it, like the reference invoice. */
+    .ds-doc { justify-self: end; width: max-content; max-width: ${u(DOC_COL_U)}; min-width: 0; font-weight: 600; text-align: left; }
+    .ds-barcode-row { margin: ${u(1)} 0 ${u(3)}; line-height: 0; }
+    .ds-barcode-svg { display: block; }
+    .ds-barcode-svg rect, .ds-barcode-svg g { shape-rendering: crispEdges; }
     .ds-title { font-size: ${u(HEADING_U)}; line-height: ${u(24)}; font-weight: 600; white-space: nowrap; overflow: hidden; text-transform: uppercase; }
     .ds-barcode { font-family: 'Libre Barcode 39', monospace; font-weight: 400; line-height: 1.15; height: 1.15em; white-space: nowrap; overflow: hidden; }
     .ds-meta { line-height: ${u(12)}; margin-top: ${u(1)}; overflow-wrap: anywhere; }
@@ -564,12 +613,12 @@ function distributorCss(sheet: SheetKey, layout: Layout): string {
 
     /* terms band */
     .ds-terms { margin-top: ${u(4)}; }
-    .ds-terms-head, .ds-terms-body { display: grid; grid-template-columns: 21.24% 20.42% 16.34% 11.44% 17.97% 1fr; padding-left: 3.27%; }
+    .ds-terms-head, .ds-terms-body { display: grid; grid-template-columns: 21.24% 20.42% 22% 1fr; padding-left: 3.27%; padding-right: ${u(12)}; }
     .ds-terms-head { background: ${band}; color: ${bandText}; border-top: 0.5pt solid #000; border-bottom: 0.5pt solid #000;
       font-size: ${u(10)}; font-weight: 600; line-height: ${u(14)}; padding-top: ${u(2.5)}; padding-bottom: ${u(2)}; }
     .ds-terms-body { line-height: ${u(12)}; padding-top: ${u(1)}; }
     .ds-terms-head > div, .ds-terms-body > div { min-width: 0; padding-right: ${u(6)}; overflow-wrap: anywhere; }
-    .ds-terms-head > div:nth-child(5), .ds-terms-body > div:nth-child(5) { text-align: center; padding-right: 0; }
+    .ds-terms-head > div:nth-child(4), .ds-terms-body > div:nth-child(4) { text-align: center; padding-right: 0; }
 
     /* items */
     .ds-items { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: ${u(11.5)}; }
@@ -621,9 +670,9 @@ function distributorCss(sheet: SheetKey, layout: Layout): string {
     .ds-cont { display: flex; justify-content: space-between; align-items: flex-start; gap: ${u(16)}; padding: 0 ${u(20)}; margin-bottom: ${u(14)};
       font-weight: 600; line-height: ${u(13.2)}; }
     .ds-cont-l { min-width: 0; overflow-wrap: anywhere; }
-    .ds-cont-r { flex: none; width: ${u(DOC_COL_U)}; line-height: ${u(12)}; }
-    .ds-cont-no { display: flex; align-items: center; gap: ${u(2)}; font-size: ${u(14)}; line-height: ${u(20)}; white-space: nowrap; overflow: hidden; }
-    .ds-cont-no .ds-barcode { font-size: ${u(14)}; height: auto; }
+    .ds-cont-r { flex: none; max-width: ${u(CONT_COL_U)}; line-height: ${u(12)}; text-align: left; }
+    .ds-cont-no { display: flex; align-items: center; gap: ${u(3)}; font-size: ${u(14)}; line-height: ${u(20)}; white-space: nowrap; overflow: hidden; }
+    .ds-cont-no .ds-barcode-svg { flex: none; }
 
     @media screen {
       body { padding: 16px 0; }

@@ -152,7 +152,11 @@ const blockedReason = (req) => {
     return "Team chat messages cannot be sent in the customer's name during a support session.";
   }
   if (/\/users\/me(\/|\?|$)/.test(url) && req.method !== 'GET' && Object.prototype.hasOwnProperty.call(body, 'email')) {
-    return 'The login email cannot be changed during a support session.';
+    // Only a real change is refused: the profile form sends the unchanged email along with
+    // a name / language edit, and support may still fix those for the customer.
+    const current = String((req.user && req.user.email) || '').trim().toLowerCase();
+    const requested = String(body.email || '').trim().toLowerCase();
+    if (requested !== current) return 'The login email cannot be changed during a support session.';
   }
   return null;
 };
