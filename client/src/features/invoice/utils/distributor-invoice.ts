@@ -1,7 +1,7 @@
 /**
  * "Distributor" invoice layout — a US wholesale invoice: centred logo, "INVOICE : number"
  * with a Code 39 barcode, date / due date and any licence numbers the branch entered, Sold To,
- * a Terms · Status · Invoiced By · Tax ID band, SKU / Qty / Unit Price / Sold Price
+ * a Terms · Status · Invoiced By · Tax ID band, UPC / Qty / Unit Price / Sold Price
  * (+ Tax when charged) / Amount columns, totals, a grey balance band, the policies and terms
  * that have text, a signature line and a page footer. Anything not entered is left out.
  *
@@ -438,7 +438,7 @@ function itemsTable(rows: Item[], startIndex: number, fmt: (n: number) => string
     <colgroup>${widths.map((w) => `<col style="width:${w.toFixed(2)}%">`).join('')}</colgroup>
     <thead>
       <tr>
-        <th></th>${cols.sku ? '<th class="ds-c-upc">SKU</th>' : ''}<th class="ds-c-name">Product Name / Description</th>
+        <th></th>${cols.sku ? '<th class="ds-c-upc">UPC</th>' : ''}<th class="ds-c-name">Product Name / Description</th>
         <th class="ds-c-qty">Qty</th><th class="ds-c-num">Unit Price</th>${cols.sold ? '<th class="ds-c-num">Sold Price</th>' : ''}
         ${cols.tax ? '<th class="ds-c-num">Tax</th>' : ''}<th class="ds-c-num">Amount</th>
       </tr>
