@@ -9,7 +9,7 @@ import { ColorField } from '@/components/color-field'
 import { useCurrencyMeta } from '@/lib/format-money'
 import { INVOICE_TEMPLATE_OPTIONS, type InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { generateA4InvoiceHTML, type PrintInvoiceData } from '@/features/invoice/utils/print-utils'
-import { getActiveDistributorSettings, withDemoLicenses, withDistributorSettings } from '@/features/invoice/utils/distributor-settings'
+import { getActiveDistributorSettings, withDistributorSettings } from '@/features/invoice/utils/distributor-settings'
 import { PRINT_COLOR_KEYS, PRINT_COLOR_PRESETS, withPrintColors, type PrintColors } from '@/lib/print-colors'
 import {
   EMPTY_DESIGN,
@@ -391,7 +391,7 @@ export function InvoiceDesigner({ open, onOpenChange, initial, saving, onSave }:
       previewOnly(
         withPrintColors(draft.colors, () =>
           withPrintDesign(draft.design, () =>
-            withDistributorSettings(withDemoLicenses(getActiveDistributorSettings()), () =>
+            withDistributorSettings(getActiveDistributorSettings(), () =>
               generateA4InvoiceHTML({ ...SAMPLE, currencyMeta }, sheet, draft.template)
             )
           )

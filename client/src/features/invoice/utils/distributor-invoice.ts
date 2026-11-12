@@ -1,8 +1,9 @@
 /**
- * "Distributor" invoice layout — a wholesale/distribution sales document: centred logo,
- * document number with a Code 39 barcode, Sold To / Ship To, a Terms · Status · Invoiced By ·
- * Rep · Tax ID band, UPC / SO / IO / Out item columns, totals, a grey balance band, policies,
- * a signature line and a page footer.
+ * "Distributor" invoice layout — a US wholesale invoice: centred logo, "INVOICE : number"
+ * with a Code 39 barcode, date / due date and any licence numbers the branch entered, Sold To,
+ * a Terms · Status · Invoiced By · Rep · Tax ID band, SKU / Qty / Unit Price / Sold Price
+ * (+ Tax when charged) / Amount columns, totals, a grey balance band, the policies and terms
+ * that have text, a signature line and a page footer. Anything not entered is left out.
  *
  * Unlike the other templates (CSS overlays on one shared HTML structure, see
  * invoice-template.ts) this one has its own markup, so it is generated here. It still emits
@@ -23,7 +24,6 @@ import { buildTaxBreakdownHtml } from '@/lib/tax-print-rows'
 import type { PrintInvoiceData } from './print-utils'
 import {
   DISTRIBUTOR_LICENSE_FIELDS,
-  DISTRIBUTOR_MISSING_VALUE,
   getActiveDistributorSettings,
 } from './distributor-settings'
 import type { SheetSize } from './paper-format'
@@ -97,7 +97,7 @@ function statusText(data: PrintInvoiceData, isQuotation: boolean): string {
 
 function documentTitle(isQuotation: boolean): string {
   if (isQuotation) return 'QUOTATION'
-  return getActivePrintDesign().texts.title || 'SALES ORDER'
+  return getActivePrintDesign().texts.title || 'INVOICE'
 }
 
 /* ── Pagination ─────────────────────────────────────────────────────────────
@@ -108,28 +108,40 @@ const ROW_BASE_U = 4
 const LINE_U = 12
 const PAGE_TOP_PAD_U = 20
 const TABLE_HEAD_U = 31 // gap above the table + heading row
-const NEXT_PAGE_TOP_U = PAGE_TOP_PAD_U + 17 + TABLE_HEAD_U // continuation strip + table heading
+const CONT_HEAD_U = 70 // continuation letterhead (business, customer, address | barcode, dates)
+const NEXT_PAGE_TOP_U = PAGE_TOP_PAD_U + CONT_HEAD_U + TABLE_HEAD_U
 const FOOTER_U = 62 // spacer + page footer
 const SAFETY_U = 8 // rounding / font-metric slack, so a sheet never spills onto a blank page
-const NAME_CHARS_PER_LINE = 50
+const NAME_CHARS_PER_LINE = 50 // with the name column at 38.2% (SKU + Tax both shown)
 
 type Item = PrintInvoiceData['items'][number]
 
-function itemLines(item: Item): number {
-  let lines = Math.max(1, Math.ceil((item.name || '').length / NAME_CHARS_PER_LINE))
+/** Which optional columns this invoice needs — SKU only when a product has a code, Tax only when charged. */
+interface Columns { sku: boolean; tax: boolean }
+function columnsFor(items: Item[]): Columns {
+  return {
+    sku: items.some((it) => (it.code || '').trim()),
+    tax: items.some((it) => (Number(it.taxAmount) || 0) > 0),
+  }
+}
+/** Name column width in % — Sunrise proportions; it takes whatever an omitted SKU / Tax column leaves. */
+const nameColumnPct = (cols: Columns) => 60 - (cols.sku ? 13.8 : 0) - (cols.tax ? 8 : 0)
+
+function itemLines(item: Item, cols: Columns): number {
+  const perLine = Math.floor((NAME_CHARS_PER_LINE * nameColumnPct(cols)) / 38.2)
+  let lines = Math.max(1, Math.ceil((item.name || '').length / perLine))
   if (item.imeis && item.imeis.length > 0) lines += 1
-  if (item.discountAmount) lines = Math.max(lines, 2)
   if ((item.code || '').length > 16) lines = Math.max(lines, Math.ceil(item.code!.length / 16))
   return lines
 }
-const itemHeight = (item: Item) => ROW_BASE_U + LINE_U * itemLines(item)
+const itemHeight = (item: Item, cols: Columns) => ROW_BASE_U + LINE_U * itemLines(item, cols)
 
 function textLines(html: string, charsPerLine: number): number {
   const plain = html.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')
   return plain.split('\n').reduce((n, line) => n + Math.max(1, Math.ceil(line.length / charsPerLine)), 0)
 }
 
-function paginate(items: Item[], pageHeightU: number, firstTopU: number, summaryU: number, fixedPerPage?: number): Item[][] {
+function paginate(items: Item[], cols: Columns, pageHeightU: number, firstTopU: number, summaryU: number, fixedPerPage?: number): Item[][] {
   if (items.length === 0) return [[]]
   if (fixedPerPage && fixedPerPage > 0) {
     const pages: Item[][] = []
@@ -143,7 +155,7 @@ function paginate(items: Item[], pageHeightU: number, firstTopU: number, summary
   let used = 0
   let cap = firstCap
   for (const item of items) {
-    const h = itemHeight(item)
+    const h = itemHeight(item, cols)
     if (current.length > 0 && used + h > cap) {
       pages.push(current)
       current = []
@@ -160,7 +172,7 @@ function paginate(items: Item[], pageHeightU: number, firstTopU: number, summary
   const lastIndex = pages.length - 1
   const last = pages[lastIndex]
   const lastCap = lastIndex === 0 ? firstCap : nextCap
-  const lastUsed = last.reduce((s, it) => s + itemHeight(it), 0)
+  const lastUsed = last.reduce((s, it) => s + itemHeight(it, cols), 0)
   if (lastUsed + summaryU > lastCap && last.length > 1) {
     pages.push([last.pop()!])
   }
@@ -181,35 +193,45 @@ function companyLines(data: PrintInvoiceData, native: boolean): string[] {
   ].filter((l): l is string => Boolean(l))
 }
 
-/** Date + every licence line (always printed, "N/A" when not entered in Settings → Printing). */
+function dateText(data: PrintInvoiceData, ctx: DistributorPrintContext): string {
+  return data.invoiceDateTime ? formatAppDateTime(data.invoiceDateTime) : formatAppDate(ctx.documentDate)
+}
+
+/** Credit invoices with a due date only — quotations and settled invoices have nothing due. */
+function dueDateText(data: PrintInvoiceData, ctx: DistributorPrintContext): string {
+  if (ctx.isQuotation || !data.dueDate) return ''
+  const due = new Date(data.dueDate)
+  return Number.isNaN(due.getTime()) ? '' : formatAppDate(due)
+}
+
+/** Date, due date and only the licence numbers the branch entered in Settings → Printing. */
 function metaLines(data: PrintInvoiceData, ctx: DistributorPrintContext): string[] {
   const settings = getActiveDistributorSettings()
-  const dateText = data.invoiceDateTime ? formatAppDateTime(data.invoiceDateTime) : formatAppDate(ctx.documentDate)
+  const due = dueDateText(data, ctx)
   const licences = DISTRIBUTOR_LICENSE_FIELDS.map(({ key, label }) => {
     // The organisation's tax number stands in for an empty State Tax Id.
-    const value = settings[key] || (key === 'stateTaxId' ? data.companyTaxNumber?.trim() : '') || DISTRIBUTOR_MISSING_VALUE
-    return `${label}: ${esc(value)}`
+    const value = settings[key] || (key === 'stateTaxId' ? data.companyTaxNumber?.trim() : '')
+    return value ? `${label}: ${esc(value)}` : ''
   })
   return [
-    `Date: ${esc(dateText)}`,
+    `Date: ${esc(dateText(data, ctx))}`,
+    due && `Due Date: ${esc(due)}`,
     ...licences,
     // Only when the branch turned on Settings → Warehouses → "Show on prints".
     ctx.warehouseLabel && `${esc(ctx.warehouseWord)}: ${ctx.warehouseLabel}`,
   ].filter((l): l is string => Boolean(l))
 }
 
-/** Printed lines of the meta block once it wraps in its 151u column (~31 SemiBold 8pt chars). */
+/** Printed lines of the meta block once it wraps in its 190u column (~39 SemiBold 8pt chars). */
 const metaLineCount = (lines: string[]) =>
-  lines.reduce((n, l) => n + Math.max(1, Math.ceil(l.replace(/&[a-z#0-9]+;/gi, '_').length / 31)), 0)
+  lines.reduce((n, l) => n + Math.max(1, Math.ceil(l.replace(/&[a-z#0-9]+;/gi, '_').length / 39)), 0)
 
 function partyLines(data: PrintInvoiceData, native: boolean): string[] {
-  const walkIn = data.customerId === 'walk-in'
   const address = (data.customerAddress || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
   const phone = data.customerPhone?.trim()
   return [
     `<div class="ds-party-name" dir="auto">${esc(partyName(data, native))}</div>`,
     ...address.map((l) => `<div dir="auto">${esc(l)}</div>`),
-    !walkIn && !address.length ? '<div>N/A</div>' : '',
     phone ? `<div>Phone: <bdi dir="ltr">${esc(phone)}</bdi></div>` : '',
     data.customerEmail ? `<div>${esc(data.customerEmail)}</div>` : '',
   ].filter(Boolean)
@@ -218,11 +240,19 @@ function partyLines(data: PrintInvoiceData, native: boolean): string[] {
 const hasLogo = (data: PrintInvoiceData) => Boolean(data.companyLogo || data.isTrial)
 const barcodeFontU = (value: string) => Math.min(14, 260 / Math.max(1, value.length + 2))
 
+/* "INVOICE : 4406" is one 16u line; a long number drops under the title (Poppins SemiBold
+ * is ~0.64em per character, the column is 190u wide). */
+const DOC_COL_U = 190
+const HEADING_U = 16
+const headingFits = (title: string, number: string) => (title.length + 3 + number.length) * 0.64 * HEADING_U <= DOC_COL_U
+const numberSizeU = (number: string) => Math.min(HEADING_U, DOC_COL_U / Math.max(1, number.length * 0.64))
+
 /** Height (u) of everything above the first item row on page 1 — mirrors the CSS below. */
 function firstPageTopU(data: PrintInvoiceData, ctx: DistributorPrintContext): number {
   const co = companyLines(data, ctx.nativeNames).length * 13.2
   const logo = hasLogo(data) ? 97 : 0
-  const doc = 24 + 24 + barcodeFontU(barcodeSafe(ctx.printNumber)) * 1.15 + 1 + metaLineCount(metaLines(data, ctx)) * 12
+  const heading = headingFits(documentTitle(ctx.isQuotation), ctx.printNumber) ? 24 : 48
+  const doc = heading + barcodeFontU(barcodeSafe(ctx.printNumber)) * 1.15 + 1 + metaLineCount(metaLines(data, ctx)) * 12
   const parties = 14 + 15 + partyLines(data, ctx.nativeNames).length * 12
   const terms = 4 + 19.5 + 13
   return PAGE_TOP_PAD_U + Math.max(co, logo, doc) + parties + terms + TABLE_HEAD_U
@@ -241,8 +271,11 @@ function letterhead(data: PrintInvoiceData, ctx: DistributorPrintContext, title:
   const barcodeValue = barcodeSafe(ctx.printNumber)
   // The barcode font is ~0.57em per character: shrink long numbers so they stay in the column.
   const barcodeSize = barcodeFontU(barcodeValue)
-  // Poppins SemiBold is ~0.64em per character: keep the number on one line in the 151u column.
-  const numberSize = Math.min(16, 150 / Math.max(1, ctx.printNumber.length * 0.64))
+  const oneLine = headingFits(title, ctx.printNumber)
+  const heading = oneLine
+    ? `<div class="ds-title">${esc(title)} : ${esc(ctx.printNumber)}</div>`
+    : `<div class="ds-title">${esc(title)} :</div>
+      <div class="ds-title ds-number" style="font-size:calc(${numberSizeU(ctx.printNumber).toFixed(2)} * var(--u))">${esc(ctx.printNumber)}</div>`
 
   const meta = metaLines(data, ctx)
 
@@ -251,8 +284,7 @@ function letterhead(data: PrintInvoiceData, ctx: DistributorPrintContext, title:
     <div class="ds-co">${companyLines(data, native).join('')}</div>
     <div class="ds-logo-slot">${logo}</div>
     <div class="ds-doc">
-      <div class="ds-title">${esc(title)} :</div>
-      <div class="ds-number" style="font-size:calc(${numberSize.toFixed(2)} * var(--u))">${esc(ctx.printNumber)}</div>
+      ${heading}
       ${barcodeValue ? `<div class="ds-barcode" style="font-size:calc(${barcodeSize.toFixed(2)} * var(--u))" aria-hidden="true">*${esc(barcodeValue)}*</div>` : ''}
       <div class="ds-meta">${meta.map((m) => `<div>${m}</div>`).join('')}</div>
     </div>
@@ -278,43 +310,44 @@ function termsBand(data: PrintInvoiceData, ctx: DistributorPrintContext): string
   </div>`
 }
 
-function itemsTable(rows: Item[], startIndex: number, fmt: (n: number) => string, native: boolean): string {
+function itemsTable(rows: Item[], startIndex: number, fmt: (n: number) => string, native: boolean, cols: Columns): string {
+  const span = 6 + (cols.sku ? 1 : 0) + (cols.tax ? 1 : 0)
   const body = rows.length
     ? rows
         .map((item, i) => {
           const name = native ? item.nameUrdu?.trim() || item.name : item.name
           const qty = Number(item.quantity) || 0
           const unit = item.unit && !/^(pcs?|piece|pieces|unit|units|nos?)$/i.test(item.unit.trim()) ? ` ${esc(item.unit)}` : ''
+          const unitPrice = Number(item.unitPrice) || 0
+          const amount = Number(item.subtotal) || 0
+          // Sold Price is what each unit actually went for once its line discount is taken off.
+          const soldPrice = qty > 0 && item.discountAmount ? amount / qty : unitPrice
           const extra = item.imeis && item.imeis.length > 0
             ? `<div class="ds-sub">IMEI/Serial: ${esc(formatImeiEntries(item.imeis))}</div>`
             : ''
-          const gross = item.discountAmount ? `<div class="ds-strike">${fmt(qty * (Number(item.unitPrice) || 0))}</div>` : ''
           return `
-      <tr${(startIndex + i) % 2 === 1 ? ' class="ds-zebra"' : ''} data-sub="${Number(item.subtotal) || 0}">
+      <tr${(startIndex + i) % 2 === 1 ? ' class="ds-zebra"' : ''} data-sub="${amount}">
         <td class="ds-c-no">${startIndex + i + 1}</td>
-        <td class="ds-c-upc">${esc(item.code || '')}</td>
+        ${cols.sku ? `<td class="ds-c-upc">${esc(item.code || '')}</td>` : ''}
         <td class="ds-c-name" dir="auto">${esc(name)}${extra}</td>
         <td class="ds-c-qty">${qty}${unit}</td>
-        <td class="ds-c-qty">${qty}${unit}</td>
-        <td class="ds-c-qty">0</td>
-        <td class="ds-c-num">${fmt(Number(item.unitPrice) || 0)}</td>
-        <td class="ds-c-num">${fmt(Number(item.taxAmount) || 0)}</td>
-        <td class="ds-c-num">${gross}${fmt(Number(item.subtotal) || 0)}</td>
+        <td class="ds-c-num">${fmt(unitPrice)}</td>
+        <td class="ds-c-num">${fmt(soldPrice)}</td>
+        ${cols.tax ? `<td class="ds-c-num">${fmt(Number(item.taxAmount) || 0)}</td>` : ''}
+        <td class="ds-c-num">${fmt(amount)}</td>
       </tr>`
         })
         .join('')
-    : '<tr><td></td><td></td><td class="ds-c-name">No items</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>'
+    : `<tr><td></td><td class="ds-c-name" colspan="${span - 1}">No items</td></tr>`
+  const widths = [3.3, ...(cols.sku ? [13.8] : []), nameColumnPct(cols), 6.5, 10.5, 10, ...(cols.tax ? [8] : []), 9.7]
   return `
   <table class="ds-items">
-    <colgroup>
-      <col style="width:3.27%"><col style="width:13.73%"><col style="width:35.62%"><col style="width:4.58%">
-      <col style="width:4.9%"><col style="width:4.9%"><col style="width:11.44%"><col style="width:8.17%"><col style="width:13.39%">
-    </colgroup>
+    <colgroup>${widths.map((w) => `<col style="width:${w.toFixed(2)}%">`).join('')}</colgroup>
     <thead>
       <tr>
-        <th></th><th class="ds-c-upc">UPC</th><th class="ds-c-name">Product Name / Description</th>
-        <th class="ds-c-qty">SO</th><th class="ds-c-qty">IO</th><th class="ds-c-qty">Out</th>
-        <th class="ds-c-num">Sold Price</th><th class="ds-c-num">Tax</th><th class="ds-c-num">Amount</th>
+        <th></th>${cols.sku ? '<th class="ds-c-upc">SKU</th>' : ''}<th class="ds-c-name">Product Name / Description</th>
+        <th class="ds-c-qty">Qty</th><th class="ds-c-num">Unit Price</th><th class="ds-c-num">Sold Price</th>
+        ${cols.tax ? '<th class="ds-c-num">Tax</th>' : ''}<th class="ds-c-num">Amount</th>
       </tr>
     </thead>
     <tbody>${body}</tbody>
@@ -328,6 +361,19 @@ function taxRowsHtml(data: PrintInvoiceData, fmt: (n: number) => string): string
   )
 }
 
+/** Notes / Terms & Conditions / policies that have text, in print order — empty ones are left out. */
+function policyBlocks(data: PrintInvoiceData): Array<{ heading: string; html: string }> {
+  const settings = getActiveDistributorSettings()
+  const plain = (text: string) => (text ? escapeHtml(text).replace(/\r?\n/g, '<br />') : '')
+  const rich = (text: unknown) => (text && String(text).trim() ? invoiceTermsToSafeHtml(String(text)) : '')
+  return [
+    { heading: 'Terms &amp; Conditions', html: rich(data.termsAndConditions) },
+    { heading: 'General Policy', html: plain(settings.generalPolicy) },
+    { heading: 'Return Policy', html: plain(settings.returnPolicy) },
+    { heading: 'Buyers Guarantee', html: plain(settings.buyersGuarantee) },
+  ].filter((b) => b.html)
+}
+
 function summary(data: PrintInvoiceData, ctx: DistributorPrintContext, fmt: (n: number) => string): string {
   const items = data.items || []
   const totalQty = items.reduce((s, it) => s + (Number(it.quantity) || 0), 0)
@@ -338,6 +384,7 @@ function summary(data: PrintInvoiceData, ctx: DistributorPrintContext, fmt: (n: 
   const delivery = Number(data.deliveryCharge) || 0
   const service = Number(data.serviceCharge) || 0
 
+  // Only amounts that were actually charged print (tax rows come from taxRowsHtml, also only when > 0).
   const upper: Array<[string, string]> = [
     ['Total Quantity', String(Math.round(totalQty * 1000) / 1000)],
     ['Subtotal', fmt(lineTotal)],
@@ -345,7 +392,7 @@ function summary(data: PrintInvoiceData, ctx: DistributorPrintContext, fmt: (n: 
   ]
   const upperTail: Array<[string, string]> = [
     ...(service > 0 ? [['Service Charge', fmt(service)] as [string, string]] : []),
-    ['Shipping', fmt(delivery)],
+    ...(delivery > 0 ? [['Shipping', fmt(delivery)] as [string, string]] : []),
   ]
   const lower: Array<[string, string]> = ctx.isQuotation
     ? [['Grand Total', fmt(total)]]
@@ -357,8 +404,12 @@ function summary(data: PrintInvoiceData, ctx: DistributorPrintContext, fmt: (n: 
   const rowsHtml = (rows: Array<[string, string]>) =>
     rows.map(([l, v]) => `<tr><th>${esc(l)}</th><td>${v}</td></tr>`).join('')
 
-  const shipMethod = delivery > 0 ? 'Delivery' : 'In Store Pick Up'
-  const shipDate = formatAppDate(ctx.documentDate)
+  const notesHtml = data.notes && String(data.notes).trim() ? invoiceTermsToSafeHtml(String(data.notes)) : ''
+  const ship: Array<[string, string]> = [
+    ['Ship Method:', delivery > 0 ? 'Delivery' : 'In Store Pick Up'],
+    ['Ship Date:', esc(formatAppDate(ctx.documentDate))],
+    ...(notesHtml ? [['Notes:', notesHtml] as [string, string]] : []),
+  ]
 
   // Running balance — registered customers only, never on a quotation.
   const showBalances = !ctx.isQuotation
@@ -366,22 +417,14 @@ function summary(data: PrintInvoiceData, ctx: DistributorPrintContext, fmt: (n: 
   const after = data.newBalance != null && data.customerId !== 'walk-in' ? Number(data.newBalance) : prev + total - paid
   const balanceText = (n: number) => `${fmt(Math.abs(n))}${n < 0 ? ' (Cr)' : ''}`
 
-  const notesHtml = data.notes ? invoiceTermsToSafeHtml(String(data.notes)) : ''
-  const termsHtml = data.termsAndConditions ? invoiceTermsToSafeHtml(String(data.termsAndConditions)) : ''
-  const settings = getActiveDistributorSettings()
-  const plain = (text: string) => (text ? escapeHtml(text).replace(/\r?\n/g, '<br />') : '')
-  // Invoice-specific notes / T&C print only when entered; the three policy headings always print.
-  const policy = (heading: string, html: string, always = false) =>
-    html || always
-      ? `<div class="ds-policy"><div class="ds-policy-h">${heading}</div>${html ? `<div class="ds-policy-t" dir="auto">${html}</div>` : ''}</div>`
-      : ''
+  const policies = policyBlocks(data)
+    .map((b) => `<div class="ds-policy"><div class="ds-policy-h">${b.heading}</div><div class="ds-policy-t" dir="auto">${b.html}</div></div>`)
+    .join('')
+  const thanks = getActivePrintDesign().texts.thankYou || 'Thank You For Your Business!'
 
   return `
   <section class="ds-summary">
-    <div class="ds-ship">
-      <div><span class="ds-ship-l">Ship Method:</span><span>${shipMethod}</span></div>
-      <div><span class="ds-ship-l">Ship Date:</span><span>${esc(shipDate)}</span></div>
-    </div>
+    <div class="ds-ship">${ship.map(([l, v]) => `<div class="ds-ship-l">${l}</div><div class="ds-ship-v" dir="auto">${v}</div>`).join('')}</div>
     <table class="ds-totals">${rowsHtml(upper)}${taxRowsHtml(data, fmt)}${rowsHtml(upperTail)}</table>
   </section>
   <div class="ds-rule"></div>
@@ -392,31 +435,26 @@ function summary(data: PrintInvoiceData, ctx: DistributorPrintContext, fmt: (n: 
     <span>Previous Due Balance: ${balanceText(prev)}</span>
     <span>Total Due Balance: ${balanceText(after)}</span>
   </div>` : '<div class="ds-balance-gap"></div>'}
-  ${policy('Notes', notesHtml)}
-  ${policy('Terms &amp; Conditions', termsHtml)}
-  ${policy('General Policy', plain(settings.generalPolicy), true)}
-  ${policy('Return Policy', plain(settings.returnPolicy), true)}
-  ${policy('Buyers Guarantee', plain(settings.buyersGuarantee), true)}
-  <div class="ds-spacer"></div>
-  <div class="ds-sign"><div class="ds-sign-line"></div>Date &amp; Signature</div>`
+  ${policies}
+  <div class="ds-sign"><div class="ds-sign-line"></div>Date &amp; Signature</div>
+  <div class="ds-thanks">${esc(thanks)}</div>`
 }
 
-/** Height (u) of the totals → signature block on the last page — mirrors the CSS below. */
+/** Height (u) of the totals → thank-you block on the last page — mirrors the CSS below. */
 function summaryHeightU(data: PrintInvoiceData, ctx: DistributorPrintContext): number {
   const taxCount =
     (data.taxLines || []).reduce((n, l) => n + 1 + Math.max(0, (l.components?.length || 0) - 1), 0) ||
     (Number(data.tax) > 0 ? 1 : 0)
-  const upperRows = 3 + taxCount + (Number(data.discount) > 0 ? 1 : 0) + (Number(data.serviceCharge) > 0 ? 1 : 0)
+  const upperRows = 2 + (Number(data.tax) > 0 ? taxCount : 0) + (Number(data.discount) > 0 ? 1 : 0) +
+    (Number(data.serviceCharge) > 0 ? 1 : 0) + (Number(data.deliveryCharge) > 0 ? 1 : 0)
+  const notesLines = data.notes && String(data.notes).trim() ? textLines(String(data.notes), 45) : 0
+  const shipU = (2 + notesLines) * 14
   const lowerRows = ctx.isQuotation ? 1 : 3
-  const showBalances = !ctx.isQuotation
-  let h = 10 + Math.max(27, upperRows * 16) + 11 + 12 + lowerRows * 18 + (showBalances ? 50 : 10)
-  const settings = getActiveDistributorSettings()
-  const optional = [data.notes, data.termsAndConditions].filter((b) => b && String(b).trim()).map(String)
-  const blocks = [...optional, settings.generalPolicy, settings.returnPolicy, settings.buyersGuarantee]
-  blocks.forEach((b, i) => {
-    h += (i === 0 ? 3 : 7) + 10 + (b ? 10 * textLines(b, 190) : 0)
+  let h = 10 + Math.max(shipU, upperRows * 16) + 11 + 12 + lowerRows * 18 + (ctx.isQuotation ? 10 : 50)
+  policyBlocks(data).forEach((b, i) => {
+    h += (i === 0 ? 3 : 7) + 10 + 10 * textLines(b.html, 190)
   })
-  return h + 18 // signature line + caption
+  return h + 48 + 18 + 30 // gap + signature line/caption + thank-you
 }
 
 function pageFooter(page: number, total: number): string {
@@ -424,17 +462,30 @@ function pageFooter(page: number, total: number): string {
   return `
   <footer class="ds-foot">
     <span>Page ${page} of ${total}</span>
-    <span class="ds-foot-thanks">${esc(texts.thankYou || 'Thank You For Your Business!')}</span>
     <span>${esc(texts.footerLine || 'Powered by Logix Plus')}</span>
   </footer>`
 }
 
-function continuationStrip(title: string, ctx: DistributorPrintContext, page: number, total: number, customer: string): string {
+/** Top of every page after the first: business, customer and address | barcode, number and dates. */
+function continuationHead(data: PrintInvoiceData, ctx: DistributorPrintContext): string {
+  const native = ctx.nativeNames
+  const company = (native ? data.companyNameUrdu || data.companyName : data.companyName || data.companyNameUrdu) || ''
+  const address = (data.customerAddress || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).join(', ')
+  const barcodeValue = barcodeSafe(ctx.printNumber)
+  const due = dueDateText(data, ctx)
   return `
-  <div class="ds-cont">
-    <div><strong>${esc(title)} : ${esc(ctx.printNumber)}</strong> — continued (page ${page} of ${total})</div>
-    <div dir="auto">${esc(customer)}</div>
-  </div>`
+  <header class="ds-cont">
+    <div class="ds-cont-l">
+      ${company ? `<div dir="auto">${esc(company)}</div>` : ''}
+      <div dir="auto">Customer: ${esc(partyName(data, native))}</div>
+      ${address ? `<div dir="auto">Address: ${esc(address)}</div>` : ''}
+    </div>
+    <div class="ds-cont-r">
+      <div class="ds-cont-no">${barcodeValue ? `<span class="ds-barcode" aria-hidden="true">*${esc(barcodeValue)}*</span>` : ''}<span>: ${esc(ctx.printNumber)}</span></div>
+      <div>Date: ${esc(dateText(data, ctx))}</div>
+      ${due ? `<div>Due Date: ${esc(due)}</div>` : ''}
+    </div>
+  </header>`
 }
 
 /** Builds the sheets (each one `.invoice-print-page`) for one invoice. */
@@ -442,8 +493,8 @@ export function buildDistributorPages(data: PrintInvoiceData, ctx: DistributorPr
   const fmt = (n: number) => formatMoneyWithMeta(n, data.currencyMeta ?? FALLBACK_CURRENCY)
   const title = documentTitle(ctx.isQuotation)
   const fixed = typeof data.a4ItemsPerPage === 'number' && data.a4ItemsPerPage > 0 ? Math.min(120, Math.floor(data.a4ItemsPerPage)) : undefined
-  const chunks = paginate(data.items || [], SHEETS[sheet].heightU, firstPageTopU(data, ctx), summaryHeightU(data, ctx), fixed)
-  const customer = partyName(data, ctx.nativeNames)
+  const cols = columnsFor(data.items || [])
+  const chunks = paginate(data.items || [], cols, SHEETS[sheet].heightU, firstPageTopU(data, ctx), summaryHeightU(data, ctx), fixed)
   let start = 0
   return chunks.map((rows, i) => {
     const first = i === 0
@@ -452,11 +503,12 @@ export function buildDistributorPages(data: PrintInvoiceData, ctx: DistributorPr
 <div class="invoice-print-page ds-page">
   ${first
     ? `${letterhead(data, ctx, title)}
-  <section class="ds-parties">${partyBlock('SOLD TO:', data, ctx)}${partyBlock('SHIP TO:', data, ctx)}</section>
+  <section class="ds-parties">${partyBlock('SOLD TO:', data, ctx)}</section>
   ${termsBand(data, ctx)}`
-    : continuationStrip(title, ctx, i + 1, chunks.length, customer)}
-  ${itemsTable(rows, start, fmt, ctx.nativeNames)}
-  ${last ? summary(data, ctx, fmt) : '<div class="ds-spacer"></div>'}
+    : continuationHead(data, ctx)}
+  ${itemsTable(rows, start, fmt, ctx.nativeNames, cols)}
+  ${last ? summary(data, ctx, fmt) : ''}
+  <div class="ds-spacer"></div>
   ${pageFooter(i + 1, chunks.length)}
 </div>`
     start += rows.length
@@ -499,16 +551,14 @@ function distributorCss(sheet: SheetKey, layout: Layout): string {
     .ds-co-name { font-weight: 600; }
     .ds-logo-slot { display: flex; justify-content: center; }
     .ds-logo { max-width: ${u(120)}; max-height: ${u(97)}; object-fit: contain; display: block; }
-    .ds-doc { justify-self: end; width: ${u(151)}; font-weight: 600; }
-    .ds-title { font-size: ${u(16)}; line-height: ${u(24)}; font-weight: 600; overflow-wrap: anywhere; }
-    .ds-number { font-size: ${u(16)}; line-height: ${u(24)}; font-weight: 600; white-space: nowrap; }
+    .ds-doc { justify-self: end; width: ${u(DOC_COL_U)}; font-weight: 600; }
+    .ds-title { font-size: ${u(HEADING_U)}; line-height: ${u(24)}; font-weight: 600; white-space: nowrap; overflow: hidden; text-transform: uppercase; }
     .ds-barcode { font-family: 'Libre Barcode 39', monospace; font-weight: 400; line-height: 1.15; height: 1.15em; white-space: nowrap; overflow: hidden; }
     .ds-meta { line-height: ${u(12)}; margin-top: ${u(1)}; overflow-wrap: anywhere; }
 
     /* sold to / ship to */
-    .ds-parties { display: grid; grid-template-columns: minmax(0, 1fr) ${u(146)}; column-gap: ${u(24)}; padding: 0 ${u(20)}; margin-top: ${u(14)}; }
-    .ds-party { line-height: ${u(12)}; min-width: 0; overflow-wrap: anywhere; max-width: ${u(260)}; }
-    .ds-party:last-child { max-width: none; }
+    .ds-parties { padding: 0 ${u(20)}; margin-top: ${u(14)}; }
+    .ds-party { line-height: ${u(12)}; min-width: 0; overflow-wrap: anywhere; max-width: ${u(300)}; }
     .ds-label-box { display: inline-block; min-width: ${u(50)}; height: ${u(15)}; line-height: ${u(15)}; background: ${band}; color: ${bandText};
       font-size: ${u(10)}; font-weight: 600; white-space: nowrap; padding-right: ${u(3)}; }
 
@@ -538,8 +588,10 @@ function distributorCss(sheet: SheetKey, layout: Layout): string {
 
     /* totals */
     .ds-summary { display: flex; justify-content: space-between; align-items: flex-start; padding: 0 ${u(12)} 0 ${u(20)}; margin-top: ${u(10)}; }
-    .ds-ship { font-size: ${u(9)}; line-height: ${u(13.5)}; }
-    .ds-ship-l { display: inline-block; width: ${u(66)}; height: ${u(14)}; background: ${band}; color: ${bandText}; font-weight: 500; padding-left: ${u(4)}; margin-right: ${u(2)}; }
+    .ds-ship { display: grid; grid-template-columns: auto minmax(0, ${u(220)}); margin-left: ${u(4)}; font-size: ${u(9)}; line-height: ${u(14)}; }
+    .ds-ship-l { background: ${band}; color: ${bandText}; font-weight: 500; padding: 0 ${u(6)} 0 ${u(4)}; white-space: nowrap; }
+    .ds-ship-v { padding-left: ${u(4)}; overflow-wrap: anywhere; }
+    .ds-ship-v p, .ds-ship-v ul, .ds-ship-v ol { margin: 0; }
     .ds-totals { border-collapse: collapse; }
     .ds-totals th { font-size: ${u(10)}; font-weight: 600; text-align: right; padding: 0 ${u(5)} 0 ${u(8)}; line-height: ${u(14)}; height: ${u(16)}; vertical-align: top; white-space: nowrap; }
     .ds-totals td { width: ${u(100)}; font-size: ${u(10)}; font-weight: 500; text-align: right; padding: 0 ${u(8)} 0 0; line-height: ${u(14)}; height: ${u(16)}; vertical-align: top; white-space: nowrap; }
@@ -561,12 +613,17 @@ function distributorCss(sheet: SheetKey, layout: Layout): string {
     .ds-policy-t p, .ds-policy-t ul, .ds-policy-t ol { margin: 0; }
     .ds-policy-t ul, .ds-policy-t ol { padding-left: ${u(12)}; }
     .ds-spacer { flex: 1 1 auto; min-height: ${u(16)}; }
-    .ds-sign { align-self: flex-end; width: ${u(120)}; margin-right: ${u(12)}; text-align: center; line-height: ${u(14)}; break-inside: avoid; }
+    .ds-sign { align-self: flex-end; width: ${u(120)}; margin: ${u(48)} ${u(24)} 0 0; text-align: center; font-size: ${u(9)}; line-height: ${u(14)}; break-inside: avoid; }
     .ds-sign-line { border-top: 0.5pt solid #000; margin-bottom: ${u(3)}; }
+    .ds-thanks { text-align: center; font-size: ${u(10)}; line-height: ${u(14)}; margin-top: ${u(16)}; }
     .ds-foot { display: flex; justify-content: space-between; align-items: flex-start; margin: ${u(15)} ${u(20)} 0; padding: ${u(5)} 0 ${u(12)};
       border-top: 0.5pt solid #d4d4d4; font-size: ${u(9)}; line-height: ${u(12.6)}; }
-    .ds-foot-thanks { margin-top: ${u(-9)}; background: ${pageBg}; padding: 0 ${u(4)}; }
-    .ds-cont { display: flex; justify-content: space-between; gap: ${u(12)}; padding: 0 ${u(20)} ${u(4)}; font-size: ${u(9)}; line-height: ${u(13)}; }
+    .ds-cont { display: flex; justify-content: space-between; align-items: flex-start; gap: ${u(16)}; padding: 0 ${u(20)}; margin-bottom: ${u(14)};
+      font-weight: 600; line-height: ${u(13.2)}; }
+    .ds-cont-l { min-width: 0; overflow-wrap: anywhere; }
+    .ds-cont-r { flex: none; width: ${u(DOC_COL_U)}; line-height: ${u(12)}; }
+    .ds-cont-no { display: flex; align-items: center; gap: ${u(2)}; font-size: ${u(14)}; line-height: ${u(20)}; white-space: nowrap; overflow: hidden; }
+    .ds-cont-no .ds-barcode { font-size: ${u(14)}; height: auto; }
 
     @media screen {
       body { padding: 16px 0; }

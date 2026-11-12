@@ -20,7 +20,7 @@ export const INVOICE_TEMPLATE_OPTIONS: Array<{ value: InvoiceTemplate; label: st
   { value: 'executive', label: 'Executive', description: 'Premium serif design in charcoal and gold, centred letterhead' },
   { value: 'challan', label: 'Challan', description: 'Bank deposit-slip style: green ruled boxes and a tear-off line' },
   { value: 'minimal', label: 'Minimal', description: 'Swiss-style whitespace, thin lines, no fills — saves ink' },
-  { value: 'distributor', label: 'Distributor', description: 'Wholesale sales order: centred logo, barcode, Sold To / Ship To, Terms · Rep band, UPC / SO / IO columns, grey balance band' },
+  { value: 'distributor', label: 'Distributor', description: 'US wholesale invoice: centred logo, INVOICE : number + barcode, Sold To, Terms · Rep band, SKU / Qty / Unit · Sold Price columns, grey balance band' },
 ]
 
 /** Default line-items-per-page for A4/A5 sheet invoices, per template. Explicit `a4ItemsPerPage` on print data always wins. */

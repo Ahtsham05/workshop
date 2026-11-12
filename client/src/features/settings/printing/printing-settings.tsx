@@ -23,7 +23,6 @@ import {
   DISTRIBUTOR_LICENSE_FIELDS,
   DISTRIBUTOR_POLICY_FIELDS,
   normalizeDistributorSettings,
-  withDemoLicenses,
   withDistributorSettings,
   type DistributorSettings,
 } from '@/features/invoice/utils/distributor-settings'
@@ -131,8 +130,8 @@ export default function PrintingSettings() {
       map[option.value] = toPreviewOnlyHtml(
         withPrintColors(colors, () =>
           withPrintDesign(design, () =>
-            // Sample licence numbers fill any empty field in the preview only — real prints show "N/A".
-            withDistributorSettings(withDemoLicenses(distributor), () => generateA4InvoiceHTML(sampleData, 'a4', option.value)),
+            // Exactly what prints: empty licences and policies are left out of the preview too.
+            withDistributorSettings(distributor, () => generateA4InvoiceHTML(sampleData, 'a4', option.value)),
           ),
         )
       )
@@ -303,7 +302,7 @@ export default function PrintingSettings() {
                 <div className="mt-8 rounded-lg border p-4">
                   <div className="text-sm font-medium">Distributor details</div>
                   <p className="text-xs text-muted-foreground mt-1 mb-4">
-                    Printed in the top-right of every Distributor invoice. Leave a number empty and its line prints as &quot;N/A&quot;.
+                    Printed in the top-right of every Distributor invoice. Only the numbers you fill in are printed; empty lines and empty policies are left off.
                     State Tax Id falls back to your organisation&apos;s tax number.
                   </p>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
