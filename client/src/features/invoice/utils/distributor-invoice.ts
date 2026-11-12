@@ -236,14 +236,15 @@ function dateText(data: PrintInvoiceData, ctx: DistributorPrintContext): string 
   return formatPattern(at, hasTime ? `${DAY_PATTERN} h:mm:ss a` : DAY_PATTERN)
 }
 
-/** Invoices only (not quotations/returns). A credit due date is a calendar day and carries the
- * invoice's time of day; without one the invoice is due when issued, as on the reference. */
+/** Invoices with a due date only (not quotations/returns) — no due date, no line. The due date
+ * is a calendar day and carries the invoice's time of day, as on the reference. */
 function dueDateText(data: PrintInvoiceData, ctx: DistributorPrintContext): string {
   if (ctx.isQuotation || isReturn(data)) return ''
-  const { at, hasTime } = invoiceMoment(data, ctx)
   const day = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(data.dueDate || ''))
-  const due = day ? new Date(at.getTime()) : at
-  if (day) due.setFullYear(Number(day[1]), Number(day[2]) - 1, Number(day[3]))
+  if (!day) return ''
+  const { at, hasTime } = invoiceMoment(data, ctx)
+  const due = new Date(at.getTime())
+  due.setFullYear(Number(day[1]), Number(day[2]) - 1, Number(day[3]))
   return formatPattern(due, hasTime ? `${DAY_PATTERN} h:mm a` : DAY_PATTERN)
 }
 
