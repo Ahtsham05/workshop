@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react'
 import { WarehouseTag } from '@/components/warehouse-tag'
 import { toast } from 'sonner'
-import { Plus, Search, Eye, Trash2, CheckCircle, XCircle, Receipt, Wallet, PackageCheck } from 'lucide-react'
+import { Plus, Search, Eye, Trash2, CheckCircle, XCircle, Receipt, Wallet, PackageCheck, Printer, Loader2 } from 'lucide-react'
+import { useSelector } from 'react-redux'
+import type { RootState } from '@/stores/store'
+import { useGetBranchQuery } from '@/stores/branch.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import type { PaperSize, PrintOrientation } from '@/features/invoice/utils/paper-format'
+import { printSalesReturn } from '../utils/sales-return-print'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -44,7 +50,7 @@ import {
   type SalesReturn,
 } from '@/stores/returns.api'
 import { usePermissions } from '@/context/permission-context'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
 import { formatAppDate } from '@/lib/date-format'
 
@@ -83,6 +89,32 @@ export default function SalesReturnList({ onCreateNew }: SalesReturnListProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedReturn, setSelectedReturn] = useState<SalesReturn | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<SalesReturn | null>(null)
+  const [printingId, setPrintingId] = useState<string | null>(null)
+
+  const currencyMeta = useCurrencyMeta()
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const user = useSelector((state: RootState) => state.auth.data?.user)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+
+  /** Prints the return as a "RETURN INVOICE" (Distributor layout, branch paper size). */
+  const handlePrint = async (ret: SalesReturn) => {
+    const id = ret._id || ret.id
+    setPrintingId(id)
+    try {
+      await printSalesReturn(ret, {
+        orgData,
+        branchData,
+        currencyMeta,
+        paperSize: (branchData?.printSettings?.paperSize ?? 'a4') as PaperSize,
+        printOrientation: (branchData?.printSettings?.printOrientation ?? 'portrait') as PrintOrientation,
+      })
+    } catch {
+      toast.error('Failed to print return')
+    } finally {
+      setPrintingId(null)
+    }
+  }
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 400)
@@ -285,6 +317,17 @@ export default function SalesReturnList({ onCreateNew }: SalesReturnListProps) {
                         >
                           <Eye className='h-3 w-3' />
                         </Button>
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          className='h-7 w-7'
+                          onClick={() => handlePrint(ret)}
+                          disabled={printingId === (ret._id || ret.id)}
+                          title='Print return invoice'
+                          aria-label={`Print return ${ret.returnNumber}`}
+                        >
+                          {printingId === (ret._id || ret.id) ? <Loader2 className='h-3 w-3 animate-spin' /> : <Printer className='h-3 w-3' />}
+                        </Button>
                         {ret.status === 'pending' && (
                           <>
                             <Button
@@ -369,6 +412,14 @@ export default function SalesReturnList({ onCreateNew }: SalesReturnListProps) {
                   <p className='font-medium'>{selectedReturn.customerName || '—'}</p>
                 </div>
                 <div>
+                  <p className='text-muted-foreground'>Invoice</p>
+                  <p className='font-medium'>
+                    {typeof selectedReturn.invoiceId === 'object'
+                      ? String((selectedReturn.invoiceId as { invoiceNumber?: string })?.invoiceNumber ?? '—')
+                      : '—'}
+                  </p>
+                </div>
+                <div>
                   <p className='text-muted-foreground'>Refund Method</p>
                   <p className='font-medium capitalize'>{selectedReturn.refundMethod}</p>
                 </div>
@@ -419,8 +470,23 @@ export default function SalesReturnList({ onCreateNew }: SalesReturnListProps) {
                   ))}
                 </TableBody>
               </Table>
-              <div className='text-right font-semibold'>
-                Total: {formatMoney(selectedReturn.totalAmount)}
+              <div className='flex items-center justify-between gap-3'>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => handlePrint(selectedReturn)}
+                  disabled={printingId === (selectedReturn._id || selectedReturn.id)}
+                >
+                  {printingId === (selectedReturn._id || selectedReturn.id) ? (
+                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                  ) : (
+                    <Printer className='mr-2 h-4 w-4' />
+                  )}
+                  Print Return Invoice
+                </Button>
+                <div className='text-right font-semibold'>
+                  Total: {formatMoney(selectedReturn.totalAmount)}
+                </div>
               </div>
             </div>
           )}

@@ -582,7 +582,8 @@ const cleanupLedgerForConvertedPendingInvoices = async (customerId) => {
 };
 
 /**
- * Running balance immediately before a sale/payment linked to referenceId.
+ * Running balance immediately before a sale or a sales return linked to referenceId (an
+ * invoice id or a sales-return id — printed as "Previous Due Balance").
  */
 const getBalanceBeforeReference = async (customerId, referenceId) => {
   if (!customerId || customerId === 'walk-in' || !referenceId) {
@@ -594,7 +595,7 @@ const getBalanceBeforeReference = async (customerId, referenceId) => {
   const saleEntry = await CustomerLedger.findOne({
     customer: customerId,
     referenceId,
-    transactionType: 'sale',
+    transactionType: { $in: ['sale', 'sales_return'] },
   }).sort({ transactionDate: 1, createdAt: 1 });
 
   if (saleEntry) {

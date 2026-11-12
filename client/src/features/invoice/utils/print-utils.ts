@@ -134,6 +134,20 @@ export interface PrintInvoiceData {
   /** Customer payment terms code: cash | due_on_receipt | net_15 | net_30 | net_60. */
   customerPaymentTerms?: string
   companyWebsite?: string
+  /**
+   * Set when this print is a SALES RETURN (Distributor layout only — see sales-return-print.ts):
+   * `invoiceNumber` is then the return number, `items` the returned lines, `total` the return
+   * total, and these are the return's own details.
+   */
+  salesReturn?: {
+    originalInvoiceNumber?: string
+    /** ISO date of the invoice the goods were returned against. */
+    originalInvoiceDate?: string
+    refundMethod?: string
+    status?: string
+    reason?: string
+    damageDescription?: string
+  }
 }
 
 /** INV-202605-000195 → QUO-202605-000195 when printing as quotation. */
