@@ -9,27 +9,35 @@ const getOrganizationService = () => require('./organization.service');
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const GRANULARITY = { none: 0, yearly: 1, monthly: 2 };
+const SEGMENT_DIGITS = { none: 0, yearly: 4, monthly: 6 };
 
 // docType -> which model/collection holds the number, plus any extra filter needed to tell
 // Invoice and Quotation documents apart (they share the same `invoices` Mongo collection).
+// `extraFilter` scopes the "highest number so far" scan to this docType; duplicate checks
+// deliberately do NOT use it — invoices and quotations share ONE unique index on
+// {organizationId, branchId, invoiceNumber}, so a quotation number taken by an invoice (or
+// the other way round) would fail the insert with E11000.
 const DOC_TYPES = {
   invoice: {
     getModel: () => getModels().Invoice,
     field: 'invoiceNumber',
     extraFilter: { type: { $ne: 'quotation' } },
     seqKeyPrefix: 'invoiceNumber',
+    label: 'Invoice',
   },
   purchase: {
     getModel: () => getModels().Purchase,
     field: 'invoiceNumber',
     extraFilter: {},
     seqKeyPrefix: 'purchaseNumber',
+    label: 'Purchase',
   },
   quotation: {
     getModel: () => getModels().Invoice,
     field: 'invoiceNumber',
     extraFilter: { type: 'quotation' },
     seqKeyPrefix: 'quotationNumber',
+    label: 'Quotation',
   },
 };
 
@@ -93,6 +101,58 @@ const formatNumber = (config, seq, now = new Date()) => {
 };
 
 /**
+ * Regex source matching exactly the numbers `config` prints: prefix, date segment and the
+ * sequence joined by the separator — the same parts, in the same order, that formatNumber
+ * joins (empty parts are skipped there, so they are skipped here too). The sequence is the
+ * one capture group. `knownSegment` pins the leading digits of the date segment (e.g. the
+ * current year for a yearly-reset scan); the rest of the segment matches any digits.
+ *
+ * Building the pattern from parts (rather than "prefix + optional separator") is what keeps
+ * an empty prefix / empty separator valid: '' + '' + '?' used to produce `^?`, which MongoDB
+ * rejects ("quantifier does not follow a repeatable item"), and an empty separator glued the
+ * date onto the sequence (INV20261100001 was read as sequence 20261100001).
+ */
+const numberPatternSource = (config, knownSegment = '') => {
+  const digits = SEGMENT_DIGITS[config.dateSegment] || 0;
+  const fixed = String(knownSegment || '').slice(0, digits);
+  const segment = digits ? `${escapeRegex(fixed)}${digits > fixed.length ? `\\d{${digits - fixed.length}}` : ''}` : '';
+  const parts = [escapeRegex(config.prefix || ''), segment, '(\\d+)'].filter(Boolean);
+  return `^${parts.join(escapeRegex(config.separator || ''))}$`;
+};
+
+/**
+ * True when two configs can print the same number (e.g. Invoice and Quotation both with an
+ * empty prefix and no date → both print "000001"). Invoices and quotations share one unique
+ * index, so such a pair would fail every save that lands on a number the other already has.
+ */
+const formatsOverlap = (a, b) => {
+  const samples = (config) => [1, 42, 123456789].map((seq) => formatNumber(config, seq, new Date(2026, 10, 1)));
+  const aRe = new RegExp(numberPatternSource(a));
+  const bRe = new RegExp(numberPatternSource(b));
+  return samples(a).some((n) => bRe.test(n)) || samples(b).some((n) => aRe.test(n));
+};
+
+/** Save-time checks for a whole documentNumbering object (missing sections use defaults). */
+const assertDocumentNumberingConfig = (documentNumbering) => {
+  if (!documentNumbering) return;
+  const plain = (v) => (v && typeof v.toObject === 'function' ? v.toObject() : v || {});
+  const sections = {};
+  Object.keys(DOC_TYPES).forEach((docType) => {
+    sections[docType] = { ...getDefaultConfig(docType), ...plain(documentNumbering[docType]) };
+    assertNumberingConsistency(sections[docType]);
+    if (/[A-Za-z0-9]/.test(sections[docType].separator || '')) {
+      throw new ApiError(httpStatus.BAD_REQUEST, `${DOC_TYPES[docType].label} separator cannot contain letters or digits`);
+    }
+  });
+  if (formatsOverlap(sections.invoice, sections.quotation)) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      'Invoice and Quotation numbers would look the same — give one of them a different prefix (e.g. INV and QUO)'
+    );
+  }
+};
+
+/**
  * `scope: 'organization'` (default) — one bucket shared by every branch, so numbers stay
  * continuous org-wide regardless of which branch created the document.
  * `scope: 'branch'` — a separate bucket per branch, so e.g. Branch A can run 1000, 1001,
@@ -125,21 +185,21 @@ const bucketKeyFor = (docType, organizationId, config, now = new Date(), branchI
 const scanCurrentMax = async ({ docType, organizationId, branchId, config, now = new Date() }) => {
   const { getModel, field, extraFilter } = assertKnownDocType(docType);
   const scanGranularity = config.resetPeriod === 'never' ? 'none' : config.resetPeriod;
-  const segment = dateSegmentFor(scanGranularity, now);
-  const docPrefix = [config.prefix, segment].filter(Boolean).join(config.separator || '');
+  const source = numberPatternSource(config, dateSegmentFor(scanGranularity, now));
+  const pattern = new RegExp(source);
   const docs = await getModel()
     .find({
       organizationId,
       ...(config.scope === 'branch' ? { branchId } : {}),
       ...extraFilter,
-      [field]: { $regex: `^${escapeRegex(docPrefix)}${escapeRegex(config.separator || '')}?` },
+      [field]: { $regex: source },
     })
     .select(field)
     .lean();
 
   let max = 0;
   for (const doc of docs) {
-    const match = String(doc[field] || '').match(/(\d+)$/);
+    const match = String(doc[field] || '').match(pattern);
     if (match) {
       const n = parseInt(match[1], 10);
       if (Number.isFinite(n)) max = Math.max(max, n);
@@ -245,7 +305,7 @@ const generateNextNumber = async ({ organizationId, branchId, docType }) => {
   if (!organizationId) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Organization is required to generate a document number');
   }
-  const { getModel, field, extraFilter } = assertKnownDocType(docType);
+  const { getModel, field } = assertKnownDocType(docType);
   await ensureNumberingIndexes(docType);
 
   const config = await resolveConfig(organizationId, docType);
@@ -267,7 +327,7 @@ const generateNextNumber = async ({ organizationId, branchId, docType }) => {
     if (!Number.isFinite(seq) || seq <= 0) continue; // eslint-disable-line no-continue
 
     const candidate = formatNumber(config, seq, now);
-    const existsFilter = { organizationId, ...extraFilter, [field]: candidate };
+    const existsFilter = { organizationId, [field]: candidate }; // any type — see DOC_TYPES
     if (config.scope === 'branch') existsFilter.branchId = branchId;
     // eslint-disable-next-line no-await-in-loop
     const exists = await getModel().exists(existsFilter);
@@ -287,18 +347,17 @@ const generateNextNumber = async ({ organizationId, branchId, docType }) => {
  * checking) for 'branch' scope, since the DB index alone already covers that case.
  */
 const assertManualNumberAvailable = async ({ organizationId, branchId, docType, invoiceNumber, excludeId }) => {
-  const { getModel, field, extraFilter } = assertKnownDocType(docType);
+  const { getModel, field, label } = assertKnownDocType(docType);
   const config = await resolveConfig(organizationId, docType);
   if (config.scope !== 'organization') return; // branch-scoped DB index is already sufficient
 
   const exists = await getModel().exists({
     organizationId,
-    ...extraFilter,
     [field]: invoiceNumber,
     ...(excludeId ? { _id: { $ne: excludeId } } : {}),
   });
   if (exists) {
-    throw new ApiError(httpStatus.BAD_REQUEST, `${docType === 'purchase' ? 'Invoice' : 'Invoice'} number "${invoiceNumber}" is already in use`);
+    throw new ApiError(httpStatus.BAD_REQUEST, `${label} number "${invoiceNumber}" is already in use`);
   }
 };
 
@@ -365,7 +424,10 @@ module.exports = {
   DOC_TYPES,
   getDefaultConfig,
   assertNumberingConsistency,
+  assertDocumentNumberingConfig,
   formatNumber,
+  numberPatternSource,
+  formatsOverlap,
   generateNextNumber,
   assertManualNumberAvailable,
   peekNextNumber,

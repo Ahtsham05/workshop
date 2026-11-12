@@ -176,6 +176,14 @@ const updateOrganization = async (orgId, updateBody) => {
     delete normalizedUpdateBody.logo;
   }
 
+  if (normalizedUpdateBody.documentNumbering) {
+    // Lazy require: documentNumbering.service requires this service back.
+    // eslint-disable-next-line global-require
+    const { assertDocumentNumberingConfig } = require('./documentNumbering.service');
+    const stored = org.documentNumbering?.toObject?.() ?? org.documentNumbering ?? {};
+    assertDocumentNumberingConfig({ ...stored, ...normalizedUpdateBody.documentNumbering });
+  }
+
   Object.assign(org, normalizedUpdateBody);
   await org.save();
 

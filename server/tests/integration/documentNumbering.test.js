@@ -337,3 +337,59 @@ describe('documentNumbering.service — per-organization customizable numbering'
     ).rejects.toThrow(/Reset period cannot be more frequent/);
   });
 });
+
+describe('documentNumbering.service — empty prefix / separator formats', () => {
+  const setFormat = async (org, docType, format) => {
+    Object.assign(org.documentNumbering[docType], format);
+    await org.save();
+  };
+
+  test('empty prefix + empty separator + no date: preview, set and generate all work (used to build the invalid regex `^?`)', async () => {
+    const org = await insertOrganization();
+    const format = { prefix: '', separator: '', dateSegment: 'none', resetPeriod: 'never', padding: 5 };
+    // Older documents in another format must not be mistaken for this format's sequence.
+    await Invoice.create(minimalInvoice({ organizationId: org._id, invoiceNumber: 'INV-202611-000058' }));
+
+    const draft = await documentNumberingService.peekNextNumber({ organizationId: org._id, docType: 'invoice', config: format });
+    expect(draft.preview).toBe('00001');
+
+    await setFormat(org, 'invoice', format);
+    expect(await documentNumberingService.generateNextNumber({ organizationId: org._id, docType: 'invoice' })).toBe('00001');
+    const resumed = await documentNumberingService.setNextNumber({ organizationId: org._id, docType: 'invoice', nextNumber: 100 });
+    expect(resumed.preview).toBe('00100');
+    expect(await documentNumberingService.generateNextNumber({ organizationId: org._id, docType: 'invoice' })).toBe('00100');
+  });
+
+  test('empty prefix seeds from existing plain-number documents', async () => {
+    const org = await insertOrganization();
+    await Invoice.create(minimalInvoice({ organizationId: org._id, invoiceNumber: '00041' }));
+    await setFormat(org, 'invoice', { prefix: '', separator: '-', dateSegment: 'none', resetPeriod: 'never', padding: 5 });
+    expect(await documentNumberingService.generateNextNumber({ organizationId: org._id, docType: 'invoice' })).toBe('00042');
+  });
+
+  test('empty separator with a date segment reads only the sequence, not date + sequence as one number', async () => {
+    const org = await insertOrganization();
+    const now = new Date();
+    const yyyymm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+    await Invoice.create(minimalInvoice({ organizationId: org._id, invoiceNumber: `INV${yyyymm}00007` }));
+    await setFormat(org, 'invoice', { prefix: 'INV', separator: '', dateSegment: 'monthly', resetPeriod: 'monthly', padding: 5 });
+    expect(await documentNumberingService.generateNextNumber({ organizationId: org._id, docType: 'invoice' })).toBe(`INV${yyyymm}00008`);
+  });
+
+  test('an invoice number already used by a quotation is skipped (they share one unique index)', async () => {
+    const org = await insertOrganization();
+    await Invoice.create(minimalInvoice({ organizationId: org._id, type: 'quotation', invoiceNumber: 'SALE-00001' }));
+    await setFormat(org, 'invoice', { prefix: 'SALE', separator: '-', dateSegment: 'none', resetPeriod: 'never', padding: 5 });
+    // The invoice scan ignores quotations, so its counter starts at 1 — and must skip SALE-00001.
+    expect(await documentNumberingService.generateNextNumber({ organizationId: org._id, docType: 'invoice' })).toBe('SALE-00002');
+  });
+
+  test('save-time check rejects Invoice/Quotation formats that print the same numbers and separators with letters or digits', () => {
+    const plain = { prefix: '', separator: '', dateSegment: 'none', resetPeriod: 'never' };
+    expect(() =>
+      documentNumberingService.assertDocumentNumberingConfig({ invoice: plain, quotation: { ...plain, separator: '/' } })
+    ).toThrow(/would look the same/);
+    expect(() => documentNumberingService.assertDocumentNumberingConfig({ invoice: plain })).not.toThrow(); // quotation keeps QUO
+    expect(() => documentNumberingService.assertDocumentNumberingConfig({ purchase: { separator: '0' } })).toThrow(/letters or digits/);
+  });
+});

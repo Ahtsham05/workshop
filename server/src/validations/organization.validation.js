@@ -10,7 +10,12 @@ const { NATIVE_LANGUAGE_SETTINGS } = require('../config/nativeLanguages');
 const GRANULARITY = { none: 0, yearly: 1, monthly: 2 };
 const numberingSection = Joi.object({
   prefix: Joi.string().trim().max(12).pattern(/^[A-Za-z0-9]*$/).allow(''),
-  separator: Joi.string().trim().max(3).allow(''),
+  separator: Joi.string()
+    .trim()
+    .max(3)
+    .pattern(/^[^A-Za-z0-9]*$/)
+    .allow('')
+    .messages({ 'string.pattern.base': 'Separator cannot contain letters or digits' }),
   dateSegment: Joi.string().valid('none', 'yearly', 'monthly'),
   resetPeriod: Joi.string().valid('never', 'yearly', 'monthly'),
   padding: Joi.number().integer().min(1).max(10),

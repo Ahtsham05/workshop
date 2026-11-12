@@ -47,6 +47,22 @@ const formatPreviewNumber = (config: NumberingSectionConfig, seq: number, now = 
     .join(config.separator || '')
 }
 
+// Mirrors documentNumbering.service.js#formatsOverlap: true when two configs can print the
+// same number. Invoices and quotations share one unique number index, so such a pair would
+// fail saves — e.g. both with an empty prefix and no date print "000001".
+const SEGMENT_DIGITS: Record<NumberingDateSegment, number> = { none: 0, yearly: 4, monthly: 6 }
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const numberPattern = (config: NumberingSectionConfig) => {
+  const digits = SEGMENT_DIGITS[config.dateSegment] || 0
+  const parts = [escapeRegex(config.prefix || ''), digits ? `\\d{${digits}}` : '', '(\\d+)'].filter(Boolean)
+  return new RegExp(`^${parts.join(escapeRegex(config.separator || ''))}$`)
+}
+const formatsOverlap = (a: NumberingSectionConfig, b: NumberingSectionConfig) => {
+  const when = new Date(2026, 10, 1)
+  const samples = (c: NumberingSectionConfig) => [1, 42, 123456789].map((seq) => formatPreviewNumber(c, seq, when))
+  return samples(a).some((n) => numberPattern(b).test(n)) || samples(b).some((n) => numberPattern(a).test(n))
+}
+
 // Granularity ranking — a reset period can never be more frequent than the date segment
 // shown, or two numerically-distinct counters would print identically (e.g. a yearly segment
 // with a monthly reset would show "INV-2026-000001" in both February and March). Mirrors
@@ -213,7 +229,8 @@ function NumberingSection({
           <Label className='text-sm'>Separator</Label>
           <Input
             value={value.separator}
-            onChange={(e) => onChange({ ...value, separator: e.target.value.slice(0, 3) })}
+            // Letters / digits would make the number ambiguous (where does the prefix end?).
+            onChange={(e) => onChange({ ...value, separator: e.target.value.replace(/[A-Za-z0-9\s]/g, '').slice(0, 3) })}
             placeholder='-'
             className='mt-1'
           />
@@ -318,9 +335,14 @@ export default function DocumentNumberingSettings() {
   }, [org])
 
   const hasChanges = !!org?.documentNumbering && !!config && JSON.stringify(config) !== JSON.stringify(org.documentNumbering)
+  const invoiceQuotationClash = !!config && formatsOverlap(config.invoice, config.quotation)
 
   const handleSave = async () => {
     if (!org || !config) return
+    if (invoiceQuotationClash) {
+      toast.error('Invoice and Quotation numbers would look the same — give one of them a different prefix')
+      return
+    }
     try {
       await updateSettings({ orgId: org.id, body: { documentNumbering: config } }).unwrap()
       toast.success('Document numbering settings updated')
@@ -357,8 +379,14 @@ export default function DocumentNumberingSettings() {
           />
         ))}
 
+        {invoiceQuotationClash && (
+          <p className='rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive'>
+            Invoice and Quotation numbers would look the same (e.g. both {formatPreviewNumber(config.invoice, 1)}). They share one
+            numbering index, so give one of them a different prefix — for example INV and QUO.
+          </p>
+        )}
         <div className='flex justify-end'>
-          <Button onClick={handleSave} disabled={saving || !hasChanges}>
+          <Button onClick={handleSave} disabled={saving || !hasChanges || invoiceQuotationClash}>
             {saving ? (
               <>
                 <Loader2 className='mr-2 h-4 w-4 animate-spin' /> Saving...
