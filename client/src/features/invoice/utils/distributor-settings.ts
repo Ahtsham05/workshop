@@ -1,3 +1,5 @@
+import { pickedPrintBranding, setNextPrintBranding } from '@/lib/print-branding'
+
 /**
  * Per-branch details printed only by the Distributor invoice layout: the licence / registration
  * numbers in the top-right block and the policy texts at the bottom (each only when filled in). Stored on
@@ -115,20 +117,16 @@ export function setActiveDistributorSettings(value: Partial<DistributorSettings>
 
 /**
  * A one-off header style for the print just requested from the Print button's dropdown
- * ("Without logo" etc.). It stays in force for a short window so every document that print
- * builds (the print window and, on Save & Print, the WhatsApp PDF) uses it; the button's main
- * click or the next pick replaces it, and it lapses on its own after 45 seconds.
+ * ("Without logo" etc.). Shared with every other print through lib/print-branding — the
+ * button's main click or the next pick replaces it, and it lapses on its own after 45 seconds.
  */
-let pickedHeaderStyle: { style: DistributorHeaderStyle; until: number } | null = null
-
 export function setNextPrintHeaderStyle(style: DistributorHeaderStyle | null) {
-  pickedHeaderStyle = style ? { style, until: Date.now() + 45_000 } : null
+  setNextPrintBranding(style)
 }
 
 /** The header style picked for the current print, if it is still in force. */
 export function pickedPrintHeaderStyle(): DistributorHeaderStyle | null {
-  if (pickedHeaderStyle && pickedHeaderStyle.until <= Date.now()) pickedHeaderStyle = null
-  return pickedHeaderStyle?.style ?? null
+  return pickedPrintBranding()
 }
 
 export const getActiveDistributorSettings = () => active

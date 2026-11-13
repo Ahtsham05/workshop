@@ -1,3 +1,4 @@
+import { PrintBrandingChoice } from '@/components/print-branding-choice'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -258,16 +259,21 @@ export function MobilePostedInvoice({ open, onOpenChange, invoiceId, invoiceNumb
             {t('Share') || 'Share'}
           </Button>
           {printer.canPrint && (
-            <Button
-              type='button'
-              variant='outline'
-              className='h-10 gap-1.5 px-3'
+            <PrintBrandingChoice
               disabled={!invoice || printer.printingId !== null}
-              onClick={() => invoice && printer.printInvoice(invoice, activeFormat)}
+              onPrint={() => invoice && printer.printInvoice(invoice, activeFormat)}
             >
-              {printer.printingId ? <Loader2 className='h-4 w-4 animate-spin' /> : <Printer className='h-4 w-4' />}
-              {t('Print') || 'Print'}
-            </Button>
+              <Button
+                type='button'
+                variant='outline'
+                className='h-10 gap-1.5 px-3'
+                disabled={!invoice || printer.printingId !== null}
+                onClick={() => invoice && printer.printInvoice(invoice, activeFormat)}
+              >
+                {printer.printingId ? <Loader2 className='h-4 w-4 animate-spin' /> : <Printer className='h-4 w-4' />}
+                {t('Print') || 'Print'}
+              </Button>
+            </PrintBrandingChoice>
           )}
           <Button
             type='button'

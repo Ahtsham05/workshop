@@ -8,8 +8,12 @@ import {
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { PrintBrandingMenuItems } from '@/components/print-branding-choice'
+import { usePrintBrandingEnabled } from '@/hooks/use-print-branding-enabled'
+import { setNextPrintBranding, type PrintBranding } from '@/lib/print-branding'
 import { PAPER_SIZE_OPTIONS, PAPER_FORMATS, type PaperSize } from '@/features/invoice/utils/paper-format'
 import {
   DISTRIBUTOR_HEADER_STYLES,
@@ -42,6 +46,8 @@ interface PrintFormatButtonProps {
    * Sales invoices / quotations: when the branch prints on the Distributor layout, the dropdown
    * offers its header styles (With logo, Without logo, …) instead of paper sizes; the pick
    * applies to that one print and it goes on the branch's sheet size (A4 if it is set to thermal).
+   * Wholesale / distributor organizations get With logo / Without logo on these invoice prints
+   * whatever the template (lib/print-branding); other prints keep the paper-size dropdown.
    */
   invoiceHeaderStyles?: boolean
 }
@@ -70,6 +76,9 @@ export function PrintFormatButton({
   const showHeaderStyles = Boolean(invoiceHeaderStyles) && branchData?.printSettings?.template === 'distributor'
   const defaultHeaderStyle = normalizeDistributorSettings(branchData?.printSettings?.distributor).headerStyle
   const sheetSize: PaperSize = PAPER_FORMATS[defaultPaperSize].family === 'thermal' ? 'a4' : defaultPaperSize
+  // Invoices of a wholesale / distributor organization on any other template: With logo / Without logo, then paper sizes.
+  const brandingEnabled = usePrintBrandingEnabled()
+  const showBranding = Boolean(invoiceHeaderStyles) && !showHeaderStyles && brandingEnabled
 
   const printDefault = () => {
     setNextPrintHeaderStyle(null)
@@ -78,6 +87,14 @@ export function PrintFormatButton({
   const printWithHeaderStyle = (style: DistributorHeaderStyle) => {
     setNextPrintHeaderStyle(style === defaultHeaderStyle ? null : style)
     onPrint(sheetSize)
+  }
+  const printWithBranding = (style: PrintBranding) => {
+    setNextPrintBranding(style)
+    onPrint(defaultPaperSize)
+  }
+  const printOnPaper = (paperSize: PaperSize) => {
+    setNextPrintBranding(null)
+    onPrint(paperSize)
   }
 
   return (
@@ -106,7 +123,7 @@ export function PrintFormatButton({
             size="icon"
             disabled={disabled}
             className="rounded-l-none border-l px-1.5 w-6"
-            title={showHeaderStyles ? 'Print with or without logo' : 'Choose a different paper size'}
+            title={showHeaderStyles || showBranding ? 'Print with or without logo' : 'Choose a different paper size'}
           >
             <ChevronDown className="h-3.5 w-3.5" />
           </Button>
@@ -132,16 +149,34 @@ export function PrintFormatButton({
               </DropdownMenuRadioGroup>
             </>
           ) : (
-          <DropdownMenuRadioGroup value={defaultPaperSize} onValueChange={(v) => onPrint(v as PaperSize)}>
-            {options.map((option) => (
-              <DropdownMenuRadioItem key={option.value} value={option.value}>
-                <div className="flex flex-col">
-                  <span>{option.label}</span>
-                  <span className="text-xs text-muted-foreground">{option.description}</span>
-                </div>
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
+            <>
+              {showBranding && (
+                <>
+                  <PrintBrandingMenuItems
+                    heading={`Print as · ${PAPER_SIZE_OPTIONS.find((o) => o.value === defaultPaperSize)?.label ?? defaultPaperSize}`}
+                    onPick={printWithBranding}
+                  />
+                  {options.length > 1 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Paper size</DropdownMenuLabel>
+                    </>
+                  )}
+                </>
+              )}
+              {(!showBranding || options.length > 1) && (
+                <DropdownMenuRadioGroup value={defaultPaperSize} onValueChange={(v) => printOnPaper(v as PaperSize)}>
+                  {options.map((option) => (
+                    <DropdownMenuRadioItem key={option.value} value={option.value}>
+                      <div className="flex flex-col">
+                        <span>{option.label}</span>
+                        <span className="text-xs text-muted-foreground">{option.description}</span>
+                      </div>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              )}
+            </>
           )}
         </DropdownMenuContent>
       </DropdownMenu>

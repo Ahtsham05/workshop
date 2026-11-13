@@ -1200,6 +1200,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
           disabled={printingRowId === String(entry.id || entry._id)}
           onPrint={(paperSize) => handlePrintLinkedInvoice(entry, paperSize)}
           label=""
+          invoiceHeaderStyles
         />
       )}
       {canPrintLinkedSupplierEntry(entry) && (

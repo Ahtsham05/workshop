@@ -1,3 +1,4 @@
+import { PRINT_BRAND_CLASS, PRINT_BRAND_HOST_CLASS, printBrandingCss } from '@/lib/print-branding'
 import { invoiceNoteToSafeHtml, escapeHtml } from '@/lib/escape-html'
 import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 import type { CurrencyOption } from '@/stores/localization.api'
@@ -748,12 +749,13 @@ export const generateInvoiceHTML = (
         border-radius: 8px;
       }
     }
+    ${printBrandingCss()}
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39${printScriptFontParams()}&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="invoice-print-root">
-  <div class="receipt-header">
+  <div class="receipt-header ${PRINT_BRAND_CLASS}">
     ${data.companyLogo ? `<img src="${data.companyLogo}" alt="${urduTexts.business_name}" class="company-logo" />` : data.isTrial ? `<img src="/images/logo-light.png" alt="Logix Plus solutions" class="company-logo" />` : ''}
     <div class="business-name">${urduTexts.business_name}</div>
     ${headerAddressLine ? `<div class="business-info">${headerAddressLine}</div>` : ''}
@@ -1084,8 +1086,8 @@ export const generateA4InvoiceHTML = (
     data.dueDate && (data.type === 'credit' || data.type === 'pending') ? formatAppDate(String(data.dueDate).slice(0, 10)) : ''
 
   const headerBlock = `
-<div class="invoice-header">
-    <div class="company-info">
+<div class="invoice-header ${PRINT_BRAND_HOST_CLASS}">
+    <div class="company-info ${PRINT_BRAND_CLASS}">
       ${data.companyLogo ? `<img src="${data.companyLogo}" alt="${urduTexts.business_name}" class="company-logo" />` : data.isTrial ? `<img src="/images/logo-light.png" alt="Logix Plus solutions" class="company-logo" />` : ''}
       <div class="company-name">${urduTexts.business_name}</div>
       ${headerAddressLine || contactLine ? `
@@ -1945,6 +1947,7 @@ ${itemizedTotalsTable}
     ${INVOICE_TEMPLATE_CSS[template] ?? ''}
     ${printColorsCss()}
     ${printDesignCss(sheetKindOf(sheetSize))}
+    ${printBrandingCss()}
   </style>
   ${printDesignHeadHtml()}
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39${printScriptFontParams()}&display=swap" rel="stylesheet">

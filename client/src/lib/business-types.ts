@@ -122,6 +122,12 @@ export const requiresRegisteredCustomer = (value?: string | null) => {
 export const usesContactLocation = (value?: string | null) => requiresRegisteredCustomer(value)
 
 /**
+ * Wholesale / distribution get a "With logo / Without logo" choice next to every invoice Print
+ * button, whatever the invoice template — lib/print-branding.
+ */
+export const usesPrintBrandingChoice = (value?: string | null) => requiresRegisteredCustomer(value)
+
+/**
  * Which menu pages an organization shows — two layers:
  *  1. Business-type defaults: whole modules a type doesn't use start switched off
  *     (BUSINESS_TYPE_HIDDEN_MODULES).

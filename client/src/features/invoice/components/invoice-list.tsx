@@ -59,6 +59,7 @@ import { prepareSheetPrintData } from '@/features/invoice/utils/distributor-prin
 import type { PaperSize } from '../utils/paper-format'
 import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
+import { PrintBrandingChoice } from '@/components/print-branding-choice'
 import { useGetAllCustomersQuery } from '../../../stores/customer.api'
 import { InvoiceDeleteDialog } from './invoice-delete-dialog'
 import { QuotationConvertDialog } from './quotation-convert-dialog'
@@ -549,14 +550,16 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
             <span className="font-medium">{twoUpSelection.length}/2 invoices selected</span>
             <span className="text-muted-foreground"> — pick two invoices to combine onto one A4 sheet (two A5-sized halves).</span>
           </div>
-          <Button size="sm" disabled={twoUpSelection.length !== 2 || printingTwoUp} onClick={handlePrintTwoUp}>
-            {printingTwoUp ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Columns2 className="h-4 w-4 mr-2" />
-            )}
-            Print 2 per page
-          </Button>
+          <PrintBrandingChoice variant="default" disabled={twoUpSelection.length !== 2 || printingTwoUp} onPrint={handlePrintTwoUp}>
+            <Button size="sm" disabled={twoUpSelection.length !== 2 || printingTwoUp} onClick={handlePrintTwoUp}>
+              {printingTwoUp ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Columns2 className="h-4 w-4 mr-2" />
+              )}
+              Print 2 per page
+            </Button>
+          </PrintBrandingChoice>
         </div>
       )}
 

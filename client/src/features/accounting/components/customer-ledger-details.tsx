@@ -31,7 +31,6 @@ import { AppDispatch } from '@/stores/store';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, FileText, List, LayoutGrid, ExternalLink, Target, FileStack, Boxes } from 'lucide-react';
-import { expiryBadge } from '@/features/reports/utils/expiry-badge';
 import { useNavigate } from '@tanstack/react-router';
 import * as XLSX from 'xlsx';
 import Axios from '@/utils/Axios';
@@ -39,7 +38,7 @@ import summery from '@/utils/summery';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { LedgerEntryForm } from './ledger-entry-form';
-import { invoiceApi, useGetInvoiceByIdQuery } from '@/stores/invoice.api';
+import { invoiceApi } from '@/stores/invoice.api';
 import { returnsApi, useGetSalesReturnByIdQuery } from '@/stores/returns.api';
 import { PaymentReceipt } from './payment-receipt';
 import {
@@ -69,6 +68,7 @@ import { useLedgerDiscountSettings } from '@/features/ledger-discounts/hooks/use
 import { CustomerProfitCard } from '@/features/customer-profit/components/customer-profit-card';
 import { LedgerCategoryCards, type LedgerCategoryGroup } from './ledger-category-cards';
 import { CommunicationLogPanel } from './communication-log-panel';
+import { InvoiceDetailDialog } from '@/components/invoice-detail-dialog';
 import { LedgerInvoiceWiseView, LedgerProductWiseView, useLedgerInvoiceDetails } from './customer-ledger-detail-views';
 import { CustomerBalanceReconciliation } from './customer-balance-reconciliation';
 import { CustomerCreditCard } from '@/features/customers/credit/customer-credit-card';
@@ -161,128 +161,7 @@ interface CustomerLedgerDetailsProps {
   initialLedgerEntry?: string;
 }
 
-// Invoice dialog content component
-function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string; customerName: string }) {
-  const { t } = useLanguage();
-  const formatMoney = useFormatMoney();
-
-  if (!invoiceId) {
-    return <div className="text-center py-8 text-gray-500">{t('No invoice selected')}</div>;
-  }
-
-  const { data: invoiceData, isLoading, error } = useGetInvoiceByIdQuery(invoiceId);
-
-  if (isLoading) {
-    return <div className="text-center py-8 text-gray-500">{t('Loading...')}</div>;
-  }
-
-  if (error || !invoiceData) {
-    return <div className="text-center py-8 text-red-500">{t('Failed to load invoice details')}</div>;
-  }
-
-  const formatDate = (date: any) => {
-    try {
-      if (!date) return '-';
-      const dateObj = new Date(date);
-      if (isNaN(dateObj.getTime())) return '-';
-      return formatAppDate(dateObj);
-    } catch {
-      return '-';
-    }
-  };
-
-  const formatCurrency = (amount: any) => {
-    const num = Number(amount);
-    return formatMoney(isNaN(num) ? 0 : num);
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <p className="text-sm text-gray-500">{t('Invoice Number')}</p>
-          <p className="font-medium">{invoiceData.invoiceNumber || '-'}</p>
-        </div>
-        <div>
-          <p className="text-sm text-gray-500">{t('Date')}</p>
-          <p className="font-medium">{formatDate(invoiceData.invoiceDate || invoiceData.date)}</p>
-        </div>
-        <div>
-          <p className="text-sm text-gray-500">{t('Customer')}</p>
-          <p className="font-medium">{invoiceData.customer?.name || customerName}</p>
-        </div>
-        <div>
-          <p className="text-sm text-gray-500">{t('Total Amount')}</p>
-          <p className="font-medium text-lg">{formatCurrency(invoiceData.total || invoiceData.totalAmount)}</p>
-          {Number(invoiceData.discount || 0) > 0 && (
-            <p className="text-xs text-green-600">-{formatCurrency(invoiceData.discount)} {t('discount')}</p>
-          )}
-        </div>
-        <div>
-          <p className="text-sm text-gray-500">{t('Status')}</p>
-          <Badge>{invoiceData.status || 'N/A'}</Badge>
-        </div>
-        <div>
-          <p className="text-sm text-gray-500">{t('Type')}</p>
-          <Badge variant="outline">{invoiceData.type || 'N/A'}</Badge>
-        </div>
-      </div>
-      <div>
-        <p className="text-sm text-gray-500 mb-2">{t('Items')}</p>
-        <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('Product')}</TableHead>
-              <TableHead>Variant</TableHead>
-              <TableHead>Batch #</TableHead>
-              <TableHead>Expiry</TableHead>
-              <TableHead>{t('Quantity')}</TableHead>
-              <TableHead>{t('price')}</TableHead>
-              <TableHead className="text-right">{t('Total')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {invoiceData.items && invoiceData.items.length > 0 ? (
-              invoiceData.items.map((item: any, index: number) => {
-                const variantLabel = item.variantId?.attributes
-                  ? Object.values(item.variantId.attributes).join(' / ')
-                  : ''
-                return (
-                <TableRow key={index}>
-                  <TableCell className="max-w-[200px] truncate" title={item.name || item.product?.name || item.productName || '-'}>{item.name || item.product?.name || item.productName || '-'}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm">{variantLabel || '—'}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{item.batchNumber || '—'}</TableCell>
-                  <TableCell>{expiryBadge(item.batchId?.expiryDate)}</TableCell>
-                  <TableCell>{item.quantity || 0}</TableCell>
-                  <TableCell>{formatCurrency(item.unitPrice || item.price)}</TableCell>
-                  <TableCell className="text-right">
-                    {Number(item.discountAmount || 0) > 0 && (
-                      <div className="text-xs text-muted-foreground line-through">
-                        {formatCurrency((item.quantity || 0) * (item.unitPrice || item.price || 0))}
-                      </div>
-                    )}
-                    {formatCurrency(item.subtotal || item.total)}
-                    {Number(item.discountAmount || 0) > 0 && (
-                      <div className="text-xs text-green-600">-{formatCurrency(item.discountAmount)}</div>
-                    )}
-                  </TableCell>
-                </TableRow>
-                )
-              })
-            ) : (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center text-gray-500">{t('No items')}</TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+// Sales return dialog content component
 function SalesReturnDialogContent({
   salesReturnId,
   fallbackCustomerName,
@@ -1109,6 +988,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
             disabled={printingRowId === String(entry.id || entry._id)}
             onPrint={(paperSize) => handlePrintLinkedCustomerDoc(entry, paperSize)}
             label=""
+            invoiceHeaderStyles
           />
         ) : (
           <Button
@@ -1727,14 +1607,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
         </DialogContent>
       </Dialog>
 
-      <Dialog open={invoiceDialogOpen} onOpenChange={setInvoiceDialogOpen}>
-        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] max-h-[80vh] overflow-y-auto overflow-x-hidden">
-          <DialogHeader>
-            <DialogTitle>{t('Invoice Details')}</DialogTitle>
-          </DialogHeader>
-          <InvoiceDialogContent invoiceId={viewingInvoice?.id} customerName={customer.name} />
-        </DialogContent>
-      </Dialog>
+      <InvoiceDetailDialog invoiceId={viewingInvoice?.id} open={invoiceDialogOpen} onOpenChange={setInvoiceDialogOpen} />
 
       <Dialog
         open={salesReturnDialogOpen}
