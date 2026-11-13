@@ -1,3 +1,4 @@
+import { contactAddressText } from '@/lib/countries'
 import { useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
@@ -252,7 +253,7 @@ export function SupplierCardGrid({ suppliers, loading, pagination }: Props) {
                       </div>
                     ) : undefined
                   }
-                  address={supplier.address}
+                  address={contactAddressText(supplier)}
                   addressClassName={getTextClasses(supplier.address || '', '')}
                   balance={balanceDisplay}
                   actions={renderActions(supplier)}

@@ -260,6 +260,16 @@ function formatPrintItemCell(
 }
 
 /** Single-line customer display for print. Walk-in: stored name as entered. */
+/** Customer's address under "Bill To" (wholesale / distributor orgs fill customerAddress). */
+function billToAddressHtml(address?: string): string {
+  const lines = String(address || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (!lines.length) return ''
+  return `<div class="bill-to-address" dir="auto">${lines.map((line) => escapeHtml(line)).join('<br>')}</div>`
+}
+
 function formatPrintCustomerCell(
   customerId: unknown,
   walkInCustomerName: string | undefined,
@@ -1103,6 +1113,7 @@ export const generateA4InvoiceHTML = (
         <span class="bill-to-customer-name">${customerNameHtml}</span>
         <span class="bill-to-invoice-type status-badge status-${type}">${getTypeText(type)}</span>
       </div>
+      ${billToAddressHtml(data.customerAddress)}
     </div>
     <div class="info-section invoice-details-section">
       <div class="info-title">${detailsSectionTitle}</div>
@@ -1518,6 +1529,17 @@ ${itemizedTotalsTable}
     .invoice-details-section {
       align-items: flex-start;
       align-self: start;
+    }
+
+    .bill-to-address {
+      font-size: 12.5px;
+      font-weight: 400;
+      color: #333;
+      line-height: 1.4;
+      margin-top: -4px;
+      unicode-bidi: plaintext;
+      text-align: start;
+      overflow-wrap: anywhere;
     }
 
     .bill-to-customer-name {

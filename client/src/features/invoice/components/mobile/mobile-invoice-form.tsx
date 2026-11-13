@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeft,
   Banknote,
@@ -136,6 +136,14 @@ const TYPE_OPTIONS: Array<{ value: InvoiceType; labelKey: string; fallback: stri
   { value: 'quotation', labelKey: 'quotation', fallback: 'Quotation', icon: FileCheck },
 ]
 
+/** Selected-card colours — the same palette and weights as the Payment Method cards. */
+const TYPE_ACTIVE: Record<InvoiceType, string> = {
+  cash: 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300',
+  credit: 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300',
+  pending: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
+  quotation: 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300',
+}
+
 type Tab = 'lines' | 'payment' | 'other'
 
 /**
@@ -205,6 +213,11 @@ export function MobileInvoiceForm(props: MobileInvoiceFormProps) {
 
   const lines = useMemo(() => invoice.items.filter((item) => item.productId && item.name), [invoice.items])
   const editorItem = editor ? invoice.items.find((item) => item.id === editor.itemId) ?? null : null
+  // While the line screen slides away (200ms) it keeps showing what it showed — otherwise a
+  // closing "Create" screen flips to "Edit" (and a discarded line to an empty form) mid-animation.
+  const shownEditorRef = useRef<{ isNew: boolean; item: InvoiceItem } | null>(null)
+  if (editor && editorItem) shownEditorRef.current = { isNew: editor.isNew, item: editorItem }
+  const shownEditor = editor && editorItem ? { isNew: editor.isNew, item: editorItem } : shownEditorRef.current
   const itemDiscountTotal = lines.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
   const grossSubtotal = lines.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
   const amountDue = invoice.type === 'quotation' ? 0 : Math.max(0, (Number(invoice.total) || 0) - totalPaidNow)
@@ -248,7 +261,7 @@ export function MobileInvoiceForm(props: MobileInvoiceFormProps) {
   const customerAddress = isWalkIn ? '' : formatCustomerAddress(selectedCustomer)
 
   return (
-    <div className='-mx-4 -mt-2 min-h-full bg-muted/30 pb-[calc(6.5rem+env(safe-area-inset-bottom))]'>
+    <div className='-mx-4 -mt-2 min-h-full bg-muted/30 pb-[calc(1.5rem+env(safe-area-inset-bottom))]'>
       {/* Breadcrumb bar */}
       <div className='flex items-center gap-1 bg-background px-2 py-1.5'>
         {onBack ? (
@@ -276,18 +289,41 @@ export function MobileInvoiceForm(props: MobileInvoiceFormProps) {
         ) : null}
       </div>
 
-      {/* Control panel: Confirm · Preview … status ribbon */}
+      {/* Control panel: Confirm · Print ▾ · Preview … status ribbon — every action sits up here
+          (Odoo's control panel), so nothing sticks over the form at the bottom of the screen. */}
       <div className='flex items-center gap-2 border-y bg-background px-3 py-2.5'>
-        <Button type='button' className='h-10 gap-1.5 px-5 text-[15px]' disabled={!canSave || saving} onClick={onConfirm}>
+        <Button type='button' className='h-9 shrink-0 gap-1.5 px-4 text-[15px]' disabled={!canSave || saving} onClick={onConfirm}>
           {savingType === 'none' ? <Loader2 className='h-4 w-4 animate-spin' /> : null}
           {isEditing ? t('Update') || 'Update' : t('Confirm') || 'Confirm'}
         </Button>
+        {canPrint ? (
+          <PrintFormatButton
+            onPrint={(paperSize) => onSaveAndPrint(paperSize)}
+            invoiceHeaderStyles
+            defaultPaperSize={defaultPaperSize}
+            allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
+            variant='outline'
+            disabled={!canSave || saving}
+            className='shrink-0'
+            mainButtonClassName='h-9 px-3'
+            mainButtonContent={
+              savingType !== null && savingType !== 'none' ? (
+                <Loader2 className='h-4 w-4 animate-spin' />
+              ) : (
+                <>
+                  <Printer className='h-4 w-4 shrink-0' />
+                  <span className='ml-1.5'>{t('Print') || 'Print'}</span>
+                </>
+              )
+            }
+          />
+        ) : null}
         {onPreview ? (
           <Button
             type='button'
             variant='outline'
             size='icon'
-            className='h-10 w-10'
+            className='h-9 w-9 shrink-0'
             disabled={lines.length === 0}
             onClick={onPreview}
             aria-label={t('Preview')}
@@ -349,8 +385,9 @@ export function MobileInvoiceForm(props: MobileInvoiceFormProps) {
           </p>
         ) : null}
 
-        {/* Sale type */}
-        <div className='mt-4 grid grid-cols-4 gap-1 rounded-xl bg-muted p-1' role='radiogroup' aria-label={t('invoice_type')}>
+        {/* Sale type — same card style as the Payment Method cards on the Payment tab */}
+        <p className='mt-4 mb-1.5 text-[13px] font-medium text-muted-foreground'>{t('invoice_type') || 'Invoice Type'}</p>
+        <div className='grid grid-cols-4 gap-1.5' role='radiogroup' aria-label={t('invoice_type')}>
           {TYPE_OPTIONS.map(({ value, labelKey, fallback, icon: Icon }) => {
             const active = invoice.type === value
             const disabled = (value === 'credit' || value === 'pending') && isWalkIn
@@ -363,12 +400,14 @@ export function MobileInvoiceForm(props: MobileInvoiceFormProps) {
                 disabled={disabled}
                 onClick={() => updateInvoiceType(value)}
                 className={cn(
-                  'flex flex-col items-center gap-0.5 rounded-lg py-1.5 text-[11px] font-semibold transition-colors disabled:opacity-35',
-                  active ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
+                  'flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-0.5 py-2 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                  active
+                    ? TYPE_ACTIVE[value]
+                    : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
                 )}
               >
                 <Icon className='h-4 w-4' />
-                {t(labelKey) || fallback}
+                <span className='line-clamp-2 w-full text-center leading-tight'>{t(labelKey) || fallback}</span>
               </button>
             )
           })}
@@ -632,48 +671,6 @@ export function MobileInvoiceForm(props: MobileInvoiceFormProps) {
       {tab === 'payment' && <div className='space-y-4 bg-background px-4 py-4'>{paymentContent}</div>}
       {tab === 'other' && <div className='space-y-4 bg-background px-4 py-4'>{otherInfoContent}</div>}
 
-      {/* Bottom bar: total + Save & Print */}
-      <div className='fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-3 pt-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/90'>
-        <div className='flex items-center gap-3'>
-          <div className='min-w-0 flex-1'>
-            <p className='truncate text-[11px] text-muted-foreground'>
-              {lines.length} {lines.length === 1 ? t('line') || 'line' : t('lines') || 'lines'}
-              {invoice.type !== 'quotation' && amountDue > 0.004 && amountDue < invoice.total - 0.004
-                ? ` · ${t('Due') || 'Due'} ${formatMoney(amountDue)}`
-                : ''}
-            </p>
-            <p className='truncate text-lg leading-tight font-bold tabular-nums'>{formatMoney(invoice.total)}</p>
-          </div>
-          {canPrint ? (
-            <PrintFormatButton
-              onPrint={(paperSize) => onSaveAndPrint(paperSize)}
-              invoiceHeaderStyles
-              defaultPaperSize={defaultPaperSize}
-              allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
-              size='lg'
-              variant='default'
-              disabled={!canSave || saving}
-              className='shrink-0'
-              mainButtonClassName='h-11 min-w-0 bg-emerald-600 hover:bg-emerald-700'
-              mainButtonContent={
-                savingType !== null && savingType !== 'none' ? (
-                  <Loader2 className='h-4 w-4 animate-spin' />
-                ) : (
-                  <>
-                    <Printer className='h-4 w-4 shrink-0' />
-                    <span className='ml-1.5'>{isEditing ? t('Update & Print') || 'Update & Print' : t('Save & Print') || 'Save & Print'}</span>
-                  </>
-                )
-              }
-            />
-          ) : (
-            <Button type='button' className='h-11 px-6' disabled={!canSave || saving} onClick={onConfirm}>
-              {isEditing ? t('Update') || 'Update' : t('Confirm') || 'Confirm'}
-            </Button>
-          )}
-        </div>
-      </div>
-
       {/* Page ⋮ menu */}
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side='bottom' className='rounded-t-2xl px-0 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]'>
@@ -817,12 +814,12 @@ export function MobileInvoiceForm(props: MobileInvoiceFormProps) {
       <MobileLineEditor
         open={editor !== null && editorItem !== null}
         onOpenChange={(open) => !open && closeEditor()}
-        item={editorItem}
-        isNew={Boolean(editor?.isNew)}
-        extras={editorItem ? getLineExtras(editorItem) : null}
+        item={shownEditor?.item ?? null}
+        isNew={Boolean(shownEditor?.isNew)}
+        extras={shownEditor ? getLineExtras(shownEditor.item) : null}
         currencySymbol={currencySymbol}
         showUrdu={showUrdu}
-        renderRateHistory={editorItem && renderRateHistory ? (onClose) => renderRateHistory(editorItem, onClose) : undefined}
+        renderRateHistory={shownEditor && renderRateHistory ? (onClose) => renderRateHistory(shownEditor.item, onClose) : undefined}
         onChangeProduct={() => editor && setPickerTarget({ itemId: editor.itemId })}
         onQuantity={(qty) => editor && onQuantity(editor.itemId, qty)}
         onUnitPrice={(price) => editor && onUnitPrice(editor.itemId, price)}

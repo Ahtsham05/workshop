@@ -6,6 +6,8 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { useLanguage } from '@/context/language-context'
+import { useContactLocation } from '@/hooks/use-contact-location'
+import { locationPreview, readLocationCells, withLocationFields, withLocationSample, type ImportLocation } from '@/lib/contact-location-import'
 import { Label } from '@/components/ui/label'
 import { DatePicker } from '@/components/ui/date-picker'
 import { getBusinessToday } from '@/lib/business-timezone'
@@ -41,7 +43,8 @@ export interface BulkSupplierResult {
   warnings?: Array<{ index?: number; name?: string; message: string }>
 }
 
-export type DuplicateStrategy = 'skip' | 'update' | 'error'
+/** 'location' = for already-saved contacts, only fill in City / State / Country. */
+export type DuplicateStrategy = 'skip' | 'update' | 'error' | 'location'
 
 interface SupplierImportDialogProps {
   open: boolean
@@ -52,7 +55,7 @@ interface SupplierImportDialogProps {
   ) => Promise<BulkSupplierResult | void>
 }
 
-interface ImportSupplier {
+interface ImportSupplier extends ImportLocation {
   name: string
   nameUrdu?: string
   phone?: string
@@ -111,7 +114,16 @@ const SAMPLE_ROWS = [
 
 export default function SupplierImportDialog({ open, onClose, onImport }: SupplierImportDialogProps) {
   const { t } = useLanguage()
-  const [duplicateStrategy, setDuplicateStrategy] = useState<DuplicateStrategy>('skip')
+  const location = useContactLocation()
+  // Wholesale / distributor: re-importing an older list adds City / State / Country to the
+  // customers already saved and changes nothing else on them — the safe default.
+  const [pickedStrategy, setDuplicateStrategy] = useState<DuplicateStrategy | null>(null)
+  const duplicateStrategy: DuplicateStrategy = pickedStrategy ?? (location.enabled ? 'location' : 'skip')
+  const importFields = useMemo(() => withLocationFields(SUPPLIER_FIELDS, location.enabled), [location.enabled])
+  const sampleRows = useMemo(
+    () => withLocationSample(SAMPLE_ROWS, location.enabled, location.defaultCountry),
+    [location.enabled, location.defaultCountry],
+  )
   const [openingBalanceDate, setOpeningBalanceDate] = useState<string>(() => getBusinessToday())
 
   const buildRow = useCallback(
@@ -135,6 +147,7 @@ export default function SupplierImportDialog({ open, onClose, onImport }: Suppli
 
       const address = parseText(values.address)
       if (address) supplier.address = address
+      if (location.enabled) Object.assign(supplier, readLocationCells(values))
       const nameUrdu = parseText(values.nameUrdu)
       if (nameUrdu) supplier.nameUrdu = nameUrdu
       const taxNumber = parseText(values.taxNumber, { code: true })
@@ -148,7 +161,7 @@ export default function SupplierImportDialog({ open, onClose, onImport }: Suppli
 
       return { value: supplier, warning: warnings.length ? warnings.join('; ') : undefined }
     },
-    [t]
+    [t, location.enabled]
   )
 
   const importBatch = useCallback(
@@ -156,7 +169,11 @@ export default function SupplierImportDialog({ open, onClose, onImport }: Suppli
       const result = (await onImport(items, { duplicateStrategy, openingBalanceDate })) || {}
       const notes: string[] = []
       if (result.updatedCount) {
-        notes.push(t('{{count}} existing suppliers were updated', { count: result.updatedCount }))
+        notes.push(
+          duplicateStrategy === 'location'
+            ? t('City / State / Country added to {{count}} existing suppliers', { count: result.updatedCount })
+            : t('{{count}} existing suppliers were updated', { count: result.updatedCount }),
+        )
       }
       return {
         insertedCount: (result.insertedCount || 0) + (result.updatedCount || 0),
@@ -186,8 +203,8 @@ export default function SupplierImportDialog({ open, onClose, onImport }: Suppli
       title={t('Import Suppliers from Excel')}
       description={t('Upload your supplier list. Columns are matched automatically — you can check and change them before importing.')}
       entityPlural={t('suppliers')}
-      fields={SUPPLIER_FIELDS}
-      sampleRows={SAMPLE_ROWS}
+      fields={importFields}
+      sampleRows={sampleRows}
       templateFileName='suppliers-import-template.xlsx'
       templateSheetName='Suppliers'
       buildRow={buildRow}
@@ -197,10 +214,13 @@ export default function SupplierImportDialog({ open, onClose, onImport }: Suppli
         <div className='space-y-1.5'>
           <Label className='text-sm'>{t('If a supplier is already saved')}</Label>
           <Select value={duplicateStrategy} onValueChange={(value) => setDuplicateStrategy(value as DuplicateStrategy)}>
-            <SelectTrigger className='h-8 w-full sm:w-[320px]'>
+            <SelectTrigger className='h-8 w-full sm:w-[400px]'>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              {location.enabled && (
+                <SelectItem value='location'>{t('Add City / State / Country only (change nothing else)')}</SelectItem>
+              )}
               <SelectItem value='skip'>{t('Skip them (keep what is already saved)')}</SelectItem>
               <SelectItem value='update'>{t('Update their contact details (balance is not changed)')}</SelectItem>
               <SelectItem value='error'>{t('Report them as problem rows')}</SelectItem>
@@ -209,6 +229,11 @@ export default function SupplierImportDialog({ open, onClose, onImport }: Suppli
           <p className='text-xs text-muted-foreground'>
             {t('Suppliers are matched by phone number, then email, then name.')}
           </p>
+          {duplicateStrategy === 'location' && (
+            <p className='text-xs text-muted-foreground'>
+              {t('Imported before City / State / Country existed? Import the same file again with those columns added — saved suppliers only get their location filled in. Names, phones, balances and credit stay as they are; new suppliers in the file are added.')}
+            </p>
+          )}
           <div className='space-y-1.5 pt-2'>
             <Label className='text-sm'>{t('Opening balance date')}</Label>
             <DatePicker
@@ -227,7 +252,7 @@ export default function SupplierImportDialog({ open, onClose, onImport }: Suppli
         <>
           <div className='font-medium'>{supplier.name}</div>
           <div className='text-muted-foreground'>
-            {[supplier.phone, supplier.email, supplier.address].filter(Boolean).join(' · ') || t('No contact details')}
+            {[supplier.phone, supplier.email, supplier.address, locationPreview(supplier)].filter(Boolean).join(' · ') || t('No contact details')}
             {supplier.balance ? ` · ${t('Balance')}: ${supplier.balance}` : ''}
           </div>
         </>

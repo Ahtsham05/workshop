@@ -1,3 +1,4 @@
+import { contactAddressText } from '@/lib/countries'
 /** Invoices and customers come from the API untyped (see invoice.api / customer lists) —
  *  one named alias here instead of scattering bare `any` through the phone screens. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -5,9 +6,8 @@ export type ApiRecord = Record<string, any>
 
 export function formatCustomerAddress(customer: ApiRecord | undefined | null): string {
   if (!customer) return ''
-  const b = customer.billingAddress || {}
-  const structured = [b.line1, b.line2, b.city, b.state, b.postalCode].filter(Boolean).join(', ')
-  return structured || String(customer.address || '').trim()
+  // "Street, City, ST ZIP, Country" (lib/countries.ts).
+  return contactAddressText(customer)
 }
 
 /** Odoo-style coloured initial tile for people/companies without a photo. */

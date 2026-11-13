@@ -1,3 +1,4 @@
+import { contactAddressText } from '@/lib/countries'
 import { useMemo, useState } from 'react'
 import { formatPaymentMethod } from '@/lib/payment-modes'
 import { useNavigate } from '@tanstack/react-router'
@@ -514,7 +515,7 @@ export function PurchaseViewDrawer({
                                 {purchase.supplier.phone}
                               </p>
                             )}
-                            {purchase.supplier?.address && <p>{purchase.supplier.address}</p>}
+                            {contactAddressText(purchase.supplier) && <p>{contactAddressText(purchase.supplier)}</p>}
                             {purchase.supplier?.taxNumber && (
                               <p>
                                 {t('Tax No')}: {purchase.supplier.taxNumber}

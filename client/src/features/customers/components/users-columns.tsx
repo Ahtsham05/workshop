@@ -24,6 +24,8 @@ import type { CreditSummary } from '@/stores/creditControl.api'
 import { CreditCell } from '../credit/credit-cell'
 import { CREDIT_STATUS_META } from '../credit/credit-utils'
 import { PAYMENT_TERM_LABELS } from '../utils/customer-excel'
+import { contactLocationColumns } from '@/components/contact-location-columns'
+import { useContactLocation } from '@/hooks/use-contact-location'
 
 export const useCustomerColumns = (onStatusChange?: (customer: Customer, next: boolean) => void): ColumnDef<Customer>[] => {
   const { t } = useLanguage()
@@ -31,6 +33,7 @@ export const useCustomerColumns = (onStatusChange?: (customer: Customer, next: b
   const currencyMeta = useCurrencyMeta()
   const formatMoney = useFormatMoney()
   const { agingFor, settings: ledgerSettings, colorsOn } = useLedgerStatus()
+  const { enabled: showLocation } = useContactLocation()
 
   return [
     {
@@ -274,6 +277,8 @@ export const useCustomerColumns = (onStatusChange?: (customer: Customer, next: b
       header: ({ column }) => <DataTableColumnHeader column={column} title='address' />,
       cell: ({ row }) => <div className={getTextClasses(row.getValue('address'), '')}>{row.getValue('address')}</div>,
     },
+    // City / State / Country — wholesale & distributor only.
+    ...(showLocation ? contactLocationColumns<Customer>((column, title) => <DataTableColumnHeader column={column} title={title} />) : []),
     {
       id: 'isActive',
       size: 90,

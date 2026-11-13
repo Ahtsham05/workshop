@@ -32,6 +32,18 @@ export const customerSchema = z.object({
   whatsapp: z.string().optional(),
   balance: z.number().optional(),
   address: z.string().optional(), // customer address is optional
+  billingAddress: z
+    .object({
+      line1: z.string().optional(),
+      line2: z.string().optional(),
+      city: z.string().optional(),
+      state: z.string().optional(),
+      postalCode: z.string().optional(),
+      countryCode: z.string().optional(),
+    })
+    .partial()
+    .nullable()
+    .optional(),
   customerType: z.enum(['retail', 'wholesale', 'vip', 'corporate']).optional(),
   creditLimit: z.number().optional(),
   creditHold: z.boolean().optional(),

@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx'
 import { nativeFieldLabel } from '@/lib/native-language'
 import { withCommonAliases, type ImportFieldSpec } from '@/lib/excel-import'
+import { withLocationFields } from '@/lib/contact-location-import'
 
 /**
  * The customer spreadsheet layout, shared by Import Excel and Export Excel so an exported
@@ -122,6 +123,9 @@ export interface CustomerExportRow {
   whatsapp: string
   email: string
   address: string
+  city?: string
+  state?: string
+  country?: string
   customerType: string
   taxNumber: string
   notes: string
@@ -153,8 +157,14 @@ const STATUS_LABELS: Record<string, string> = {
  * live figures marked "(read only)" — the bracket is stripped by the importer's header
  * matcher, and none of those names is an import column, so they are simply ignored.
  */
-export function downloadCustomersWorkbook(rows: CustomerExportRow[], fileName: string) {
-  const editable = CUSTOMER_IMPORT_FIELDS.filter((field) => field.key !== 'balance')
+export function downloadCustomersWorkbook(
+  rows: CustomerExportRow[],
+  fileName: string,
+  options: { withLocation?: boolean } = {},
+) {
+  const editable = withLocationFields(CUSTOMER_IMPORT_FIELDS, Boolean(options.withLocation)).filter(
+    (field) => field.key !== 'balance',
+  )
   const readOnly: { label: string; width: number; get: (row: CustomerExportRow) => string | number }[] = [
     { label: 'Current Balance (read only)', width: 18, get: (r) => r.balance },
     { label: 'Credit Used (read only)', width: 18, get: (r) => r.creditUsed },

@@ -131,7 +131,7 @@ export const bulkAddCustomers = createAsyncThunk(
       customers,
       duplicateStrategy,
       openingBalanceDate,
-    }: { customers: any[]; duplicateStrategy?: 'skip' | 'update' | 'error'; openingBalanceDate?: string },
+    }: { customers: any[]; duplicateStrategy?: 'skip' | 'update' | 'error' | 'location'; openingBalanceDate?: string },
     { dispatch }
   ) => {
     const response = await Axios.post(summery.bulkAddCustomers.url, { customers, duplicateStrategy, openingBalanceDate })

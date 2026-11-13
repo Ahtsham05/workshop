@@ -115,6 +115,13 @@ export const requiresRegisteredCustomer = (value?: string | null) => {
 }
 
 /**
+ * Wholesale / distribution keep City, State and Country on every customer and supplier
+ * (Add/Edit forms, lists, Excel import, invoice "Sold To" block). Other types keep the
+ * single free-text address.
+ */
+export const usesContactLocation = (value?: string | null) => requiresRegisteredCustomer(value)
+
+/**
  * Which menu pages an organization shows — two layers:
  *  1. Business-type defaults: whole modules a type doesn't use start switched off
  *     (BUSINESS_TYPE_HIDDEN_MODULES).

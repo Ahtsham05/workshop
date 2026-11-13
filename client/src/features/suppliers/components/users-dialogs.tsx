@@ -14,7 +14,7 @@ export default function SuppliersDialogs({ setFetch }: any) {
 
   const handleImport = async (
     suppliers: any[],
-    options?: { duplicateStrategy?: 'skip' | 'update' | 'error'; openingBalanceDate?: string }
+    options?: { duplicateStrategy?: 'skip' | 'update' | 'error' | 'location'; openingBalanceDate?: string }
   ) => {
     // No toast and no dialog close here: the import dialog owns the reporting, and it
     // needs the per-row breakdown in the response to say which rows didn't make it.

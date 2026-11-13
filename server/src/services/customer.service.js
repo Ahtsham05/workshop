@@ -7,6 +7,7 @@ const customerLedgerService = require('./customerLedger.service');
 const { toImportText, parseImportNumber, matchKey, phoneKey, isValidEmail } = require('../utils/importRow');
 const accountsSystemService = require('./accountsSystem.service');
 const { startOfBusinessDay } = require('../utils/businessTimezone');
+const { mergeBillingAddress, importLocationFields, nestBillingAddress } = require('../utils/location');
 const creditControlService = require('./creditControl.service');
 
 /**
@@ -15,7 +16,9 @@ const creditControlService = require('./creditControl.service');
  * @returns {Promise<Customer>}
  */
 const createCustomer = async (customerBody) => {
-  const customer = await Customer.create(customerBody);
+  const body = { ...customerBody };
+  if (body.billingAddress) body.billingAddress = mergeBillingAddress(null, body.billingAddress);
+  const customer = await Customer.create(body);
 
   await customerLedgerService.syncOpeningBalanceEntry({
     customerId: customer._id,
@@ -81,6 +84,11 @@ const updateCustomerById = async (customerId, updateBody) => {
       customer.set(key, undefined);
       delete updates[key];
     }
+  }
+
+  if (updates.billingAddress) {
+    customer.set('billingAddress', mergeBillingAddress(customer.billingAddress, updates.billingAddress));
+    delete updates.billingAddress;
   }
 
   const originalBalance = Number(customer.balance || 0);
@@ -204,7 +212,7 @@ const ACCOUNT_SETUP_CONCURRENCY = 10;
  * @param {Array} customersToAdd
  * @param {Object} branchContext - { organizationId, branchId, createdBy }
  * @param {Object} [options]
- * @param {'skip'|'update'|'error'} [options.duplicateStrategy='skip'] - What to do with a
+ * @param {'skip'|'update'|'error'|'location'} [options.duplicateStrategy='skip'] - What to do with a
  *   row matching a customer that already exists (matched on phone, then email, then
  *   name). Defaults to 'skip' so re-uploading a contact list tops it up instead of
  *   duplicating it or erroring on every known customer.
@@ -212,7 +220,7 @@ const ACCOUNT_SETUP_CONCURRENCY = 10;
  */
 const bulkAddCustomers = async (customersToAdd, branchContext = {}, options = {}) => {
   const { organizationId, branchId, createdBy } = branchContext;
-  const duplicateStrategy = ['skip', 'update', 'error'].includes(options.duplicateStrategy)
+  const duplicateStrategy = ['skip', 'update', 'error', 'location'].includes(options.duplicateStrategy)
     ? options.duplicateStrategy
     : 'skip';
   // Optional "Opening balance date" for every imported opening balance (YYYY-MM-DD),
@@ -301,6 +309,24 @@ const bulkAddCustomers = async (customersToAdd, branchContext = {}, options = {}
       skipped.push({ index, name, reason: `"${name}" is already saved — left unchanged` });
       return;
     }
+    // Re-importing a list that was imported before City / State / Country existed: a saved
+    // contact gets only its location filled in — name, phones, credit, balance untouched.
+    if (match && duplicateStrategy === 'location') {
+      const location = importLocationFields(row);
+      if (location.invalidCountry) {
+        warnings.push({ index, name, message: `Country "${location.invalidCountry}" is not recognised — left unchanged` });
+      }
+      const set = {};
+      Object.entries(location.fields).forEach(([key, value]) => {
+        if (value) set[key] = value;
+      });
+      if (!Object.keys(set).length) {
+        skipped.push({ index, name, reason: `"${name}" is already saved — this row has no City / State / Country` });
+        return;
+      }
+      updateOps.push({ index, name, filter: { _id: match._id, organizationId, branchId }, set });
+      return;
+    }
 
     const fields = {
       name,
@@ -312,6 +338,11 @@ const bulkAddCustomers = async (customersToAdd, branchContext = {}, options = {}
       taxNumber: toImportText(row.taxNumber),
       notes: toImportText(row.notes),
     };
+    const location = importLocationFields(row);
+    Object.assign(fields, location.fields);
+    if (location.invalidCountry) {
+      warnings.push({ index, name, message: `Country "${location.invalidCountry}" is not recognised — imported without a country` });
+    }
     const customerType = matchKey(row.customerType);
     if (['retail', 'wholesale', 'vip', 'corporate'].includes(customerType)) fields.customerType = customerType;
     else if (customerType) warnings.push({ index, name, message: `Customer type "${row.customerType}" is not recognised — imported without it` });
@@ -364,7 +395,7 @@ const bulkAddCustomers = async (customersToAdd, branchContext = {}, options = {}
     }
 
     validDocs.push({
-      ...fields,
+      ...nestBillingAddress(fields),
       creditLimit: fields.creditLimit !== undefined ? fields.creditLimit : defaultCreditLimit,
       balance: balance.value ?? 0,
       organizationId,

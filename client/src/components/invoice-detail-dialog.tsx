@@ -1,3 +1,4 @@
+import { contactAddressText } from '@/lib/countries'
 import { useMemo, useState, type ReactNode } from 'react'
 import { formatPaymentMethod } from '@/lib/payment-modes'
 import { useNavigate } from '@tanstack/react-router'
@@ -87,10 +88,7 @@ function paymentMethodLabel(invoice: any) {
 }
 
 function customerAddress(customer: Record<string, any> | undefined) {
-  if (!customer) return ''
-  const b = customer.billingAddress || {}
-  const structured = [b.line1, b.line2, b.city, b.state, b.postalCode].filter(Boolean).join(', ')
-  return structured || String(customer.address || '').trim()
+  return contactAddressText(customer)
 }
 
 function TotalRow({

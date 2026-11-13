@@ -13,6 +13,8 @@ import { store } from '@/stores/store'
 import { invoiceApi } from '@/stores/invoice.api'
 import { customerApi } from '@/stores/customer.api'
 import { organizationApi } from '@/stores/organization.api'
+import { contactAddressLines } from '@/lib/countries'
+import { usesContactLocation } from '@/lib/business-types'
 import type { InvoiceTemplate } from './invoice-template'
 import type { PrintInvoiceData } from './print-utils'
 
@@ -111,15 +113,9 @@ function itemCode(item: SourceItem | undefined): string {
   return String(variant?.barcode || product?.barcode || item.barcode || variant?.sku || product?.sku || item.sku || '').trim()
 }
 
+/** Street, "City, ST ZIP", country — one per line (see lib/countries.ts). */
 function customerAddressLines(customer: CustomerLike | undefined): string {
-  if (!customer) return ''
-  const b = customer.billingAddress || {}
-  const cityLine = [b.city, [b.state, b.postalCode].filter(Boolean).join(' ')].filter(Boolean).join(', ')
-  const structured = [b.line1, b.line2, [cityLine, b.countryCode].filter(Boolean).join(' ')]
-    .map((l) => String(l || '').trim())
-    .filter(Boolean)
-  if (structured.length) return structured.join('\n')
-  return String(customer.address || '').trim()
+  return contactAddressLines(customer).join('\n')
 }
 
 function needsFullInvoice(source: InvoicePrintSource): boolean {
@@ -199,11 +195,39 @@ export async function withDistributorPrintDetails(
   }
 }
 
-/** Runs the lookups only for the Distributor template; every other template is untouched. */
+/**
+ * Wholesale / distributor orgs print the customer's address (street, city/state, country)
+ * under "Bill To" on every A4/A5 template, not only the Distributor one — one customer
+ * lookup (RTK cache first), nothing else.
+ */
+async function withCustomerAddress(
+  printData: PrintInvoiceData,
+  source: InvoicePrintSource | null | undefined,
+): Promise<PrintInvoiceData> {
+  if (printData.customerAddress) return printData
+  try {
+    const state = store.getState()
+    const org = organizationApi.endpoints.getMyOrganization.select()(state)?.data
+    const user = refOf(state.auth?.data?.user) as { businessType?: string } | null
+    if (!usesContactLocation(org?.businessType || user?.businessType)) return printData
+    const src: InvoicePrintSource = source || {}
+    const customerId = idOf(printData.customerId ?? src.customerId)
+    const customer =
+      (customerId && isObjectId(customerId)
+        ? await readQuery<CustomerLike>(() => store.dispatch(customerApi.endpoints.getCustomerById.initiate(customerId)))
+        : undefined) || (refOf(src.customerId) as CustomerLike | undefined)
+    const address = customerAddressLines(customer)
+    return address ? { ...printData, customerAddress: address } : printData
+  } catch {
+    return printData
+  }
+}
+
+/** Distributor template: every lookup. Other templates: only the wholesale/distributor Bill To address. */
 export function prepareSheetPrintData(
   printData: PrintInvoiceData,
   source: InvoicePrintSource | null | undefined,
   template: InvoiceTemplate,
 ): Promise<PrintInvoiceData> {
-  return template === 'distributor' ? withDistributorPrintDetails(printData, source) : Promise.resolve(printData)
+  return template === 'distributor' ? withDistributorPrintDetails(printData, source) : withCustomerAddress(printData, source)
 }

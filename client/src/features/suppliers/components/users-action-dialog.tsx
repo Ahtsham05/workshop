@@ -33,6 +33,9 @@ import { addSupplier, updateSupplier } from '@/stores/supplier.slice' // Adjuste
 import toast from 'react-hot-toast'
 import { useLanguage } from '@/context/language-context'
 import { EntityFormSection } from '@/components/entity-form-section'
+import { ContactLocationFields } from '@/components/contact-location-fields'
+import { locationFormDefaults, locationToPayload } from '@/lib/countries'
+import { useContactLocation } from '@/hooks/use-contact-location'
 import { handleFormEnterKeyDown } from '@/lib/form-enter-navigation'
 import {
   User,
@@ -67,6 +70,9 @@ const getFormSchema = (t: (key: string) => string) => z.object({
   phone: z.string(),
   whatsapp: z.string().optional(),
   address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  countryCode: z.string().optional(),
   balance: z.coerce.number().optional(),
   picture: imageRefSchema,
   idCardFront: imageRefSchema,
@@ -93,11 +99,13 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
   const formSchema = getFormSchema(t)
   type supplierForm = z.infer<typeof formSchema>
 
+  const location = useContactLocation()
   const form = useForm<supplierForm>({
     resolver: zodResolver(formSchema),
     defaultValues: isEdit
       ? {
           ...currentRow,
+          ...locationFormDefaults(currentRow?.billingAddress, location.defaultCountry),
         }
       : {
           name: '',
@@ -106,6 +114,7 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
           phone: '03',
           whatsapp: '03',
           address: 'address',
+          ...locationFormDefaults(null, location.defaultCountry),
           balance: 0,
           picture: undefined,
           idCardFront: undefined,
@@ -133,6 +142,12 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
     form.setValue('name', defaultName.trim())
   }, [open, isEdit, defaultName, form])
 
+  // The org (and so its country) can load after the form was created.
+  useEffect(() => {
+    if (!open || isEdit || !location.enabled || !location.defaultCountry) return
+    if (!form.getValues('countryCode')) form.setValue('countryCode', location.defaultCountry)
+  }, [open, isEdit, location.enabled, location.defaultCountry, form])
+
   // A quick-create from a picker (defaultName) starts from the typed name, never a draft.
   const draft = useFormDraft(form, {
     key: 'supplier',
@@ -144,7 +159,9 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    const { picture, idCardFront, idCardBack, ...rest } = values
+    const { picture, idCardFront, idCardBack, city, state, countryCode, ...fields } = values
+    // City / State / Country are only on the form for wholesale & distributor orgs.
+    const rest = { ...fields, ...(location.enabled ? locationToPayload({ city, state, countryCode }) : {}) }
     const payload = isEdit
       ? {
           ...rest,
@@ -360,7 +377,7 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                 name='address'
                 render={({ field }) => (
                   <FormItem className='gap-1.5'>
-                    <FormLabel>{t('address')}</FormLabel>
+                    <FormLabel>{location.enabled ? t('Street address') : t('address')}</FormLabel>
                     <FormControl>
                       <div className='relative'>
                         <MapPin className='pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground' />
@@ -377,6 +394,7 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                   </FormItem>
                 )}
               />
+              {location.enabled && <ContactLocationFields />}
               </EntityFormSection>
 
               <EntityFormSection

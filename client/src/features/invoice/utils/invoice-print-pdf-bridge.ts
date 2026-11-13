@@ -17,6 +17,14 @@ const A4_HEIGHT_MM = 297
  * host container happens to be, is what makes wrapping/font proportions match true print
  * layout consistently every time. */
 const A4_CSS_WIDTH_PX = 794
+/** Pixels per CSS pixel in the captured page. 3 ≈ 290 DPI on A4 — print-shop sharpness for the
+ *  small policy text and thin table rules. Was 2 (≈190 DPI), which looked soft next to a laptop
+ *  print. A 3× A4 canvas is ~8 MP, well under iOS Safari's ~16.7 MP canvas limit. */
+const CAPTURE_SCALE = 3
+/** JPEG quality for each page image. 0.97 removes the grey smudging JPEG puts around small text
+ *  (visible at 0.92) and builds ~7× faster than lossless PNG, which jsPDF re-encodes in JS — too
+ *  slow on phones — for the same look at 300 DPI. */
+const PAGE_JPEG_QUALITY = 0.97
 
 /**
  * Captures invoice HTML as a true A4-page PDF. Two earlier approaches both had real problems:
@@ -61,16 +69,29 @@ async function buildPdfFromChunks(chunks: HTMLElement[]): Promise<Blob> {
     // left at its default (the real browser window's height), content taller than that forces
     // it to scroll-and-stitch internally, which is what produced a repeated row — sizing the
     // virtual window to the chunk's own full height up front avoids that path entirely.
-    const capture = () =>
-      html2canvas(chunk, {
-        scale: 2,
+    // Paint on a canvas that belongs to the invoice's own frame. html2canvas otherwise creates its
+    // canvas in the app document, whose fonts are not the invoice's (e.g. no Poppins there): the
+    // text was laid out in one font and painted in another — letters drifted, spaces vanished
+    // ("SOLDTO"), and a wider fallback clipped the invoice number.
+    const capture = () => {
+      const rect = chunk.getBoundingClientRect()
+      const canvas = chunk.ownerDocument.createElement('canvas')
+      canvas.width = Math.max(1, Math.ceil(rect.width * CAPTURE_SCALE))
+      canvas.height = Math.max(1, Math.ceil(rect.height * CAPTURE_SCALE))
+      return html2canvas(chunk, {
+        canvas,
+        scale: CAPTURE_SCALE,
         useCORS: true,
         allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
         windowWidth: captureWidth,
         windowHeight: captureHeight,
+        // html2canvas measures the text in its own copy of the page — make that copy finish
+        // loading the same fonts first, or it measures in a fallback font.
+        onclone: (cloneDoc) => loadUsedFonts(cloneDoc),
       })
+    }
     let canvas = await capture()
     // A page drawn before the browser finished laying it out comes back 0×0 (seen with the
     // Distributor template) — give layout a moment and draw it once more.
@@ -90,7 +111,7 @@ async function buildPdfFromChunks(chunks: HTMLElement[]): Promise<Blob> {
     const imgHeight = naturalHeight * fitScale
 
     if (i > 0) pdf.addPage()
-    pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', margin, margin, imgWidth, imgHeight)
+    pdf.addImage(canvas.toDataURL('image/jpeg', PAGE_JPEG_QUALITY), 'JPEG', margin, margin, imgWidth, imgHeight)
   }
 
   return pdf.output('blob')
@@ -133,6 +154,96 @@ async function waitForFrameLayout(frame: HTMLIFrameElement, doc: Document): Prom
   await nextFrame()
   await nextFrame()
   void doc.body?.offsetHeight // force layout
+}
+
+/** `@import url(...)` rules in the invoice CSS (the Distributor template loads Poppins this way). */
+const CSS_IMPORT_RE = /@import\s+url\(\s*(['"]?)([^'")]+)\1\s*\)\s*;?/g
+
+/** Pulls the `@import`ed stylesheet URLs out of the invoice CSS (handled by inlineStylesheets). */
+function hoistCssImports(html: string): { html: string; urls: string[] } {
+  const urls = new Set<string>()
+  const stripped = html.replace(CSS_IMPORT_RE, (_match, _quote, url: string) => {
+    urls.add(url)
+    return ''
+  })
+  return { html: stripped, urls: [...urls] }
+}
+
+/** Font CSS already fetched this session (Google Fonts CSS is small and immutable per URL). */
+const stylesheetText = new Map<string, Promise<string | null>>()
+
+function fetchStylesheet(url: string): Promise<string | null> {
+  let hit = stylesheetText.get(url)
+  if (!hit) {
+    hit = fetch(url, { mode: 'cors', credentials: 'omit' })
+      .then((res) => (res.ok ? res.text() : null))
+      .catch(() => null)
+    stylesheetText.set(url, hit)
+    hit.then((text) => text === null && stylesheetText.delete(url))
+  }
+  return hit
+}
+
+/**
+ * The invoice's web-font stylesheets as inline `<style>` blocks. They must be inline: html2canvas
+ * measures the text in its own copy of the page, and in that copy a `<link>`ed (or `@import`ed)
+ * stylesheet never loads — the copy had no Poppins at all, measured every word in a fallback font
+ * and the PDF came out with squeezed words and lost spaces. An inline `<style>` is copied with
+ * its `@font-face` rules, so the copy loads the very same font files (from the HTTP cache).
+ * A stylesheet that can't be fetched falls back to a `<link>`.
+ */
+async function inlineStylesheets(urls: string[]): Promise<string> {
+  const blocks = await Promise.all(
+    urls.map(async (url) => {
+      const css = await fetchStylesheet(url)
+      return css !== null
+        ? `<style data-pdf-font>${css.replace(/<\/style/gi, '<\\/style')}</style>`
+        : `<link rel="stylesheet" href="${url.replace(/"/g, '&quot;')}">`
+    }),
+  )
+  return blocks.join('')
+}
+
+const linkHrefs = (html: string) =>
+  [...html.matchAll(/<link\b[^>]*\bhref=["']([^"']+)["'][^>]*>/gi)]
+    .filter((m) => !/rel=["']?(preconnect|dns-prefetch)/i.test(m[0]))
+    .map((m) => m[1])
+
+/** Longest we wait for the invoice's stylesheets / web fonts / logo before drawing anyway. */
+const STYLESHEET_WAIT_MS = 4000
+
+async function waitForStylesheets(doc: Document): Promise<void> {
+  const pending = Array.from(doc.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'))
+    .filter((link) => !link.sheet)
+    .map(
+      (link) =>
+        new Promise((resolve) => {
+          link.addEventListener('load', resolve, { once: true })
+          link.addEventListener('error', resolve, { once: true })
+        }),
+    )
+  if (!pending.length) return
+  await Promise.race([Promise.all(pending), new Promise((r) => setTimeout(r, STYLESHEET_WAIT_MS))])
+}
+
+/** Asks for every web font the page's text actually uses, then waits for them — `fonts.ready`
+ *  alone can resolve before a font a heading needs has even been requested. */
+async function loadUsedFonts(doc: Document): Promise<void> {
+  const fonts = doc.fonts
+  if (!fonts) return
+  const wanted = new Set<string>()
+  const view = doc.defaultView
+  doc.body?.querySelectorAll<HTMLElement>('*').forEach((el) => {
+    if (!el.childNodes.length) return
+    const cs = view?.getComputedStyle(el)
+    if (!cs) return
+    wanted.add(`${cs.fontStyle} ${cs.fontWeight} 16px ${cs.fontFamily}`)
+  })
+  const loads = [...wanted].map((font) => fonts.load(font).catch(() => []))
+  await Promise.race([
+    Promise.all(loads).then(() => fonts.ready),
+    new Promise((r) => setTimeout(r, STYLESHEET_WAIT_MS)),
+  ])
 }
 
 /** Longest we wait for web fonts / the logo before drawing anyway (fallback fonts, no logo). */
@@ -178,13 +289,20 @@ export async function buildInvoicePdfInOpener(invoiceRootHtml: string, headHtml 
   try {
     const doc = frame.contentDocument
     if (!doc) throw new Error('PDF frame unavailable')
+    const { html: bodyHtml, urls } = hoistCssImports(invoiceRootHtml)
+    const fontCss = await inlineStylesheets([...new Set([...linkHrefs(headHtml), ...urls])])
     doc.open()
     doc.write(
-      `<!doctype html><html><head><meta charset="utf-8">${headHtml}<style>${FLAT_PAGE_CSS}</style></head><body>${invoiceRootHtml}</body></html>`,
+      `<!doctype html><html><head><meta charset="utf-8">${fontCss}<style>${FLAT_PAGE_CSS}</style></head><body>${bodyHtml}</body></html>`,
     )
     doc.close()
+    // Order matters: font CSS first, then layout, then the fonts that layout asks for — only then
+    // is the page set in exactly the fonts the print view uses.
+    await waitForStylesheets(doc)
     await waitForFrameLayout(frame, doc)
+    await loadUsedFonts(doc)
     await waitForAssets(doc)
+    void doc.body?.offsetHeight // re-layout with the final fonts
 
     const root = (doc.getElementById('invoice-print-root') ?? doc.body.firstElementChild ?? doc.body) as HTMLElement
     const pageEls = root.querySelectorAll<HTMLElement>('.invoice-print-page')

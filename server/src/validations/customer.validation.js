@@ -1,5 +1,16 @@
 const Joi = require('joi');
 
+// City / State / Country (wholesale & distributor forms). Merged into the saved
+// billingAddress server-side, so a partial patch never wipes line1/postalCode.
+const billingAddress = Joi.object({
+  line1: Joi.string().allow('', null),
+  line2: Joi.string().allow('', null),
+  city: Joi.string().allow('', null),
+  state: Joi.string().allow('', null),
+  postalCode: Joi.string().allow('', null),
+  countryCode: Joi.string().allow('', null),
+});
+
 const cloudinaryImage = Joi.object({
   url: Joi.string().uri().required(),
   publicId: Joi.string().required(),
@@ -18,6 +29,7 @@ const createCustomer = {
     phone: Joi.string().allow(''),
     whatsapp: Joi.string().allow(''),
     address: Joi.string().allow(''),
+    billingAddress: billingAddress.optional(),
     balance: Joi.number().optional(),
     picture: cloudinaryImage,
     idCardFront: cloudinaryImage,
@@ -71,6 +83,7 @@ const updateCustomer = {
     phone: Joi.string().allow(''),
     whatsapp: Joi.string().allow(''),
     address: Joi.string().allow(''),
+    billingAddress: billingAddress.optional(),
     balance: Joi.number().optional(),
     picture: nullableCloudinaryImage,
     idCardFront: nullableCloudinaryImage,
@@ -118,7 +131,7 @@ const bulkDeleteCustomers = {
 // doesn't reject the request either.
 const bulkAddCustomers = {
   body: Joi.object().keys({
-    duplicateStrategy: Joi.string().valid('skip', 'update', 'error').optional(),
+    duplicateStrategy: Joi.string().valid('skip', 'update', 'error', 'location').optional(),
     openingBalanceDate: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow('', null).optional(),
     customers: Joi.array().items(
       Joi.object().keys({
@@ -128,6 +141,9 @@ const bulkAddCustomers = {
         phone: Joi.any(),
         whatsapp: Joi.any(),
         address: Joi.any(),
+        city: Joi.any(),
+        state: Joi.any(),
+        country: Joi.any(),
         balance: Joi.any(),
         creditLimit: Joi.any(),
         paymentTerms: Joi.any(),

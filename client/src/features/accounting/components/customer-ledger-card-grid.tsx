@@ -1,3 +1,4 @@
+import { contactAddressText } from '@/lib/countries'
 import { useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
@@ -215,7 +216,7 @@ export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, p
                       </div>
                     ) : undefined
                   }
-                  address={customer.address}
+                  address={contactAddressText(customer)}
                   addressClassName={getTextClasses(customer.address || '', '')}
                   balance={balanceDisplay}
                   actions={renderActions(customer)}

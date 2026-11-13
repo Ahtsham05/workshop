@@ -1,3 +1,4 @@
+import { contactAddressText } from '@/lib/countries'
 import { useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowDownToLine, Banknote, BookOpen, Receipt } from 'lucide-react'
@@ -181,7 +182,7 @@ export function SupplierLedgerCardGrid({ suppliers, loading, onSelectSupplier, p
                       </div>
                     ) : undefined
                   }
-                  address={supplier.address}
+                  address={contactAddressText(supplier)}
                   addressClassName={getTextClasses(supplier.address || '', '')}
                   balance={balanceDisplay}
                   actions={renderActions(supplier)}

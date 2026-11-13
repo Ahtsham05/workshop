@@ -13,8 +13,11 @@ import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { buildSupplierBalanceMessage } from '@/utils/sms-messages'
+import { contactLocationColumns } from '@/components/contact-location-columns'
+import { useContactLocation } from '@/hooks/use-contact-location'
 
 export function useSupplierColumns(onStatusChange?: (supplier: Supplier, next: boolean) => void) {
+  const { enabled: showLocation } = useContactLocation()
   const { t, language } = useLanguage()
   const isUrdu = language === 'ur'
   const branchName = useBranchName()
@@ -150,6 +153,11 @@ export function useSupplierColumns(onStatusChange?: (supplier: Supplier, next: b
     ),
   }
 
+  // City / State / Country — wholesale & distributor only.
+  const locationColumns = showLocation
+    ? contactLocationColumns<Supplier>((column, title) => <DataTableColumnHeader column={column} title={title} />)
+    : []
+
   let columns: ColumnDef<Supplier>[]
 
   if (isUrdu) {
@@ -161,6 +169,7 @@ export function useSupplierColumns(onStatusChange?: (supplier: Supplier, next: b
       phoneColumn,
       whatsappColumn,
       addressColumn,
+      ...locationColumns,
       isActiveColumn,
       actionsColumn,
     ]
@@ -173,6 +182,7 @@ export function useSupplierColumns(onStatusChange?: (supplier: Supplier, next: b
       phoneColumn,
       whatsappColumn,
       addressColumn,
+      ...locationColumns,
       isActiveColumn,
       actionsColumn,
     ]

@@ -303,11 +303,11 @@ const hasLogo = (data: PrintInvoiceData) => headerStyle() === 'logo' && Boolean(
  * exactly the number printed next to it. Code 128 is the standard for documents: much shorter
  * than Code 39 for the same number (digit runs pack two per symbol), so the bars come out
  * thicker and scan reliably. Width follows the real module count at 0.75u per module (≈0.26mm
- * on A4, the usual 10-mil minimum), capped by the column. Page 1 prints the number under the
- * bars (human-readable line) like a professional label. Vector bars stay sharp in print/PDF.
+ * on A4, the usual 10-mil minimum), capped by the column. No human-readable line under the bars:
+ * the number is already printed right above them ("INVOICE : …"). Vector bars stay sharp in print/PDF.
  */
 const BARCODE_H_U = 18
-const BARCODE_TEXT_U = 10 // human-readable line under the page-1 barcode
+const BARCODE_TEXT_U = 10 // line height of the number shown instead of bars when they can't be drawn
 const BARCODE_U_PER_MODULE = 0.75
 
 type DrawnBarcode = { svg: SVGSVGElement; modules: number }
@@ -375,7 +375,7 @@ function firstPageTopU(data: PrintInvoiceData, ctx: DistributorPrintContext): nu
   const co = showsCompany() ? companyLines(data, ctx.nativeNames).length * 13.2 : 0
   const logo = hasLogo(data) ? 97 : 0
   const heading = 24 // "INVOICE : number" line
-  const doc = heading + (barcodeSafe(ctx.printNumber) ? BARCODE_H_U + BARCODE_TEXT_U + 4 : 0) + metaLineCount(metaLines(data, ctx)) * 12
+  const doc = heading + (barcodeSafe(ctx.printNumber) ? BARCODE_H_U + 4 : 0) + metaLineCount(metaLines(data, ctx)) * 12
   const parties = 14 + 15 + partyLines(data, ctx.nativeNames).length * 12
   const terms = showsCompany() ? 4 + 19.5 + 13 : 0
   return PAGE_TOP_PAD_U + Math.max(co, logo, doc) + parties + terms + TABLE_HEAD_U
@@ -408,7 +408,7 @@ function letterhead(data: PrintInvoiceData, ctx: DistributorPrintContext, title:
     ${logo ? `<div class="ds-logo-slot">${logo}</div>` : ''}
     <div class="ds-doc">
       ${heading}
-      ${barcodeValue ? `<div class="ds-barcode-row">${barcodeHtml(barcodeValue, DOC_COL_U, BARCODE_H_U, true)}</div>` : ''}
+      ${barcodeValue ? `<div class="ds-barcode-row">${barcodeHtml(barcodeValue, DOC_COL_U, BARCODE_H_U)}</div>` : ''}
       <div class="ds-meta">${meta.map((m) => `<div>${m}</div>`).join('')}</div>
     </div>
   </header>`

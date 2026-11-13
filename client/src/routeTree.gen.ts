@@ -11,6 +11,7 @@
 // Import Routes
 
 import { Route as rootRoute } from './routes/__root'
+import { Route as InstallImport } from './routes/install'
 import { Route as AuthenticatedImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexImport } from './routes/_authenticated/index'
 import { Route as OrderQrTokenImport } from './routes/order.$qrToken'
@@ -233,6 +234,12 @@ import { Route as AuthenticatedSchoolExamsRollSlipsIndexImport } from './routes/
 import { Route as AuthenticatedHrEmployeesIdEditImport } from './routes/_authenticated/hr/employees/$id.edit'
 
 // Create/Update Routes
+
+const InstallRoute = InstallImport.update({
+  id: '/install',
+  path: '/install',
+  getParentRoute: () => rootRoute,
+} as any)
 
 const AuthenticatedRoute = AuthenticatedImport.update({
   id: '/_authenticated',
@@ -1751,6 +1758,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: ''
       preLoaderRoute: typeof AuthenticatedImport
+      parentRoute: typeof rootRoute
+    }
+    '/install': {
+      id: '/install'
+      path: '/install'
+      fullPath: '/install'
+      preLoaderRoute: typeof InstallImport
       parentRoute: typeof rootRoute
     }
     '/_authenticated/manufacturing': {
@@ -3869,6 +3883,7 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 
 export interface FileRoutesByFullPath {
   '': typeof AuthenticatedRouteWithChildren
+  '/install': typeof InstallRoute
   '/manufacturing': typeof AuthenticatedManufacturingRouteRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
@@ -4091,6 +4106,7 @@ export interface FileRoutesByFullPath {
 }
 
 export interface FileRoutesByTo {
+  '/install': typeof InstallRoute
   '/forgot-password': typeof authForgotPasswordRoute
   '/onboarding': typeof authOnboardingRoute
   '/otp': typeof authOtpRoute
@@ -4310,6 +4326,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/install': typeof InstallRoute
   '/_authenticated/manufacturing': typeof AuthenticatedManufacturingRouteRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
@@ -4535,6 +4552,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | ''
+    | '/install'
     | '/manufacturing'
     | '/settings'
     | '/forgot-password'
@@ -4756,6 +4774,7 @@ export interface FileRouteTypes {
     | '/school/students/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/install'
     | '/forgot-password'
     | '/onboarding'
     | '/otp'
@@ -4973,6 +4992,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_authenticated'
+    | '/install'
     | '/_authenticated/manufacturing'
     | '/_authenticated/settings'
     | '/(auth)/forgot-password'
@@ -5197,6 +5217,7 @@ export interface FileRouteTypes {
 
 export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  InstallRoute: typeof InstallRoute
   authForgotPasswordRoute: typeof authForgotPasswordRoute
   authOnboardingRoute: typeof authOnboardingRoute
   authOtpRoute: typeof authOtpRoute
@@ -5213,6 +5234,7 @@ export interface RootRouteChildren {
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  InstallRoute: InstallRoute,
   authForgotPasswordRoute: authForgotPasswordRoute,
   authOnboardingRoute: authOnboardingRoute,
   authOtpRoute: authOtpRoute,
@@ -5238,6 +5260,7 @@ export const routeTree = rootRoute
       "filePath": "__root.tsx",
       "children": [
         "/_authenticated",
+        "/install",
         "/(auth)/forgot-password",
         "/(auth)/onboarding",
         "/(auth)/otp",
@@ -5355,6 +5378,9 @@ export const routeTree = rootRoute
         "/_authenticated/hr/settings/",
         "/_authenticated/products/bulk-edit/"
       ]
+    },
+    "/install": {
+      "filePath": "install.tsx"
     },
     "/_authenticated/manufacturing": {
       "filePath": "_authenticated/manufacturing/route.tsx",

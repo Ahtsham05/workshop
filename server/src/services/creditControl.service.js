@@ -1,4 +1,5 @@
 const httpStatus = require('http-status');
+const { countryName } = require('../utils/location');
 const mongoose = require('mongoose');
 const { Customer, Invoice, Organization, CreditLimitEvent } = require('../models');
 const ApiError = require('../utils/ApiError');
@@ -993,7 +994,7 @@ const exportCustomers = async ({ organizationId, branchId }) => {
   const [settings, customers, overdue] = await Promise.all([
     getSettings(organizationId),
     Customer.find(customerScopeFilter({ organizationId, branchId }))
-      .select('name nameUrdu phone whatsapp email address balance customerType taxNumber notes creditLimit tempCreditLimit creditHold creditHoldReason paymentTerms isActive')
+      .select('name nameUrdu phone whatsapp email address billingAddress balance customerType taxNumber notes creditLimit tempCreditLimit creditHold creditHoldReason paymentTerms isActive')
       .sort({ name: 1 })
       .lean(),
     scanOverdue({ organizationId, branchId }),
@@ -1010,6 +1011,9 @@ const exportCustomers = async ({ organizationId, branchId }) => {
       whatsapp: customer.whatsapp || '',
       email: customer.email || '',
       address: customer.address || '',
+      city: customer.billingAddress?.city || '',
+      state: customer.billingAddress?.state || '',
+      country: countryName(customer.billingAddress?.countryCode),
       customerType: customer.customerType || '',
       taxNumber: customer.taxNumber || '',
       notes: customer.notes || '',

@@ -34,6 +34,9 @@ import toast from 'react-hot-toast'
 import { useLanguage } from '@/context/language-context'
 import { useEffect, useState } from 'react'
 import { EntityFormSection } from '@/components/entity-form-section'
+import { ContactLocationFields } from '@/components/contact-location-fields'
+import { locationFormDefaults, locationToPayload } from '@/lib/countries'
+import { useContactLocation } from '@/hooks/use-contact-location'
 import { handleFormEnterKeyDown } from '@/lib/form-enter-navigation'
 import {
   User,
@@ -79,6 +82,9 @@ const formSchema = z.object({
   phone: z.string().optional(),
   whatsapp: z.string().optional(),
   address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  countryCode: z.string().optional(),
   balance: z.coerce.number().optional(),
   picture: imageRefSchema,
   idCardFront: imageRefSchema,
@@ -112,11 +118,13 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
   const { data: creditSettings } = useGetCreditSettingsQuery(undefined, { skip: !open || !canManageCredit })
   const nativeLanguageName = useNativeLanguageName()
   const { showUrduInput } = useUrduDisplay()
+  const location = useContactLocation()
   const form = useForm<customerForm>({
     resolver: zodResolver(formSchema),
     defaultValues: isEdit
       ? {
           ...currentRow,
+          ...locationFormDefaults(currentRow?.billingAddress, location.defaultCountry),
           customerType: currentRow?.customerType || NONE,
           paymentTerms: currentRow?.paymentTerms || NONE,
         }
@@ -127,6 +135,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
           phone: '03',
           whatsapp: '03',
           address: 'address',
+          ...locationFormDefaults(null, location.defaultCountry),
           balance: 0,
           picture: undefined,
           idCardFront: undefined,
@@ -147,6 +156,12 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
     if (!open || isEdit || !defaultName?.trim()) return
     form.setValue('name', defaultName.trim())
   }, [open, isEdit, defaultName, form])
+
+  // The org (and so its country) can load after the form was created.
+  useEffect(() => {
+    if (!open || isEdit || !location.enabled || !location.defaultCountry) return
+    if (!form.getValues('countryCode')) form.setValue('countryCode', location.defaultCountry)
+  }, [open, isEdit, location.enabled, location.defaultCountry, form])
 
   // A quick-create from a picker (defaultName) starts from the typed name, never a draft.
   const draft = useFormDraft(form, {
@@ -169,7 +184,9 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
   }, [form])
 
   const onSubmit = async (values: customerForm) => {
-    const { picture, idCardFront, idCardBack, customerType, paymentTerms, creditLimit, ...rest } = values
+    const { picture, idCardFront, idCardBack, customerType, paymentTerms, creditLimit, city, state, countryCode, ...fields } = values
+    // City / State / Country are only on the form for wholesale & distributor orgs.
+    const rest = { ...fields, ...(location.enabled ? locationToPayload({ city, state, countryCode }) : {}) }
     const creditPart = canManageCredit && creditLimit !== undefined ? { creditLimit } : {}
     const payload = isEdit
       ? {
@@ -399,7 +416,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                 name='address'
                 render={({ field }) => (
                   <FormItem className='gap-1.5'>
-                    <FormLabel>{t('address')}</FormLabel>
+                    <FormLabel>{location.enabled ? t('Street address') : t('address')}</FormLabel>
                     <FormControl>
                       <div className='relative'>
                         <MapPin className='pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground' />
@@ -416,6 +433,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                   </FormItem>
                 )}
               />
+              {location.enabled && <ContactLocationFields />}
               </EntityFormSection>
 
               <EntityFormSection

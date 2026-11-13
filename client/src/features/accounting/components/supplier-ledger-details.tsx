@@ -1,3 +1,4 @@
+import { contactAddressText } from '@/lib/countries'
 import { useState, useEffect, useMemo } from 'react';
 import { LedgerPeriodSelector, formatLedgerPeriodRange } from './ledger-period-selector';
 import { getStoredLedgerPeriod, storeLedgerPeriod, type LedgerPeriod } from '../utils/ledger-period';
@@ -1431,7 +1432,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                 name: supplier.name,
                 nameUrdu: supplier.nameUrdu,
                 phone: supplier.phone,
-                address: supplier.address,
+                address: contactAddressText(supplier),
               }}
               payment={{
                 amount: selectedPayment.entry.debit,

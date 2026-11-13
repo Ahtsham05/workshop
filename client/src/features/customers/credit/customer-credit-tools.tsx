@@ -31,6 +31,7 @@ import { usePermissions } from '@/context/permission-context'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { useLazyExportCustomersForExcelQuery, type BulkCreditAction } from '@/stores/creditControl.api'
 import { downloadCustomersWorkbook } from '../utils/customer-excel'
+import { useContactLocation } from '@/hooks/use-contact-location'
 import { BulkCreditDialog, type BulkCreditCustomer } from './bulk-credit-dialog'
 import { OverdueReviewDialog } from './overdue-review-dialog'
 
@@ -45,11 +46,14 @@ export function CustomerCreditTools({ selected, onChanged }: { selected: BulkCre
   const [bulkAction, setBulkAction] = useState<BulkCreditAction | null>(null)
   const [overdueOpen, setOverdueOpen] = useState(false)
   const [fetchExport, { isFetching: exporting }] = useLazyExportCustomersForExcelQuery()
+  const contactLocation = useContactLocation()
 
   const exportExcel = async () => {
     try {
       const { results } = await fetchExport().unwrap()
-      downloadCustomersWorkbook(results, `customers-${new Date().toISOString().slice(0, 10)}.xlsx`)
+      downloadCustomersWorkbook(results, `customers-${new Date().toISOString().slice(0, 10)}.xlsx`, {
+        withLocation: contactLocation.enabled,
+      })
       toast.success(t('{{n}} customers exported', { n: results.length }))
     } catch (error) {
       toast.error(getErrorMessage(error, t('Could not export customers')))

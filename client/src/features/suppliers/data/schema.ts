@@ -31,6 +31,18 @@ export const supplierSchema = z.object({
   phone: z.string().optional(), // supplier phone number is optional
   whatsapp: z.string().optional(),
   address: z.string().optional(), // supplier address is optional
+  billingAddress: z
+    .object({
+      line1: z.string().optional(),
+      line2: z.string().optional(),
+      city: z.string().optional(),
+      state: z.string().optional(),
+      postalCode: z.string().optional(),
+      countryCode: z.string().optional(),
+    })
+    .partial()
+    .nullable()
+    .optional(),
   balance: z.number().optional(),
   customerId: z.string().optional(), // linked shadow Customer record so this supplier can also be billed as a customer
   // Defaults true; deactivating hides the supplier from Purchase pickers without

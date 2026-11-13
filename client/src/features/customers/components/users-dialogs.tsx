@@ -14,7 +14,7 @@ export default function UsersDialogs({setFetch}:any) {
 
   const handleImport = async (
     customers: any[],
-    options?: { duplicateStrategy?: 'skip' | 'update' | 'error'; openingBalanceDate?: string }
+    options?: { duplicateStrategy?: 'skip' | 'update' | 'error' | 'location'; openingBalanceDate?: string }
   ) => {
     // The per-row breakdown in the response is what the import dialog turns into "row 14
     // could not be saved because…", so it's returned rather than swallowed. The AI card

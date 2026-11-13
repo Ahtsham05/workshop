@@ -6,6 +6,8 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { useLanguage } from '@/context/language-context'
+import { useContactLocation } from '@/hooks/use-contact-location'
+import { locationPreview, readLocationCells, withLocationFields, withLocationSample, type ImportLocation } from '@/lib/contact-location-import'
 import { Label } from '@/components/ui/label'
 import { DatePicker } from '@/components/ui/date-picker'
 import { getBusinessToday } from '@/lib/business-timezone'
@@ -42,7 +44,8 @@ export interface BulkCustomerResult {
   warnings?: Array<{ index?: number; name?: string; message: string }>
 }
 
-export type DuplicateStrategy = 'skip' | 'update' | 'error'
+/** 'location' = for already-saved contacts, only fill in City / State / Country. */
+export type DuplicateStrategy = 'skip' | 'update' | 'error' | 'location'
 
 interface CustomerImportDialogProps {
   open: boolean
@@ -53,7 +56,7 @@ interface CustomerImportDialogProps {
   ) => Promise<BulkCustomerResult | void>
 }
 
-interface ImportCustomer {
+interface ImportCustomer extends ImportLocation {
   name: string
   nameUrdu?: string
   phone?: string
@@ -77,7 +80,16 @@ const CUSTOMER_TYPES = ['retail', 'wholesale', 'vip', 'corporate']
 
 export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerImportDialogProps) {
   const { t } = useLanguage()
-  const [duplicateStrategy, setDuplicateStrategy] = useState<DuplicateStrategy>('skip')
+  const location = useContactLocation()
+  // Wholesale / distributor: re-importing an older list adds City / State / Country to the
+  // customers already saved and changes nothing else on them — the safe default.
+  const [pickedStrategy, setDuplicateStrategy] = useState<DuplicateStrategy | null>(null)
+  const duplicateStrategy: DuplicateStrategy = pickedStrategy ?? (location.enabled ? 'location' : 'skip')
+  const importFields = useMemo(() => withLocationFields(CUSTOMER_FIELDS, location.enabled), [location.enabled])
+  const sampleRows = useMemo(
+    () => withLocationSample(SAMPLE_ROWS, location.enabled, location.defaultCountry),
+    [location.enabled, location.defaultCountry],
+  )
   const [openingBalanceDate, setOpeningBalanceDate] = useState<string>(() => getBusinessToday())
   const { hasPermission } = usePermissions()
   const canManageCredit = hasPermission('manageCreditLimits')
@@ -109,6 +121,7 @@ export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerI
 
       const address = parseText(values.address)
       if (address) customer.address = address
+      if (location.enabled) Object.assign(customer, readLocationCells(values))
       const taxNumber = parseText(values.taxNumber, { code: true })
       if (taxNumber) customer.taxNumber = taxNumber
       const notes = parseText(values.notes)
@@ -155,7 +168,7 @@ export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerI
 
       return { value: customer, warning: warnings.length ? warnings.join('; ') : undefined }
     },
-    [t, canManageCredit]
+    [t, canManageCredit, location.enabled]
   )
 
   const importBatch = useCallback(
@@ -163,7 +176,11 @@ export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerI
       const result = (await onImport(items, { duplicateStrategy, openingBalanceDate })) || {}
       const notes: string[] = []
       if (result.updatedCount) {
-        notes.push(t('{{count}} existing customers were updated', { count: result.updatedCount }))
+        notes.push(
+          duplicateStrategy === 'location'
+            ? t('City / State / Country added to {{count}} existing customers', { count: result.updatedCount })
+            : t('{{count}} existing customers were updated', { count: result.updatedCount }),
+        )
       }
       return {
         insertedCount: (result.insertedCount || 0) + (result.updatedCount || 0),
@@ -191,8 +208,8 @@ export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerI
       title={t('Import Customers from Excel')}
       description={t('Upload your customer list. Columns are matched automatically — you can check and change them before importing.')}
       entityPlural={t('customers')}
-      fields={CUSTOMER_FIELDS}
-      sampleRows={SAMPLE_ROWS}
+      fields={importFields}
+      sampleRows={sampleRows}
       templateFileName='customers-import-template.xlsx'
       templateSheetName='Customers'
       buildRow={buildRow}
@@ -202,10 +219,13 @@ export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerI
         <div className='space-y-1.5'>
           <Label className='text-sm'>{t('If a customer is already saved')}</Label>
           <Select value={duplicateStrategy} onValueChange={(value) => setDuplicateStrategy(value as DuplicateStrategy)}>
-            <SelectTrigger className='h-8 w-full sm:w-[320px]'>
+            <SelectTrigger className='h-8 w-full sm:w-[400px]'>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              {location.enabled && (
+                <SelectItem value='location'>{t('Add City / State / Country only (change nothing else)')}</SelectItem>
+              )}
               <SelectItem value='skip'>{t('Skip them (keep what is already saved)')}</SelectItem>
               <SelectItem value='update'>{t('Update their details — contact, credit limit, terms, hold (balance is not changed)')}</SelectItem>
               <SelectItem value='error'>{t('Report them as problem rows')}</SelectItem>
@@ -214,6 +234,11 @@ export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerI
           <p className='text-xs text-muted-foreground'>
             {t('Customers are matched by phone number, then email, then name.')}
           </p>
+          {duplicateStrategy === 'location' && (
+            <p className='text-xs text-muted-foreground'>
+              {t('Imported before City / State / Country existed? Import the same file again with those columns added — saved customers only get their location filled in. Names, phones, balances and credit stay as they are; new customers in the file are added.')}
+            </p>
+          )}
           <p className='text-xs text-muted-foreground'>
             {t('Tip: Export Excel on the Customers page gives a file in this layout — change limits there and import it back with "Update their details".')}
           </p>
@@ -243,7 +268,7 @@ export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerI
             )}
           </div>
           <div className='text-muted-foreground'>
-            {[customer.phone, customer.email, customer.address].filter(Boolean).join(' · ') || t('No contact details')}
+            {[customer.phone, customer.email, customer.address, locationPreview(customer)].filter(Boolean).join(' · ') || t('No contact details')}
             {customer.balance ? ` · ${t('Balance')}: ${customer.balance}` : ''}
             {customer.creditLimit !== undefined ? ` · ${t('Limit')}: ${customer.creditLimit || t('none')}` : ''}
             {customer.paymentTerms ? ` · ${t(PAYMENT_TERM_LABELS[customer.paymentTerms])}` : ''}

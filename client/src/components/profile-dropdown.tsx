@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { CurrentUserAvatar } from '@/components/user-avatar'
 import { Button } from '@/components/ui/button'
@@ -21,6 +22,7 @@ import { WhatsAppLogo } from '@/components/support/whatsapp-logo'
 import { useSupportContext } from '@/hooks/use-support-context'
 import { SUPPORT, supportMailUrl, supportTelUrl, supportWhatsAppUrl } from '@/config/support'
 import { usePWAInstall } from '@/hooks/use-pwa-install'
+import { IOSInstallGuideDialog } from '@/components/ios-install-guide'
 import { useLogout } from '@/hooks/use-logout'
 
 export function ProfileDropdown({
@@ -33,7 +35,8 @@ export function ProfileDropdown({
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const { data: branch } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { t } = useLanguage()
-  const { isInstallable, install } = usePWAInstall()
+  const { isInstallable, isInstalled, isIOS, install } = usePWAInstall()
+  const [iosGuideOpen, setIosGuideOpen] = useState(false)
   const { logout: safeLogout } = useLogout()
   const supportCtx = useSupportContext()
 
@@ -41,15 +44,18 @@ export function ProfileDropdown({
     void safeLogout()
   }
 
+  // iPhone/iPad never get an install prompt — they add the app from Safari's Share menu.
+  const canInstall = !isInstalled && (isInstallable || isIOS)
+
   const handleInstallApp = async () => {
-    try {
-      await install()
-      toast.success('App installed! You can now access it from your home screen.')
-    } catch {
-      toast.error('Installation failed. Try again or use "Add to home screen".')
+    if (!isInstallable && isIOS) {
+      setIosGuideOpen(true)
+      return
     }
+    if (await install()) toast.success('App installed! You can now access it from your home screen.')
   }
   return (
+    <>
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
@@ -109,7 +115,7 @@ export function ProfileDropdown({
               <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
             </Link>
           </DropdownMenuItem>
-          {isInstallable && (
+          {canInstall && (
             <DropdownMenuItem onClick={handleInstallApp}>
               <Download className='mr-2 h-4 w-4' />
               <span>Install App</span>
@@ -154,5 +160,7 @@ export function ProfileDropdown({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    <IOSInstallGuideDialog open={iosGuideOpen} onOpenChange={setIosGuideOpen} />
+    </>
   )
 }

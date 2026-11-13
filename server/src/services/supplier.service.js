@@ -7,6 +7,7 @@ const supplierLedgerService = require('./supplierLedger.service');
 const { toImportText, parseImportNumber, matchKey, phoneKey, isValidEmail } = require('../utils/importRow');
 const accountsSystemService = require('./accountsSystem.service');
 const { startOfBusinessDay } = require('../utils/businessTimezone');
+const { mergeBillingAddress, importLocationFields, nestBillingAddress } = require('../utils/location');
 
 /**
  * Create a supplier
@@ -14,7 +15,9 @@ const { startOfBusinessDay } = require('../utils/businessTimezone');
  * @returns {Promise<Supplier>}
  */
 const createSupplier = async (supplierBody) => {
-  const supplier = await Supplier.create(supplierBody);
+  const body = { ...supplierBody };
+  if (body.billingAddress) body.billingAddress = mergeBillingAddress(null, body.billingAddress);
+  const supplier = await Supplier.create(body);
 
   await supplierLedgerService.syncOpeningBalanceEntry({
     supplierId: supplier._id,
@@ -63,6 +66,7 @@ const ensureSupplierCustomerAccount = async (supplier) => {
     phone: supplier.phone,
     whatsapp: supplier.whatsapp,
     address: supplier.address,
+    billingAddress: supplier.billingAddress,
     isSupplierAccount: true,
     linkedSupplierId: supplier._id,
   });
@@ -114,6 +118,11 @@ const updateSupplierById = async (supplierId, updateBody) => {
     }
   }
 
+  if (updates.billingAddress) {
+    supplier.set('billingAddress', mergeBillingAddress(supplier.billingAddress, updates.billingAddress));
+    delete updates.billingAddress;
+  }
+
   const originalBalance = Number(supplier.balance || 0);
   Object.assign(supplier, updates);
   await supplier.save();
@@ -129,6 +138,7 @@ const updateSupplierById = async (supplierId, updateBody) => {
         phone: supplier.phone,
         whatsapp: supplier.whatsapp,
         address: supplier.address,
+        billingAddress: supplier.billingAddress,
       },
     );
   }
@@ -200,12 +210,12 @@ const ACCOUNT_SETUP_CONCURRENCY = 10;
  * @param {Array} suppliersToAdd
  * @param {Object} branchContext - { organizationId, branchId, createdBy }
  * @param {Object} [options]
- * @param {'skip'|'update'|'error'} [options.duplicateStrategy='skip']
+ * @param {'skip'|'update'|'error'|'location'} [options.duplicateStrategy='skip']
  * @returns {Promise<Object>}
  */
 const bulkAddSuppliers = async (suppliersToAdd, branchContext = {}, options = {}) => {
   const { organizationId, branchId, createdBy } = branchContext;
-  const duplicateStrategy = ['skip', 'update', 'error'].includes(options.duplicateStrategy)
+  const duplicateStrategy = ['skip', 'update', 'error', 'location'].includes(options.duplicateStrategy)
     ? options.duplicateStrategy
     : 'skip';
   // Optional "Opening balance date" for every imported opening balance (YYYY-MM-DD),
@@ -279,6 +289,24 @@ const bulkAddSuppliers = async (suppliersToAdd, branchContext = {}, options = {}
       skipped.push({ index, name, reason: `"${name}" is already saved — left unchanged` });
       return;
     }
+    // Re-importing a list that was imported before City / State / Country existed: a saved
+    // contact gets only its location filled in — name, phones, credit, balance untouched.
+    if (match && duplicateStrategy === 'location') {
+      const location = importLocationFields(row);
+      if (location.invalidCountry) {
+        warnings.push({ index, name, message: `Country "${location.invalidCountry}" is not recognised — left unchanged` });
+      }
+      const set = {};
+      Object.entries(location.fields).forEach(([key, value]) => {
+        if (value) set[key] = value;
+      });
+      if (!Object.keys(set).length) {
+        skipped.push({ index, name, reason: `"${name}" is already saved — this row has no City / State / Country` });
+        return;
+      }
+      updateOps.push({ index, name, filter: { _id: match._id, organizationId, branchId }, set });
+      return;
+    }
 
     const fields = {
       name,
@@ -289,6 +317,11 @@ const bulkAddSuppliers = async (suppliersToAdd, branchContext = {}, options = {}
       address: toImportText(row.address),
       taxNumber: toImportText(row.taxNumber),
     };
+    const location = importLocationFields(row);
+    Object.assign(fields, location.fields);
+    if (location.invalidCountry) {
+      warnings.push({ index, name, message: `Country "${location.invalidCountry}" is not recognised — imported without a country` });
+    }
 
     if (match && duplicateStrategy === 'update') {
       // Empty cell means "leave it alone", never "clear it". Balance stays out of it —
@@ -301,7 +334,7 @@ const bulkAddSuppliers = async (suppliersToAdd, branchContext = {}, options = {}
       return;
     }
 
-    validDocs.push({ ...fields, balance: balance.value ?? 0, organizationId, branchId, createdBy });
+    validDocs.push({ ...nestBillingAddress(fields), balance: balance.value ?? 0, organizationId, branchId, createdBy });
     validMeta.push({ index, name });
   });
 

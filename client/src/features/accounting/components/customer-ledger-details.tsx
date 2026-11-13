@@ -1,3 +1,4 @@
+import { contactAddressText } from '@/lib/countries'
 import { useState, useEffect, useMemo } from 'react';
 import { LedgerPeriodSelector, formatLedgerPeriodRange } from './ledger-period-selector';
 import { getStoredLedgerPeriod, isAllTimePeriod, storeLedgerPeriod, type LedgerPeriod } from '../utils/ledger-period';
@@ -1454,7 +1455,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
         accountName: customer.name,
         accountNameUrdu: customer.nameUrdu,
         accountPhone: customer.phone,
-        accountAddress: customer.address,
+        accountAddress: contactAddressText(customer),
         periodStart: dateRange.startDate,
         periodEnd: dateRange.endDate,
         allTime: isAllTimePeriod(dateRange),
@@ -1818,7 +1819,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                 name: customer.name,
                 nameUrdu: customer.nameUrdu,
                 phone: customer.phone,
-                address: customer.address,
+                address: contactAddressText(customer),
               }}
               payment={{
                 amount: selectedPayment.entry.credit,
