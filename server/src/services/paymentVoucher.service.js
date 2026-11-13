@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { PaymentVoucher, Wallet, Expense, Supplier, Customer } = require('../models');
+const { PaymentVoucher, Wallet, Expense, Supplier, Customer, Employee } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
 const walletEntryService = require('./walletEntry.service');
@@ -9,6 +9,8 @@ const supplierLedgerService = require('./supplierLedger.service');
 const customerLedgerService = require('./customerLedger.service');
 const voucherEdit = require('./voucherEdit');
 const ledgerDiscountService = require('./ledgerDiscount.service');
+const employeeLedgerService = require('./employeeLedger.service');
+const { formatMoney } = require('../utils/money');
 
 /** Discount fields only ever belong on a supplier line (Discount Received). */
 const DISCOUNT_FIELDS = ['discountAmount', 'discountReason', 'discountPercent', 'discountBaseAmount', 'discountApprovalNote', 'discountNote'];
@@ -35,6 +37,37 @@ const preflightDiscounts = async (organizationId, postedLines, ctx = {}, restore
       discount: ledgerDiscountService.voucherLineDiscount(line),
     })),
   });
+};
+
+const employeePurposeOf = (line) => (line?.employeePurpose === 'advance' ? 'advance' : 'salary');
+const EMPLOYEE_TRANSACTION = { salary: 'salary_payment', advance: 'advance_payment' };
+
+/**
+ * Salary can only be paid up to what the employee has earned and not yet been paid (the payroll
+ * accrual minus earlier payments and advances) — the same rule as Pay Employee. Anything beyond
+ * that is an advance, which the line must say so it lands on the right side of the books (an
+ * advance is money owed back, not a staff expense). Lines for the same employee add up, in order.
+ * @param {Map} [restored] per-employee amount an edit's reversals hand back first
+ */
+const preflightEmployeeSalary = async (scope, postedLines, restored = new Map()) => {
+  const salaryLines = postedLines.filter((line) => line.payeeType === 'employee' && employeePurposeOf(line) === 'salary');
+  if (salaryLines.length === 0) return;
+  const available = new Map();
+  for (const line of salaryLines) {
+    const key = String(line.employeeId);
+    if (!available.has(key)) {
+      const summary = await employeeLedgerService.getEmployeeLedgerSummary(line.employeeId, scope);
+      available.set(key, Number(summary.currentBalance || 0) + (restored.get(key) || 0));
+    }
+    const left = Math.max(0, Math.round(available.get(key) * 100) / 100);
+    if (Number(line.amount) > left + 0.005) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Salary to ${line.payeeName} is more than the payable salary of ${formatMoney(left)}. Pay the extra as an Advance.`
+      );
+    }
+    available.set(key, available.get(key) - Number(line.amount));
+  }
 };
 
 const lineDescription = (voucher, line) => `Payment voucher ${voucher.voucherNumber} — ${line.payeeName}${line.description ? ` (${line.description})` : ''}`;
@@ -219,6 +252,25 @@ const syncCustomerLine = async (voucher, line, ctx = {}) => {
 };
 
 /**
+ * Salary or an advance paid to an employee — posted on their Employee Ledger, which owns the bank /
+ * Cash Book legs (and, for salary, the staff expense) for it. Like supplier / customer lines it must
+ * NOT also go through `syncLineCashEntry`, or the account would be debited twice.
+ */
+const syncEmployeeLine = async (voucher, line) => {
+  const entry = await employeeLedgerService.postVoucherEntry({
+    organizationId: voucher.organizationId,
+    branchId: voucher.branchId,
+    employeeId: line.employeeId,
+    transactionType: EMPLOYEE_TRANSACTION[employeePurposeOf(line)],
+    amount: line.amount,
+    description: lineDescription(voucher, line),
+    voucher,
+    referenceModel: 'PaymentVoucher',
+  });
+  return entry._id;
+};
+
+/**
  * Post every ledger record one line owns, recording the ids of the ones a later reversal has
  * to find (`expenseId` / `supplierLedgerEntryId`) on the line. `voucher` only needs the header
  * fields (number, date, account name, reference, notes, createdBy...), so an edit can pass the
@@ -237,6 +289,8 @@ const postLine = async (voucher, line, isCashAccount, ctx = {}) => {
     line.supplierLedgerEntryId = await syncSupplierLine(voucher, line, ctx);
   } else if (line.payeeType === 'customer') {
     line.customerLedgerEntryId = await syncCustomerLine(voucher, line, ctx);
+  } else if (line.payeeType === 'employee') {
+    line.employeeLedgerEntryId = await syncEmployeeLine(voucher, line);
   } else {
     await syncLineCashEntry(voucher, line, isCashAccount);
   }
@@ -268,6 +322,13 @@ const reverseLine = async (voucher, line) => {
     if (line.customerLedgerEntryId) {
       await customerLedgerService.deleteLedgerEntry(line.customerLedgerEntryId);
     }
+    return;
+  }
+  if (line.payeeType === 'employee') {
+    await employeeLedgerService.removeVoucherEntry(line.employeeLedgerEntryId, {
+      organizationId: voucher.organizationId,
+      branchId: voucher.branchId,
+    });
     return;
   }
 
@@ -319,6 +380,14 @@ const annotateLine = async (voucher, existing, line) => {
     }
     return;
   }
+  if (line.payeeType === 'employee') {
+    await employeeLedgerService.updateVoucherEntryText(
+      existing.employeeLedgerEntryId,
+      { description, notes: voucher.notes || '' },
+      { organizationId: voucher.organizationId, branchId: voucher.branchId }
+    );
+    return;
+  }
 
   await cashBookService.updateDescriptionByReference(line._id, 'PaymentVoucher', description);
   await walletEntryService.updateDescriptionByReference(line._id, 'PaymentVoucher', description);
@@ -334,6 +403,7 @@ const annotateLine = async (voucher, existing, line) => {
 const paymentLegRef = (line) => {
   if (line.payeeType === 'supplier') return { referenceModel: 'SupplierLedger', referenceId: line.supplierLedgerEntryId };
   if (line.payeeType === 'customer') return { referenceModel: 'CustomerLedger', referenceId: line.customerLedgerEntryId };
+  if (line.payeeType === 'employee') return { referenceModel: 'EmployeeLedger', referenceId: line.employeeLedgerEntryId };
   return { referenceModel: 'PaymentVoucher', referenceId: line._id };
 };
 
@@ -361,6 +431,14 @@ const resolveLinePayeeName = async (line, orgId, branchId) => {
       throw new ApiError(httpStatus.NOT_FOUND, 'Customer not found');
     }
     return customer.name;
+  }
+  if (line.payeeType === 'employee') {
+    // Employees belong to a branch — pay only this branch's staff from this branch's accounts.
+    const employee = await Employee.findOne({ _id: line.employeeId, organizationId: orgId, branchId }).select('firstName lastName');
+    if (!employee) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+    }
+    return `${employee.firstName} ${employee.lastName || ''}`.trim();
   }
   return line.payeeName;
 };
@@ -397,6 +475,9 @@ const createVoucher = async (voucherBody, userId, ctx = {}) => {
       supplierName: line.payeeType === 'supplier' ? payeeName : undefined,
       customerId: line.payeeType === 'customer' ? line.customerId : undefined,
       customerName: line.payeeType === 'customer' ? payeeName : undefined,
+      employeeId: line.payeeType === 'employee' ? line.employeeId : undefined,
+      employeeName: line.payeeType === 'employee' ? payeeName : undefined,
+      employeePurpose: line.payeeType === 'employee' ? employeePurposeOf(line) : undefined,
       payeeName,
       amount: Number(line.amount),
       description: line.description || undefined,
@@ -406,6 +487,7 @@ const createVoucher = async (voucherBody, userId, ctx = {}) => {
 
   const totalAmount = resolvedLines.reduce((sum, line) => sum + line.amount, 0);
   await preflightDiscounts(voucherBody.organizationId, resolvedLines, ctx);
+  await preflightEmployeeSalary({ organizationId: voucherBody.organizationId, branchId: voucherBody.branchId }, resolvedLines);
   if (totalAmount <= 0) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Voucher total must be greater than zero');
   }
@@ -473,6 +555,7 @@ const getVoucherDetailById = async (id, scope = {}) => {
 };
 
 const headerOf = (voucher) => ({
+  _id: voucher._id,
   organizationId: voucher.organizationId,
   branchId: voucher.branchId,
   voucherNumber: voucher.voucherNumber,
@@ -491,6 +574,8 @@ const lineMoneyChanged = (existing, line) =>
   (line.payeeType === 'expense' && !voucherEdit.sameText(existing.category, line.category)) ||
   (line.payeeType === 'supplier' && !voucherEdit.sameId(existing.supplierId, line.supplierId)) ||
   (line.payeeType === 'customer' && !voucherEdit.sameId(existing.customerId, line.customerId)) ||
+  (line.payeeType === 'employee' &&
+    (!voucherEdit.sameId(existing.employeeId, line.employeeId) || employeePurposeOf(existing) !== employeePurposeOf(line))) ||
   !voucherEdit.sameAmount(lineDiscountAmount(existing), lineDiscountAmount(line)) ||
   (lineDiscountAmount(line) > 0 && !voucherEdit.sameText(existing.discountReason, line.discountReason));
 
@@ -509,7 +594,13 @@ const resolveEditedLine = async (input, existing, voucher) => {
     existing.payeeType === 'customer' &&
     voucherEdit.sameId(existing.customerId, input.customerId);
 
-  const payeeName = unchangedSupplier || unchangedCustomer
+  const unchangedEmployee =
+    existing &&
+    input.payeeType === 'employee' &&
+    existing.payeeType === 'employee' &&
+    voucherEdit.sameId(existing.employeeId, input.employeeId);
+
+  const payeeName = unchangedSupplier || unchangedCustomer || unchangedEmployee
     ? existing.payeeName
     : await resolveLinePayeeName(input, voucher.organizationId, voucher.branchId);
 
@@ -521,6 +612,9 @@ const resolveEditedLine = async (input, existing, voucher) => {
     supplierName: input.payeeType === 'supplier' ? (unchangedSupplier ? existing.supplierName : payeeName) : undefined,
     customerId: input.payeeType === 'customer' ? input.customerId : undefined,
     customerName: input.payeeType === 'customer' ? (unchangedCustomer ? existing.customerName : payeeName) : undefined,
+    employeeId: input.payeeType === 'employee' ? input.employeeId : undefined,
+    employeeName: input.payeeType === 'employee' ? (unchangedEmployee ? existing.employeeName || existing.payeeName : payeeName) : undefined,
+    employeePurpose: input.payeeType === 'employee' ? employeePurposeOf(input) : undefined,
     payeeName,
     amount: Number(input.amount),
     description: input.description || undefined,
@@ -610,6 +704,7 @@ const updateVoucher = async (voucherId, scope, body, userId, ctx = {}) => {
       pair.line.expenseId = pair.existing.expenseId;
       pair.line.supplierLedgerEntryId = pair.existing.supplierLedgerEntryId;
       pair.line.customerLedgerEntryId = pair.existing.customerLedgerEntryId;
+      pair.line.employeeLedgerEntryId = pair.existing.employeeLedgerEntryId;
       pair.line.creditDraws = pair.existing.creditDraws;
       pair.line.discountLedgerEntryId = pair.existing.discountLedgerEntryId;
     }
@@ -629,6 +724,20 @@ const updateVoucher = async (voucherId, scope, body, userId, ctx = {}) => {
   const postSet = new Set([...plan.added, ...plan.replaced]);
   await preflightDiscounts(organizationId, pairs.filter((pair) => postSet.has(pair)).map((pair) => pair.line), ctx, restored);
   const totalDiscount = pairs.reduce((sum, pair) => sum + lineDiscountAmount(pair.line), 0);
+
+  // Salary checked against what is payable once the reversed lines have handed their money back.
+  const restoredToEmployee = new Map();
+  toReverse
+    .filter((line) => line.payeeType === 'employee')
+    .forEach((line) => {
+      const key = String(line.employeeId);
+      restoredToEmployee.set(key, (restoredToEmployee.get(key) || 0) + Number(line.amount || 0));
+    });
+  await preflightEmployeeSalary(
+    { organizationId, branchId },
+    pairs.filter((pair) => postSet.has(pair)).map((pair) => pair.line),
+    restoredToEmployee
+  );
 
   await voucherEdit.assertLegsNotReconciled({
     organizationId,

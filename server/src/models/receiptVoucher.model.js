@@ -16,7 +16,9 @@ const receiptVoucherLineSchema = new mongoose.Schema(
   {
     sourceType: {
       type: String,
-      enum: ['customer', 'income'],
+      // 'employee' = cash a staff member handed back (returning an advance, repaying a loan or an
+      // over-payment) — posted on their Employee Ledger as Cash Received.
+      enum: ['customer', 'income', 'employee'],
       required: true,
     },
     // Income category name when sourceType === 'income' (free text, matches how Payment
@@ -31,6 +33,15 @@ const receiptVoucherLineSchema = new mongoose.Schema(
     },
     // Denormalized customer name so the line stays readable if the customer is later renamed.
     customerName: {
+      type: String,
+      trim: true,
+    },
+    employeeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employee',
+    },
+    // Denormalized employee name so the line stays readable if the employee is later renamed.
+    employeeName: {
       type: String,
       trim: true,
     },
@@ -53,6 +64,11 @@ const receiptVoucherLineSchema = new mongoose.Schema(
     customerLedgerEntryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'CustomerLedger',
+    },
+    // Set after employeeLedgerService.postVoucherEntry succeeds (sourceType === 'employee' only).
+    employeeLedgerEntryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'EmployeeLedger',
     },
     // Settlement discount given with this line (customer lines — Discount Allowed) — its own ledger row, linked to the
     // payment row (services/ledgerDiscount.service.js). Cash moved = amount; settled = amount +

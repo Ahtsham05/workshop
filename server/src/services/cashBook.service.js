@@ -152,7 +152,9 @@ const deleteEmployeeLedgerPaymentCashBook = async (entry, employeeName = '') => 
   const name = String(employeeName || '').trim();
   const reference = String(entry.reference || '').trim();
   const amount = Number(entry.credit || 0);
-  if (name && amount > 0) {
+  // Fallback for legacy rows that were never linked by referenceId — only when the linked delete
+  // found nothing, or it could also take out an unrelated entry that happens to share the wording.
+  if (!deleted && name && amount > 0 && entry.transactionType !== 'payment_received') {
     const label = entry.transactionType === 'advance_payment' ? 'Advance payment' : 'Salary payment';
     const descriptions = reference
       ? [`${label} to ${name} (${reference})`, `${label} to ${name}`]

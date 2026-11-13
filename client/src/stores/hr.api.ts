@@ -36,6 +36,88 @@ const baseQueryWithAuth: BaseQueryFn<
   return result;
 };
 
+/**
+ * Ledger figures for one employee. Sign convention of `currentBalance`: + = the business owes
+ * the employee (salary payable), − = the employee owes the business (advance / loan).
+ */
+export interface EmployeeLedgerFigures {
+  totalPayable: number
+  totalSalaryPaid: number
+  totalAdvancePaid: number
+  totalAdvanceRecovered: number
+  /** Cash the employee handed back (Receipt Voucher). */
+  totalCashReceived: number
+  outstandingAdvance: number
+  remainingPayable: number
+  payableNow: number
+  receivableNow: number
+  currentBalance: number
+  transactionCount: number
+}
+
+export interface EmployeeWithBalance extends EmployeeLedgerFigures {
+  id: string
+  employeeId: string
+  name: string
+  phone: string
+  employmentStatus: string
+  designation: string
+  department: string
+  monthlySalary: number
+  lastActivity: string | null
+}
+
+export type EmployeeLedgerTransactionType =
+  | 'salary_payable'
+  | 'salary_payment'
+  | 'advance_payment'
+  | 'advance_recovery'
+  | 'adjustment'
+  | 'payment_received'
+
+export interface EmployeeStatementRow {
+  id: string
+  transactionDate: string
+  transactionType: EmployeeLedgerTransactionType
+  description: string
+  reference: string
+  referenceId: string | null
+  referenceModel: string | null
+  paymentMethod: string
+  walletType: string
+  notes: string
+  debit: number
+  credit: number
+  /** A memo row (advance recovery) shows its amount but does not move the balance. */
+  memo: boolean
+  runningBalance: number
+  /** Posted by a Payment / Receipt Voucher — edited from there, not here. */
+  voucherOwned: boolean
+  createdBy: string
+  createdAt: string
+}
+
+export interface EmployeeStatement {
+  employee: {
+    id: string
+    employeeId: string
+    name: string
+    phone: string
+    employmentStatus: string
+    designation: string
+    department: string
+    joiningDate: string | null
+    monthlySalary: number
+  }
+  period: { startDate: string | null; endDate: string | null }
+  openingBalance: number
+  totals: { debit: number; credit: number }
+  closingBalance: number
+  rows: EmployeeStatementRow[]
+  /** All-time figures (not limited to the period). */
+  summary: EmployeeLedgerFigures
+}
+
 export const hrApi = createApi({
   reducerPath: 'hrApi',
   baseQuery: baseQueryWithAuth,
@@ -262,8 +344,12 @@ export const hrApi = createApi({
       query: (params) => ({ url: '/employee-ledger', params }),
       providesTags: ['EmployeeLedger'],
     }),
-    getEmployeesWithLedgerBalances: builder.query({
+    getEmployeesWithLedgerBalances: builder.query<EmployeeWithBalance[], void>({
       query: () => ({ url: '/employee-ledger/employees-with-balances' }),
+      providesTags: ['EmployeeLedger'],
+    }),
+    getEmployeeStatement: builder.query<EmployeeStatement, { employeeId: string; startDate?: string; endDate?: string }>({
+      query: ({ employeeId, ...params }) => ({ url: `/employee-ledger/employee/${employeeId}/statement`, params }),
       providesTags: ['EmployeeLedger'],
     }),
     getEmployeeLedgerSummary: builder.query({
@@ -338,6 +424,7 @@ export const {
   useMarkPayrollPaidMutation,
   useGetEmployeeLedgerEntriesQuery,
   useGetEmployeesWithLedgerBalancesQuery,
+  useGetEmployeeStatementQuery,
   useGetEmployeeLedgerSummaryQuery,
   useCreateEmployeeAdvancePaymentMutation,
   useCreateEmployeePaymentMutation,

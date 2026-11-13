@@ -388,6 +388,14 @@ export const sidebarData: SidebarData = {
           excludeBusinessTypes: ['school'],
         },
         {
+          title: 'Employee Ledger',
+          url: '/hr/employee-ledger',
+          icon: IconBook,
+          anyPermission: ['getPayroll', 'getEmployees'],
+          requiredFeature: 'hr_management',
+          excludeBusinessTypes: ['school'],
+        },
+        {
           title: 'HR Settings',
           url: '/hr/settings',
           icon: IconSettings,

@@ -183,6 +183,14 @@ import { formatAppDate } from '@/lib/date-format'
 import { useNativeLanguageName } from '@/hooks/use-native-language-name'
 import { useTransactionLayout } from '@/lib/transaction-layout'
 import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
+import { appZoomFactor } from '@/lib/appearance'
+import { MobileInvoiceForm, type MobilePageAction } from './mobile/mobile-invoice-form'
+import { MobilePostedInvoice } from './mobile/mobile-posted-invoice'
+import type { MobileLineExtras } from './mobile/mobile-line-editor'
+import type { ApiRecord } from './mobile/mobile-utils'
+
+/** Same test as useIsPhone, readable synchronously inside effects and callbacks. */
+const isPhoneViewport = () => typeof window !== 'undefined' && window.innerWidth < 640 * appZoomFactor()
 import { useWarehouseQuantities } from '@/hooks/use-warehouse-quantities'
 import { WarehouseStockTrigger } from '@/components/warehouse-stock-trigger'
 /** Toggle to show payment source fields on invoice checkout. */
@@ -222,6 +230,9 @@ interface InvoicePanelProps {
    * Product Catalog panel's own barcode field already uses. Wired to the header's "Scan
    * Barcode" quick action so it also works with the catalog hidden. */
   onBarcodeSearch?: (barcode: string) => void
+  /** Phone layout only: page-level actions (history, hold, held drafts…) for its ⋮ menu —
+   * the page's own toolbar is hidden on phones. */
+  mobilePageActions?: MobilePageAction[]
 }
 
 export function InvoicePanel({
@@ -249,6 +260,7 @@ export function InvoicePanel({
   showProductCatalog = true,
   stickyActionsContainer = null,
   onBarcodeSearch,
+  mobilePageActions,
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
   const nativeLanguageName = useNativeLanguageName()
@@ -266,6 +278,9 @@ export function InvoicePanel({
   // copies of the same row would double up every interactive control (Popover triggers,
   // input refs) under one shared item-id key, breaking things like the product picker.
   const isPhone = useIsPhone()
+  // Phone only: after a save, the posted invoice (print preview + Share/Print) opens over the
+  // fresh form — Odoo's "Confirm" → posted invoice.
+  const [postedInvoice, setPostedInvoice] = useState<{ id: string; number?: string } | null>(null)
   // Preview of the number the next save would actually receive (see next-number route +
   // Invoice.generateNextDocumentNumber) — shown read-only until the user clicks the pencil
   // to type their own. Only relevant before the invoice is first saved; a saved invoice
@@ -415,6 +430,9 @@ export function InvoicePanel({
       autoOpenedInvoiceItemIdRef.current !== first.id
     ) {
       autoOpenedInvoiceItemIdRef.current = first.id
+      // Phones open on the Odoo-style form itself; the full-screen customer search waits
+      // for a tap instead of covering the page on arrival.
+      if (isPhoneViewport()) return
       queueMicrotask(() => {
         setProductSelectOpen('')
         setCustomerSelectOpen(true)
@@ -1121,7 +1139,7 @@ export function InvoicePanel({
   // object handleProductSelect expects, using the *variant's* real price/cost/stock
   // when the row is a variant, and wires variantId straight through.
   const handleCatalogItemSelect = useCallback(
-    (itemId: string, catalogItem: PurchaseCatalogItem) => {
+    (itemId: string, catalogItem: PurchaseCatalogItem, itemsOverride?: InvoiceItem[]) => {
       const builtProduct = {
         id: catalogItem.productId,
         _id: catalogItem.productId,
@@ -1142,7 +1160,7 @@ export function InvoicePanel({
         cost: catalogItem.cost,
         stockQuantity: catalogItem.stockQuantity,
       }
-      handleProductSelect(itemId, builtProduct, catalogItem.variantId)
+      handleProductSelect(itemId, builtProduct, catalogItem.variantId, itemsOverride)
     },
     [handleProductSelect]
   )
@@ -1636,6 +1654,32 @@ export function InvoicePanel({
     }))
   }, [setInvoice])
 
+  // Picking a customer (desktop popover and the phone's customer search). Wholesale /
+  // distribution (payment cards) keeps the sale Cash; everyone else switches to Credit.
+  const applyCustomerSelection = useCallback((customer: ApiRecord | 'walk-in') => {
+    if (customer === 'walk-in') {
+      setInvoice(prev => ({ ...prev, customerId: 'walk-in' }))
+      return
+    }
+    const customerId = customer._id || customer.id
+    setInvoice(prev => paymentCards ? {
+      ...prev,
+      customerId,
+      customerName: customer.name,
+    } : {
+      ...prev,
+      customerId,
+      customerName: customer.name, // Set customer name for editing
+      type: 'credit',
+      // Switching to credit must clear the cash-default paidAmount/balance
+      // (mirrors updateInvoiceType) — items added before a customer is
+      // picked default to type 'cash', which forces paidAmount = total;
+      // left uncorrected, the invoice saves as fully paid/cash-equivalent.
+      paidAmount: 0,
+      balance: prev.total,
+    })
+  }, [setInvoice, paymentCards])
+
   const handleSaveInvoice = useCallback(async (requestedPrint: 'none' | PaperSize = 'none') => {
     const printType: 'none' | PaperSize = canPrint ? requestedPrint : 'none'
     // Validate required fields
@@ -1972,6 +2016,13 @@ export function InvoicePanel({
         notes: (r.notes as string | undefined) ?? invoice.notes,
         termsAndConditions: (r.termsAndConditions as string | undefined) ?? invoice.termsAndConditions,
         receivedByName: (r.receivedByName as string | undefined) ?? invoice.receivedByName,
+      }
+
+      // Phones: show the posted invoice (print preview, Share, Print) — offline saves have no
+      // server id to load, so they stay on the fresh form with the toast above.
+      const savedId = r._offline ? '' : String(r.id || r._id || '')
+      if (savedId && isPhoneViewport()) {
+        setPostedInvoice({ id: savedId, number: savedInvoicePayload.invoiceNumber })
       }
 
       // Handle print
@@ -3064,9 +3115,26 @@ export function InvoicePanel({
       </div>
     )
 
+    // Phone line editor: the same unit picker, sized for a thumb.
+    const unitSelectMobile = showUnitConversions && hasProduct ? (
+      <Select value={item.unit || 'pcs'} onValueChange={updateUnit}>
+        <SelectTrigger className='h-12 min-w-[6rem] rounded-xl text-sm'>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {unitOptions.map((unitOption) => (
+            <SelectItem key={unitOption.value} value={unitOption.value}>
+              {unitOption.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    ) : null
+
     return {
       hasProduct, productCell, qtyControl, priceControl, discountControl, totalDisplay, deleteButton, historyButton,
       productCellCard, qtyControlCard, priceControlCard, discountControlCard, totalDisplayCard,
+      stockBadge, branchTrigger, serialTrigger, batchTags, insufficientStockWarning, unitSelectMobile,
     }
   }
 
@@ -3101,6 +3169,370 @@ export function InvoicePanel({
       </div>
     )
   }
+
+  // Payment method, paid amount, split payment, cash change and the customer's running balance —
+  // one block rendered by the desktop Payment & Amount card and the phone's Payment tab.
+  const paymentDetailsBlock = (
+    <div className='space-y-4'>
+      {/* Payment Method selector — gated by SHOW_INVOICE_PAYMENT_METHOD_UI */}
+      {SHOW_INVOICE_PAYMENT_METHOD_UI && paymentCards && invoice.type !== 'pending' && invoice.type !== 'quotation' && (
+        <PaymentMethodCards
+          label={t('payment_method') || 'Payment Method'}
+          wallets={wallets}
+          paymentMethod={invoice.paymentMethod}
+          walletType={invoice.walletType}
+          reference={invoice.paymentReference}
+          compact={showProductCatalog}
+          onSelect={(selection) =>
+            setInvoice(prev => ({
+              ...prev,
+              paymentMethod: selection.paymentMethod,
+              walletType: selection.walletType,
+              // A reference belongs to one tender — a new card starts blank.
+              paymentReference:
+                prev.paymentMethod === selection.paymentMethod && prev.walletType === selection.walletType
+                  ? prev.paymentReference
+                  : undefined,
+              // The split leg's bucket is derived from the primary method — stale once it changes.
+              splitPaymentMethod: undefined,
+              splitWalletType: undefined,
+              splitPaidAmount: 0,
+            }))
+          }
+          onReferenceChange={(paymentReference) => setInvoice(prev => ({ ...prev, paymentReference }))}
+        />
+      )}
+      {SHOW_INVOICE_PAYMENT_METHOD_UI && !paymentCards && invoice.type !== 'pending' && invoice.type !== 'quotation' && (
+        <div className='space-y-3'>
+          <div>
+            <Label className='mb-2 block'>{t('payment_method') || 'Payment Method'}</Label>
+            <Select
+              value={
+                invoice.paymentMethod === 'wallet' && invoice.walletType
+                  ? toWalletOptionValue(invoice.walletType)
+                  : invoice.paymentMethod || 'cash'
+              }
+              onValueChange={(val: string) => {
+                if (isWalletOptionValue(val)) {
+                  setInvoice(prev => ({
+                    ...prev,
+                    paymentMethod: 'wallet',
+                    walletType: getWalletTypeFromOptionValue(val),
+                    // The split leg's bucket is derived from this field — stale once it changes.
+                    splitPaymentMethod: undefined,
+                    splitWalletType: undefined,
+                    splitPaidAmount: 0,
+                  }))
+                } else {
+                  setInvoice(prev => ({
+                    ...prev,
+                    paymentMethod: val as 'cash',
+                    walletType: undefined,
+                    splitPaymentMethod: undefined,
+                    splitWalletType: undefined,
+                    splitPaidAmount: 0,
+                  }))
+                }
+              }}
+            >
+              <SelectTrigger className='w-full'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {paymentMethodOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {wallets.length === 0 && (
+              <p className='mt-1 text-xs text-muted-foreground'>{t('no_wallets_configured') || 'No wallets configured. Add one from the Wallet page.'}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {invoice.type !== 'pending' && invoice.type !== 'quotation' && (invoice.type === 'credit' || (invoice.type === 'cash' && invoice.splitPaymentMethod)) && (
+        <div>
+          <Label htmlFor="paidAmount">{t('paid_amount')}</Label>
+          <Input
+            type="text"
+            inputMode="decimal"
+            showVoiceInput={false}
+            value={paidAmountInput}
+            onChange={(e) => handlePaidAmountChange(e.target.value)}
+            placeholder="0.00"
+          />
+        </div>
+      )}
+
+      {SHOW_INVOICE_PAYMENT_METHOD_UI && invoice.type !== 'pending' && invoice.type !== 'quotation' && (
+        <SplitPaymentFields
+          primaryMethod={invoice.paymentMethod === 'wallet' ? 'wallet' : 'cash'}
+          wallets={wallets}
+          paidAmount={invoice.paidAmount || 0}
+          showBalance={false}
+          value={{
+            splitPaymentMethod: invoice.splitPaymentMethod,
+            splitWalletType: invoice.splitWalletType,
+            splitPaidAmount: invoice.splitPaidAmount,
+          }}
+          onChange={(patch) => setInvoice(prev => ({ ...prev, ...patch }))}
+        />
+      )}
+
+      {/* Cash Received & Change Calculator — brought back for catalog-shown mode
+          only, per request; the compact catalog-hidden layout dropped it earlier in
+          favor of editing Paid Amount directly. Only for pure-cash payments, and
+          hidden once splitting is on: "amount given by customer" no longer means the
+          whole total was cash, so the change math would be wrong. */}
+      {showProductCatalog && invoice.type !== 'pending' && invoice.type !== 'quotation' && invoice.type === 'cash' && (!invoice.paymentMethod || invoice.paymentMethod === 'cash') && !invoice.splitPaymentMethod && (
+        <div className='space-y-3 p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'>
+          <h4 className='text-sm font-semibold text-emerald-800 dark:text-emerald-200 flex items-center gap-2'>
+            <Banknote className='h-4 w-4' />
+            Cash Received
+          </h4>
+          <div>
+            <Label className='text-xs text-muted-foreground'>Amount Given by Customer ({currencySymbol})</Label>
+            <Input
+              type="text"
+              inputMode="decimal"
+              showVoiceInput={false}
+              value={cashReceivedInput}
+              onChange={(e) => setCashReceivedInput(e.target.value)}
+              placeholder={invoice.total.toFixed(2)}
+              className='mt-1 text-base font-semibold'
+              onFocus={(e) => e.target.select()}
+            />
+          </div>
+          {parseFloat(cashReceivedInput) > 0 && (
+            <div className='space-y-2 pt-2 border-t border-emerald-200 dark:border-emerald-700'>
+              <div className='flex justify-between text-sm'>
+                <span className='text-muted-foreground'>Total Bill:</span>
+                <span className='font-semibold'>{formatMoney(invoice.total)}</span>
+              </div>
+              <div className='flex justify-between text-sm'>
+                <span className='text-muted-foreground'>Amount Received:</span>
+                <span className='font-semibold text-emerald-700'>{formatMoney(parseFloat(cashReceivedInput))}</span>
+              </div>
+              {parseFloat(cashReceivedInput) >= invoice.total ? (
+                <div className='flex justify-between items-center p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700'>
+                  <span className='font-bold text-emerald-800 dark:text-emerald-200'>Change to Return:</span>
+                  <span className='font-bold text-xl text-emerald-700 dark:text-emerald-300'>
+                    {formatMoney(parseFloat(cashReceivedInput) - invoice.total)}
+                  </span>
+                </div>
+              ) : (
+                <div className='flex justify-between items-center p-2.5 rounded-lg bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700'>
+                  <span className='font-bold text-red-800 dark:text-red-200'>Amount Short:</span>
+                  <span className='font-bold text-xl text-red-600 dark:text-red-400'>
+                    {formatMoney(invoice.total - parseFloat(cashReceivedInput))}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Customer Balance Display - After Payment Details */}
+      {invoice.customerId && invoice.customerId !== 'walk-in' && (
+        <>
+          <Separator className="my-2" />
+          <div className='space-y-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg'>
+            {customers.find((c) => (c._id || c.id) === invoice.customerId)?.isSupplierAccount ? (
+              <p className="text-xs text-muted-foreground -mt-1 mb-1">
+                {t('Net balance with this supplier — includes purchases and sales combined')}
+              </p>
+            ) : null}
+            <div className='flex justify-between items-center text-sm'>
+              <span className="font-medium">{t('Previous Balance')}:</span>
+              <span className={`font-bold ${customerBalance > 0 ? 'text-red-600' : customerBalance < 0 ? 'text-green-600' : 'text-gray-600'}`}>
+                {loadingBalance ? (
+                  <span className="text-xs">Loading...</span>
+                ) : (
+                  `${formatMoney(Math.abs(customerBalance))} ${customerBalance > 0 ? '(Dr)' : customerBalance < 0 ? '(Cr)' : ''}`
+                )}
+              </span>
+            </div>
+            <div className='flex justify-between items-center text-sm'>
+              <span className="font-medium">{t('Current Amount')}:</span>
+              <span className="font-bold text-red-600">{formatMoney(invoice.total)} (Dr)</span>
+            </div>
+            {totalPaidNow > 0 && (
+              <div className='flex justify-between items-center text-sm'>
+                <span className="font-medium">{t('Paid Now')}:</span>
+                <span className="font-bold text-green-600">-{formatMoney(totalPaidNow)} (Cr)</span>
+              </div>
+            )}
+            <Separator />
+            <div className='flex justify-between items-center'>
+              <span className="font-bold">{t('Net Balance')}:</span>
+              <span className={`font-bold text-lg ${(customerBalance + invoice.total - totalPaidNow) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {formatMoney(Math.abs(customerBalance + invoice.total - totalPaidNow))} {(customerBalance + invoice.total - totalPaidNow) > 0 ? '(Receivable)' : '(Payable)'}
+              </span>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+
+  const quotationConvertButton = isEditing && editingInvoice?.type === 'quotation' ? (
+    <Button
+      type='button'
+      className='w-full bg-emerald-600 hover:bg-emerald-700'
+      size='lg'
+      onClick={() => setShowConvertDialog(true)}
+    >
+      <FileCheck className='h-4 w-4 mr-2' />
+      {t('convert_to_invoice') || 'Convert to Invoice'}
+    </Button>
+  ) : null
+
+  // Pending only: send the goods-handoff SMS/WhatsApp after saving. Shared by the desktop
+  // Payment card and the phone's Payment tab.
+  const pendingSendSelector = invoice.type === 'pending' ? (
+    <div className='rounded-lg border bg-muted/40 p-3 space-y-2'>
+      <p className='text-xs font-medium text-muted-foreground'>
+        Also send after saving:
+        {isSendingSms && (
+          <span className='ml-2 inline-flex items-center gap-1 text-blue-600'>
+            <Loader2 className='h-3 w-3 animate-spin' /> Sending SMS…
+          </span>
+        )}
+        {isWhatsAppSending && (
+          <span className='ml-2 inline-flex items-center gap-1 text-green-600'>
+            <Loader2 className='h-3 w-3 animate-spin' /> Sending WhatsApp…
+          </span>
+        )}
+      </p>
+      {/* Icon-only — labels made this row overflow the 300px sidebar column (see
+          git history), and four short-word buttons read fine as icons + a
+          tooltip once each icon is visually distinct from the others. */}
+      <div className='flex gap-1'>
+        <Button
+          type='button'
+          size='sm'
+          variant={sendMethod === 'none' ? 'default' : 'outline'}
+          title="None — don't send anything"
+          className='h-8 flex-1 px-0'
+          onClick={() => {
+            setSendMethod('none')
+            localStorage.setItem('invoiceSendMethod', 'none')
+          }}
+        >
+          <Ban className='h-3.5 w-3.5' />
+        </Button>
+        <Button
+          type='button'
+          size='sm'
+          variant={sendMethod === 'sms' ? 'default' : 'outline'}
+          title='SMS'
+          className={cn('h-8 flex-1 px-0', sendMethod === 'sms' && 'bg-blue-600 hover:bg-blue-700 border-blue-600')}
+          onClick={() => {
+            setSendMethod('sms')
+            localStorage.setItem('invoiceSendMethod', 'sms')
+          }}
+        >
+          <MessageSquare className='h-3.5 w-3.5' />
+        </Button>
+        <Button
+          type='button'
+          size='sm'
+          variant={sendMethod === 'whatsapp' ? 'default' : 'outline'}
+          title='WhatsApp'
+          className={cn('h-8 flex-1 px-0', sendMethod === 'whatsapp' && 'border-[#25d366]')}
+          style={sendMethod === 'whatsapp' ? { backgroundColor: '#25d366', borderColor: '#25d366' } : {}}
+          onClick={() => {
+            setSendMethod('whatsapp')
+            localStorage.setItem('invoiceSendMethod', 'whatsapp')
+          }}
+        >
+          <Send className='h-3.5 w-3.5' />
+        </Button>
+        <Button
+          type='button'
+          size='sm'
+          variant={sendMethod === 'both' ? 'default' : 'outline'}
+          title='Both — SMS and WhatsApp'
+          className={cn('h-8 flex-1 gap-0.5 px-0', sendMethod === 'both' && 'bg-purple-600 hover:bg-purple-700 border-purple-600')}
+          onClick={() => {
+            setSendMethod('both')
+            localStorage.setItem('invoiceSendMethod', 'both')
+          }}
+        >
+          <MessageSquare className='h-3.5 w-3.5' />
+          <Send className='h-3.5 w-3.5' />
+        </Button>
+      </div>
+      {sendMethod !== 'none' && (
+        <p className='text-xs text-muted-foreground'>
+          {sendMethod === 'sms' && 'Every save button will also send an SMS to the customer.'}
+          {sendMethod === 'whatsapp' && 'Every save button will also send the invoice PDF via WhatsApp.'}
+          {sendMethod === 'both' && 'Every save button will also send both an SMS and the invoice PDF via WhatsApp.'}
+        </p>
+      )}
+    </div>
+  ) : null
+
+  // Notes + Terms editors (desktop Notes & Terms card, phone Other Info tab).
+  const notesTermsBody = (
+    <>
+      <RichTextEditor
+        value={invoice.notes || ''}
+        onChange={(notes) => setInvoice((prev) => ({ ...prev, notes }))}
+        fieldLabel={t('notes')}
+        addButtonLabel={t('add_invoice_note')}
+        placeholder={t('invoice_notes_placeholder')}
+      />
+      <RichTextEditor
+        value={invoice.termsAndConditions || ''}
+        onChange={(termsAndConditions) => setInvoice((prev) => ({ ...prev, termsAndConditions }))}
+        fieldLabel={t('terms_and_conditions')}
+        addButtonLabel={t('add_terms_and_conditions')}
+        placeholder={t('invoice_terms_placeholder')}
+      />
+      {(() => {
+        const currentTerms = normalizeInvoiceNotesHtml(invoice.termsAndConditions || '').trim()
+        const differsFromDefault = currentTerms !== normalizeInvoiceNotesHtml(branchDefaultTerms).trim()
+        if (!differsFromDefault) return null
+        const showUseDefault = Boolean(branchDefaultTerms)
+        const showSaveDefault = canSaveDefaultTerms && Boolean(currentTerms)
+        if (!showUseDefault && !showSaveDefault) return null
+        return (
+          <div className='flex flex-wrap justify-end gap-2'>
+            {showUseDefault && (
+              <Button
+                type='button'
+                variant='ghost'
+                size='sm'
+                className='h-7 text-xs'
+                onClick={() => setInvoice((prev) => ({ ...prev, termsAndConditions: branchDefaultTerms }))}
+              >
+                <RotateCcw className='mr-1 h-3 w-3' />
+                {t('use_default_terms')}
+              </Button>
+            )}
+            {showSaveDefault && (
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='h-7 text-xs'
+                disabled={isSavingDefaultTerms}
+                onClick={handleSaveDefaultTerms}
+              >
+                {isSavingDefaultTerms ? <Loader2 className='mr-1 h-3 w-3 animate-spin' /> : <Save className='mr-1 h-3 w-3' />}
+                {t('save_terms_as_default')}
+              </Button>
+            )}
+          </div>
+        )
+      })()}
+    </>
+  )
 
   // Phones only (sm:hidden below 640px): Preview/Save/Save & Print always reachable at the
   // bottom of the screen instead of buried mid-page (catalog-shown mode) or up in the header
@@ -3166,6 +3598,336 @@ export function InvoicePanel({
       </div>
     </div>
   )
+
+  // Dialogs both layouts need: quick-create customer/product, convert quotation, the serial/IMEI
+  // picker, and the duplicate-sale / credit-limit guards.
+  const sharedDialogs = (
+    <>
+      <EntityQuickCreateDialogs
+        state={quickCreate}
+        onClose={() => {
+          setQuickCreate(null)
+          setQuickCreateProductItemId(null)
+        }}
+        onCreated={handleQuickCreated}
+      />
+
+      <QuotationConvertDialog
+        invoice={isEditing && editingInvoice?.type === 'quotation' ? editingInvoice : null}
+        open={showConvertDialog}
+        onOpenChange={setShowConvertDialog}
+        onConverted={() => {
+          onSaveSuccess?.()
+          onBackToList?.()
+        }}
+      />
+
+      {(() => {
+        const dialogItem = invoice.items.find((i) => i.id === serialDialogItemId)
+        if (!dialogItem) return null
+        const dialogProduct = products.find((p: any) => (p._id || p.id) === dialogItem.productId)
+
+        if (isUsedPhonesBucketProduct(dialogProduct)) {
+          return (
+            <UsedPhoneSelectDialog
+              open={!!serialDialogItemId}
+              onOpenChange={(open) => setSerialDialogItemId(open ? serialDialogItemId : '')}
+              onSelect={(buyback) => selectUsedPhoneForItem(dialogItem.id, buyback)}
+            />
+          )
+        }
+
+        return (
+          <SerialNumberDialog
+            open={!!serialDialogItemId}
+            onOpenChange={(open) => setSerialDialogItemId(open ? serialDialogItemId : '')}
+            productId={dialogItem.productId}
+            batchId={dialogItem.batchId}
+            batchIds={dialogItem.batchAllocations?.map((a) => a.batchId)}
+            itemName={dialogItem.name}
+            quantity={dialogItem.quantity}
+            selected={dialogItem.imeis || []}
+            isSerial={!!dialogProduct?.trackSerial}
+            onChange={(next, records) => updateItemImeis(dialogItem.id, next, records)}
+            onComplete={addNewRowAndOpenProduct}
+          />
+        )
+      })()}
+      {duplicateGuardElement}
+      {creditGuardElement}
+    </>
+  )
+
+  // ── Phone (<640px): the Odoo-style form ─────────────────────────────────────────────
+  // "Discard changes" in the phone line editor: put the line back as it was when opened,
+  // keeping the local running-stock cache in step (handleProductSelect/updateQuantity move it).
+  const restoreInvoiceLine = (snapshot: InvoiceItem) => {
+    const current = invoice.items.find((i) => i.id === snapshot.id)
+    if (!current) return
+    const stockOf = (line: InvoiceItem) => line.stockQuantity || line.quantity
+    setProducts((prev) => prev.map((p) => {
+      const pid = p._id || p.id
+      let next = p.stockQuantity
+      if (current.productId && !current.variantId && pid === current.productId) next += stockOf(current)
+      if (snapshot.productId && !snapshot.variantId && pid === snapshot.productId) next -= stockOf(snapshot)
+      return next === p.stockQuantity ? p : { ...p, stockQuantity: next }
+    }))
+    setInvoice((prev) => {
+      const items = prev.items.map((i) => (i.id === snapshot.id ? snapshot : i))
+      if (!calculateTotals) return { ...prev, items }
+      const totals = calculateTotals(items, prev.discountType, prev.discountValue, prev.deliveryCharge || 0, prev.serviceCharge || 0)
+      return {
+        ...prev,
+        items,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        discount: totals.discount,
+        total: totals.total,
+        totalProfit: totals.totalProfit,
+        totalCost: totals.totalCost,
+        paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+        balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount,
+      }
+    })
+  }
+
+  // Phone product search → a line. A new line reuses the form's first blank row (a new
+  // invoice starts with several), else appends one; returns the line's id for the editor.
+  const mobilePickProduct = (targetItemId: string | null, catalogItem: PurchaseCatalogItem): string => {
+    if (targetItemId) {
+      handleCatalogItemSelect(targetItemId, catalogItem)
+      return targetItemId
+    }
+    const blank = invoice.items.find((item) => item.isManualEntry && !item.productId)
+    if (blank) {
+      handleCatalogItemSelect(blank.id, catalogItem)
+      return blank.id
+    }
+    const newItem = createEmptyManualInvoiceItem()
+    handleCatalogItemSelect(newItem.id, catalogItem, [...invoice.items, newItem])
+    return newItem.id
+  }
+
+  if (isPhone) {
+    const selectedCustomer =
+      invoice.customerId && invoice.customerId !== 'walk-in'
+        ? customers.find((c) => String(c._id || c.id) === String(invoice.customerId)) ?? null
+        : null
+    const mobileOtherInfo = (
+      <>
+        {salesmanOptions.length > 0 && (
+          <div>
+            <Label htmlFor='m-salesman' className='mb-1.5 block text-[13px] text-muted-foreground'>{t('salesman') || 'Salesman'}</Label>
+            <SearchableSelect
+              id='m-salesman'
+              options={salesmanOptions}
+              value={invoice.salesmanId || ''}
+              onValueChange={(value) => setInvoice(prev => ({ ...prev, salesmanId: value }))}
+              placeholder={t('select_salesman') || 'Select a salesman...'}
+              clearLabel={t('none') || 'None'}
+            />
+          </div>
+        )}
+        <WarehouseField kind='sale' value={invoice.warehouseId} onValueChange={setInvoiceWarehouse} />
+        {invoice.type === 'pending' && (
+          <div>
+            <Label htmlFor='m-received-by' className='mb-1.5 block text-[13px] text-muted-foreground'>{t('received_by') || 'Received By'}</Label>
+            <SmartInput
+              id='m-received-by'
+              placeholder={t('enter_received_by_name') || 'Name of person collecting the products'}
+              value={invoice.receivedByName || ''}
+              onChange={(e) => setInvoice(prev => ({ ...prev, receivedByName: e.target.value }))}
+              showVoiceInput={true}
+              voiceInputSize='sm'
+              className='w-full'
+            />
+          </div>
+        )}
+        {nativeLanguageName && (
+          <div className='flex items-center justify-between gap-3 rounded-xl border px-3 py-3'>
+            <Label htmlFor='m-print-native' className='text-sm font-normal'>
+              {t('urdu_print', { lang: nativeLanguageName })}
+            </Label>
+            <Switch
+              id='m-print-native'
+              checked={printReceiptInUrdu}
+              onCheckedChange={(v) => {
+                setPrintReceiptInUrdu(v)
+                setInvoicePrintInUrdu(v)
+              }}
+            />
+          </div>
+        )}
+        <div className='space-y-3 border-t pt-4'>
+          <p className='flex items-center gap-2 text-sm font-semibold'>
+            <ScrollText className='h-4 w-4 text-muted-foreground' />
+            {t('notes_and_terms')}
+          </p>
+          {notesTermsBody}
+        </div>
+      </>
+    )
+
+    return (
+      <>
+        <MobileInvoiceForm
+          invoice={invoice}
+          setInvoice={setInvoice}
+          isEditing={isEditing}
+          editingInvoiceNumber={editingInvoice?.invoiceNumber}
+          previewedInvoiceNumber={previewedInvoiceNumber}
+          currencySymbol={currencySymbol}
+          showUrdu={showUrdu}
+          selectedCustomer={selectedCustomer}
+          walkInAllowed={walkInAllowed}
+          customerBalance={customerBalance}
+          loadingBalance={loadingBalance}
+          customerPicker={{
+            open: customerSelectOpen,
+            setOpen: (open) => {
+              setCustomerSelectOpen(open)
+              if (!open) setCustomerSearchQuery('')
+            },
+            query: customerSearchQuery,
+            setQuery: setCustomerSearchQuery,
+            visible: visibleCustomers,
+            total: filteredCustomers.length,
+            loading: customersLoading,
+            onSelect: (customer) => {
+              applyCustomerSelection(customer)
+              setCustomerSelectOpen(false)
+              setCustomerSearchQuery('')
+            },
+            onCreate: canCreateCustomer ? () => openQuickCreate('customer', customerSearchQuery) : undefined,
+          }}
+          creditStrip={
+            invoice.type !== 'quotation' ? (
+              <InvoiceCreditStrip
+                className='mt-2'
+                customerId={invoice.customerId}
+                excludeInvoiceId={isEditing ? editingInvoiceId || undefined : undefined}
+                unpaid={
+                  invoice.type === 'pending' || invoice.type === 'credit' || invoice.splitPaymentMethod
+                    ? Math.max(0, (Number(invoice.total) || 0) - totalPaidNow)
+                    : 0
+                }
+              />
+            ) : null
+          }
+          dueDateField={
+            <InvoiceDueDateField
+              type={invoice.type}
+              invoiceDate={invoice.invoiceDate}
+              customerId={invoice.customerId}
+              paymentTerms={selectedCustomer?.paymentTerms}
+              value={invoice.dueDate}
+              onChange={(dueDate) => setInvoice((prev) => ({ ...prev, dueDate }))}
+              isEditing={Boolean(isEditing)}
+            />
+          }
+          updateInvoiceType={updateInvoiceType}
+          getLineExtras={(item) => {
+            const parts = renderInvoiceItemParts(item)
+            return {
+              stockBadge: parts.stockBadge || null,
+              branchTrigger: parts.branchTrigger,
+              batchTags: parts.batchTags || null,
+              serialTrigger: parts.serialTrigger || null,
+              insufficientStockWarning: parts.insufficientStockWarning || null,
+              unitSelect: parts.unitSelectMobile,
+            } satisfies MobileLineExtras
+          }}
+          productPicker={{
+            query: productSearchQuery,
+            setQuery: setProductSearchQuery,
+            visible: visibleSellableProducts,
+            total: filteredSellableProducts.length,
+            catalog: pickableSellableCatalog,
+            loading: productsLoading,
+            warehouseQtyOf: warehouseQty.active && warehouseQty.warehouse ? warehouseQty.qtyOf : undefined,
+            warehouseName: warehouseQty.warehouse?.name,
+            onCreate: canCreateProduct
+              ? (itemId) => openQuickCreate('product', productSearchQuery, itemId ?? undefined)
+              : undefined,
+          }}
+          onPickProduct={mobilePickProduct}
+          onQuantity={updateQuantity}
+          onUnitPrice={applyUnitPrice}
+          onItemDiscount={updateItemDiscount}
+          onRemoveLine={removeFromInvoice}
+          onRestoreLine={restoreInvoiceLine}
+          onBarcodeSearch={onBarcodeSearch}
+          renderRateHistory={
+            rateHistoryCustomerReady
+              ? (item, onClose) => {
+                  if (!item.productId) return null
+                  const catalogEntry = item.variantId
+                    ? sellableCatalog.find((c) => c.variantId === item.variantId)
+                    : sellableCatalog.find((c) => c.type === 'product' && c.productId === item.productId)
+                  return (
+                    <CustomerRateHistoryPanel
+                      variant='inline'
+                      open
+                      onOpenChange={(next) => !next && onClose()}
+                      anchor={null}
+                      customer={{
+                        id: String(invoice.customerId),
+                        name: selectedCustomer?.name || invoice.customerName || '',
+                        nameUrdu: selectedCustomer?.nameUrdu,
+                        phone: selectedCustomer?.phone,
+                        picture: selectedCustomer?.picture,
+                      }}
+                      customerBalance={customerBalance}
+                      loadingBalance={loadingBalance}
+                      line={{ ...item, productId: item.productId }}
+                      listPrice={catalogEntry?.price}
+                      showCost={showProfitDetails}
+                      excludeInvoiceId={isEditing ? editingInvoiceId : undefined}
+                      onApplyRate={(rate) => applyUnitPrice(item.id, rate)}
+                      autoOpen={false}
+                      onAutoOpenChange={() => undefined}
+                      // Phone: leave the keyboard down after "Use" / closing an invoice view.
+                      onReturnFocus={() => undefined}
+                    />
+                  )
+                }
+              : undefined
+          }
+          taxRate={taxRate}
+          hasTaxSystem={Boolean(orgData?.taxSystem && orgData.taxSystem !== 'NONE')}
+          taxBreakdown={<TaxBreakdownSummary taxLines={invoice.taxLines || []} totalTax={invoice.tax} />}
+          updateDiscount={updateDiscount}
+          setTaxRate={setTaxRate}
+          totalPaidNow={totalPaidNow}
+          paymentContent={
+            <>
+              {paymentDetailsBlock}
+              {quotationConvertButton}
+              {pendingSendSelector}
+            </>
+          }
+          otherInfoContent={mobileOtherInfo}
+          canPrint={canPrint}
+          defaultPaperSize={defaultPaperSize}
+          savingType={savingType}
+          canSave={invoice.items.some((item) => item.productId && item.name)}
+          onConfirm={() => handleSaveInvoice('none')}
+          onSaveAndPrint={(paperSize) => handleSaveInvoice(paperSize)}
+          onPreview={showPreview ? previewInvoice : undefined}
+          onBack={onBackToList}
+          pageActions={mobilePageActions}
+        />
+        {sharedDialogs}
+        <MobilePostedInvoice
+          open={postedInvoice !== null}
+          onOpenChange={(open) => !open && setPostedInvoice(null)}
+          invoiceId={postedInvoice?.id ?? null}
+          invoiceNumber={postedInvoice?.number}
+          onNewInvoice={() => window.scrollTo({ top: 0 })}
+        />
+      </>
+    )
+  }
 
   return (
     <div
@@ -3462,7 +4224,7 @@ export function InvoicePanel({
                         {walkInAllowed && (
                         <CommandItem
                           onSelect={() => {
-                            setInvoice(prev => ({ ...prev, customerId: 'walk-in' }))
+                            applyCustomerSelection('walk-in')
                             setCustomerSelectOpen(false)
                             setCustomerSearchQuery('')
                             goToProducts()
@@ -3487,22 +4249,7 @@ export function InvoicePanel({
                             <CommandItem
                               key={customerId}
                               onSelect={() => {
-                                setInvoice(prev => paymentCards ? {
-                                  ...prev,
-                                  customerId,
-                                  customerName: customer.name,
-                                } : {
-                                  ...prev,
-                                  customerId,
-                                  customerName: customer.name, // Set customer name for editing
-                                  type: 'credit',
-                                  // Switching to credit must clear the cash-default paidAmount/balance
-                                  // (mirrors updateInvoiceType) — items added before a customer is
-                                  // picked default to type 'cash', which forces paidAmount = total;
-                                  // left uncorrected, the invoice saves as fully paid/cash-equivalent.
-                                  paidAmount: 0,
-                                  balance: prev.total,
-                                })
+                                applyCustomerSelection(customer)
                                 setCustomerSelectOpen(false)
                                 setCustomerSearchQuery('')
                                 goToProducts()
@@ -3856,57 +4603,7 @@ export function InvoicePanel({
           </CardTitle>
         </CardHeader>
         <CardContent className='space-y-3 pt-0'>
-          <RichTextEditor
-            value={invoice.notes || ''}
-            onChange={(notes) => setInvoice((prev) => ({ ...prev, notes }))}
-            fieldLabel={t('notes')}
-            addButtonLabel={t('add_invoice_note')}
-            placeholder={t('invoice_notes_placeholder')}
-          />
-          <RichTextEditor
-            value={invoice.termsAndConditions || ''}
-            onChange={(termsAndConditions) => setInvoice((prev) => ({ ...prev, termsAndConditions }))}
-            fieldLabel={t('terms_and_conditions')}
-            addButtonLabel={t('add_terms_and_conditions')}
-            placeholder={t('invoice_terms_placeholder')}
-          />
-          {(() => {
-            const currentTerms = normalizeInvoiceNotesHtml(invoice.termsAndConditions || '').trim()
-            const differsFromDefault = currentTerms !== normalizeInvoiceNotesHtml(branchDefaultTerms).trim()
-            if (!differsFromDefault) return null
-            const showUseDefault = Boolean(branchDefaultTerms)
-            const showSaveDefault = canSaveDefaultTerms && Boolean(currentTerms)
-            if (!showUseDefault && !showSaveDefault) return null
-            return (
-              <div className='flex flex-wrap justify-end gap-2'>
-                {showUseDefault && (
-                  <Button
-                    type='button'
-                    variant='ghost'
-                    size='sm'
-                    className='h-7 text-xs'
-                    onClick={() => setInvoice((prev) => ({ ...prev, termsAndConditions: branchDefaultTerms }))}
-                  >
-                    <RotateCcw className='mr-1 h-3 w-3' />
-                    {t('use_default_terms')}
-                  </Button>
-                )}
-                {showSaveDefault && (
-                  <Button
-                    type='button'
-                    variant='outline'
-                    size='sm'
-                    className='h-7 text-xs'
-                    disabled={isSavingDefaultTerms}
-                    onClick={handleSaveDefaultTerms}
-                  >
-                    {isSavingDefaultTerms ? <Loader2 className='mr-1 h-3 w-3 animate-spin' /> : <Save className='mr-1 h-3 w-3' />}
-                    {t('save_terms_as_default')}
-                  </Button>
-                )}
-              </div>
-            )
-          })()}
+          {notesTermsBody}
         </CardContent>
       </Card>
 
@@ -4334,223 +5031,10 @@ export function InvoicePanel({
         </CardHeader>
         <CardContent className='p-4 pt-0 space-y-4'>
           {/* Payment Details */}
-          <div className='space-y-4'>
-            {/* Payment Method selector — gated by SHOW_INVOICE_PAYMENT_METHOD_UI */}
-            {SHOW_INVOICE_PAYMENT_METHOD_UI && paymentCards && invoice.type !== 'pending' && invoice.type !== 'quotation' && (
-              <PaymentMethodCards
-                label={t('payment_method') || 'Payment Method'}
-                wallets={wallets}
-                paymentMethod={invoice.paymentMethod}
-                walletType={invoice.walletType}
-                reference={invoice.paymentReference}
-                compact={showProductCatalog}
-                onSelect={(selection) =>
-                  setInvoice(prev => ({
-                    ...prev,
-                    paymentMethod: selection.paymentMethod,
-                    walletType: selection.walletType,
-                    // A reference belongs to one tender — a new card starts blank.
-                    paymentReference:
-                      prev.paymentMethod === selection.paymentMethod && prev.walletType === selection.walletType
-                        ? prev.paymentReference
-                        : undefined,
-                    // The split leg's bucket is derived from the primary method — stale once it changes.
-                    splitPaymentMethod: undefined,
-                    splitWalletType: undefined,
-                    splitPaidAmount: 0,
-                  }))
-                }
-                onReferenceChange={(paymentReference) => setInvoice(prev => ({ ...prev, paymentReference }))}
-              />
-            )}
-            {SHOW_INVOICE_PAYMENT_METHOD_UI && !paymentCards && invoice.type !== 'pending' && invoice.type !== 'quotation' && (
-              <div className='space-y-3'>
-                <div>
-                  <Label className='mb-2 block'>{t('payment_method') || 'Payment Method'}</Label>
-                  <Select
-                    value={
-                      invoice.paymentMethod === 'wallet' && invoice.walletType
-                        ? toWalletOptionValue(invoice.walletType)
-                        : invoice.paymentMethod || 'cash'
-                    }
-                    onValueChange={(val: string) => {
-                      if (isWalletOptionValue(val)) {
-                        setInvoice(prev => ({
-                          ...prev,
-                          paymentMethod: 'wallet',
-                          walletType: getWalletTypeFromOptionValue(val),
-                          // The split leg's bucket is derived from this field — stale once it changes.
-                          splitPaymentMethod: undefined,
-                          splitWalletType: undefined,
-                          splitPaidAmount: 0,
-                        }))
-                      } else {
-                        setInvoice(prev => ({
-                          ...prev,
-                          paymentMethod: val as 'cash',
-                          walletType: undefined,
-                          splitPaymentMethod: undefined,
-                          splitWalletType: undefined,
-                          splitPaidAmount: 0,
-                        }))
-                      }
-                    }}
-                  >
-                    <SelectTrigger className='w-full'>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {paymentMethodOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {wallets.length === 0 && (
-                    <p className='mt-1 text-xs text-muted-foreground'>{t('no_wallets_configured') || 'No wallets configured. Add one from the Wallet page.'}</p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {invoice.type !== 'pending' && invoice.type !== 'quotation' && (invoice.type === 'credit' || (invoice.type === 'cash' && invoice.splitPaymentMethod)) && (
-              <div>
-                <Label htmlFor="paidAmount">{t('paid_amount')}</Label>
-                <Input
-                  type="text"
-                  inputMode="decimal"
-                  showVoiceInput={false}
-                  value={paidAmountInput}
-                  onChange={(e) => handlePaidAmountChange(e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-            )}
-
-            {SHOW_INVOICE_PAYMENT_METHOD_UI && invoice.type !== 'pending' && invoice.type !== 'quotation' && (
-              <SplitPaymentFields
-                primaryMethod={invoice.paymentMethod === 'wallet' ? 'wallet' : 'cash'}
-                wallets={wallets}
-                paidAmount={invoice.paidAmount || 0}
-                showBalance={false}
-                value={{
-                  splitPaymentMethod: invoice.splitPaymentMethod,
-                  splitWalletType: invoice.splitWalletType,
-                  splitPaidAmount: invoice.splitPaidAmount,
-                }}
-                onChange={(patch) => setInvoice(prev => ({ ...prev, ...patch }))}
-              />
-            )}
-
-            {/* Cash Received & Change Calculator — brought back for catalog-shown mode
-                only, per request; the compact catalog-hidden layout dropped it earlier in
-                favor of editing Paid Amount directly. Only for pure-cash payments, and
-                hidden once splitting is on: "amount given by customer" no longer means the
-                whole total was cash, so the change math would be wrong. */}
-            {showProductCatalog && invoice.type !== 'pending' && invoice.type !== 'quotation' && invoice.type === 'cash' && (!invoice.paymentMethod || invoice.paymentMethod === 'cash') && !invoice.splitPaymentMethod && (
-              <div className='space-y-3 p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'>
-                <h4 className='text-sm font-semibold text-emerald-800 dark:text-emerald-200 flex items-center gap-2'>
-                  <Banknote className='h-4 w-4' />
-                  Cash Received
-                </h4>
-                <div>
-                  <Label className='text-xs text-muted-foreground'>Amount Given by Customer ({currencySymbol})</Label>
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    showVoiceInput={false}
-                    value={cashReceivedInput}
-                    onChange={(e) => setCashReceivedInput(e.target.value)}
-                    placeholder={invoice.total.toFixed(2)}
-                    className='mt-1 text-base font-semibold'
-                    onFocus={(e) => e.target.select()}
-                  />
-                </div>
-                {parseFloat(cashReceivedInput) > 0 && (
-                  <div className='space-y-2 pt-2 border-t border-emerald-200 dark:border-emerald-700'>
-                    <div className='flex justify-between text-sm'>
-                      <span className='text-muted-foreground'>Total Bill:</span>
-                      <span className='font-semibold'>{formatMoney(invoice.total)}</span>
-                    </div>
-                    <div className='flex justify-between text-sm'>
-                      <span className='text-muted-foreground'>Amount Received:</span>
-                      <span className='font-semibold text-emerald-700'>{formatMoney(parseFloat(cashReceivedInput))}</span>
-                    </div>
-                    {parseFloat(cashReceivedInput) >= invoice.total ? (
-                      <div className='flex justify-between items-center p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700'>
-                        <span className='font-bold text-emerald-800 dark:text-emerald-200'>Change to Return:</span>
-                        <span className='font-bold text-xl text-emerald-700 dark:text-emerald-300'>
-                          {formatMoney(parseFloat(cashReceivedInput) - invoice.total)}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className='flex justify-between items-center p-2.5 rounded-lg bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700'>
-                        <span className='font-bold text-red-800 dark:text-red-200'>Amount Short:</span>
-                        <span className='font-bold text-xl text-red-600 dark:text-red-400'>
-                          {formatMoney(invoice.total - parseFloat(cashReceivedInput))}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Customer Balance Display - After Payment Details */}
-            {invoice.customerId && invoice.customerId !== 'walk-in' && (
-              <>
-                <Separator className="my-2" />
-                <div className='space-y-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg'>
-                  {customers.find((c) => (c._id || c.id) === invoice.customerId)?.isSupplierAccount ? (
-                    <p className="text-xs text-muted-foreground -mt-1 mb-1">
-                      {t('Net balance with this supplier — includes purchases and sales combined')}
-                    </p>
-                  ) : null}
-                  <div className='flex justify-between items-center text-sm'>
-                    <span className="font-medium">{t('Previous Balance')}:</span>
-                    <span className={`font-bold ${customerBalance > 0 ? 'text-red-600' : customerBalance < 0 ? 'text-green-600' : 'text-gray-600'}`}>
-                      {loadingBalance ? (
-                        <span className="text-xs">Loading...</span>
-                      ) : (
-                        `${formatMoney(Math.abs(customerBalance))} ${customerBalance > 0 ? '(Dr)' : customerBalance < 0 ? '(Cr)' : ''}`
-                      )}
-                    </span>
-                  </div>
-                  <div className='flex justify-between items-center text-sm'>
-                    <span className="font-medium">{t('Current Amount')}:</span>
-                    <span className="font-bold text-red-600">{formatMoney(invoice.total)} (Dr)</span>
-                  </div>
-                  {totalPaidNow > 0 && (
-                    <div className='flex justify-between items-center text-sm'>
-                      <span className="font-medium">{t('Paid Now')}:</span>
-                      <span className="font-bold text-green-600">-{formatMoney(totalPaidNow)} (Cr)</span>
-                    </div>
-                  )}
-                  <Separator />
-                  <div className='flex justify-between items-center'>
-                    <span className="font-bold">{t('Net Balance')}:</span>
-                    <span className={`font-bold text-lg ${(customerBalance + invoice.total - totalPaidNow) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {formatMoney(Math.abs(customerBalance + invoice.total - totalPaidNow))} {(customerBalance + invoice.total - totalPaidNow) > 0 ? '(Receivable)' : '(Payable)'}
-                    </span>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+          {paymentDetailsBlock}
 
           {/* Save Buttons */}
-          {isEditing && editingInvoice?.type === 'quotation' && (
-            <Button
-              type='button'
-              className='w-full bg-emerald-600 hover:bg-emerald-700'
-              size='lg'
-              onClick={() => setShowConvertDialog(true)}
-            >
-              <FileCheck className='h-4 w-4 mr-2' />
-              {t('convert_to_invoice') || 'Convert to Invoice'}
-            </Button>
-          )}
+          {quotationConvertButton}
 
           <div className='grid grid-cols-1 gap-3'>
             {/* Compact mode (catalog hidden): the sticky bar below is the buttons row —
@@ -4612,89 +5096,7 @@ export function InvoicePanel({
             {/* Send After Save selector — pending-only: it's a goods-handoff receipt
                 (see isPendingHandoff in handleSaveInvoice), not a general notifier, so
                 it stays out of the way for cash/credit/quotation invoices entirely. */}
-            {invoice.type === 'pending' && (
-              <div className='rounded-lg border bg-muted/40 p-3 space-y-2'>
-                <p className='text-xs font-medium text-muted-foreground'>
-                  Also send after saving:
-                  {isSendingSms && (
-                    <span className='ml-2 inline-flex items-center gap-1 text-blue-600'>
-                      <Loader2 className='h-3 w-3 animate-spin' /> Sending SMS…
-                    </span>
-                  )}
-                  {isWhatsAppSending && (
-                    <span className='ml-2 inline-flex items-center gap-1 text-green-600'>
-                      <Loader2 className='h-3 w-3 animate-spin' /> Sending WhatsApp…
-                    </span>
-                  )}
-                </p>
-                {/* Icon-only — labels made this row overflow the 300px sidebar column (see
-                    git history), and four short-word buttons read fine as icons + a
-                    tooltip once each icon is visually distinct from the others. */}
-                <div className='flex gap-1'>
-                  <Button
-                    type='button'
-                    size='sm'
-                    variant={sendMethod === 'none' ? 'default' : 'outline'}
-                    title="None — don't send anything"
-                    className='h-8 flex-1 px-0'
-                    onClick={() => {
-                      setSendMethod('none')
-                      localStorage.setItem('invoiceSendMethod', 'none')
-                    }}
-                  >
-                    <Ban className='h-3.5 w-3.5' />
-                  </Button>
-                  <Button
-                    type='button'
-                    size='sm'
-                    variant={sendMethod === 'sms' ? 'default' : 'outline'}
-                    title='SMS'
-                    className={cn('h-8 flex-1 px-0', sendMethod === 'sms' && 'bg-blue-600 hover:bg-blue-700 border-blue-600')}
-                    onClick={() => {
-                      setSendMethod('sms')
-                      localStorage.setItem('invoiceSendMethod', 'sms')
-                    }}
-                  >
-                    <MessageSquare className='h-3.5 w-3.5' />
-                  </Button>
-                  <Button
-                    type='button'
-                    size='sm'
-                    variant={sendMethod === 'whatsapp' ? 'default' : 'outline'}
-                    title='WhatsApp'
-                    className={cn('h-8 flex-1 px-0', sendMethod === 'whatsapp' && 'border-[#25d366]')}
-                    style={sendMethod === 'whatsapp' ? { backgroundColor: '#25d366', borderColor: '#25d366' } : {}}
-                    onClick={() => {
-                      setSendMethod('whatsapp')
-                      localStorage.setItem('invoiceSendMethod', 'whatsapp')
-                    }}
-                  >
-                    <Send className='h-3.5 w-3.5' />
-                  </Button>
-                  <Button
-                    type='button'
-                    size='sm'
-                    variant={sendMethod === 'both' ? 'default' : 'outline'}
-                    title='Both — SMS and WhatsApp'
-                    className={cn('h-8 flex-1 gap-0.5 px-0', sendMethod === 'both' && 'bg-purple-600 hover:bg-purple-700 border-purple-600')}
-                    onClick={() => {
-                      setSendMethod('both')
-                      localStorage.setItem('invoiceSendMethod', 'both')
-                    }}
-                  >
-                    <MessageSquare className='h-3.5 w-3.5' />
-                    <Send className='h-3.5 w-3.5' />
-                  </Button>
-                </div>
-                {sendMethod !== 'none' && (
-                  <p className='text-xs text-muted-foreground'>
-                    {sendMethod === 'sms' && 'Every save button will also send an SMS to the customer.'}
-                    {sendMethod === 'whatsapp' && 'Every save button will also send the invoice PDF via WhatsApp.'}
-                    {sendMethod === 'both' && 'Every save button will also send both an SMS and the invoice PDF via WhatsApp.'}
-                  </p>
-                )}
-              </div>
-            )}
+            {pendingSendSelector}
           </div>
         </CardContent>
       </Card>
@@ -4778,24 +5180,7 @@ export function InvoicePanel({
         )
       })()}
 
-      <EntityQuickCreateDialogs
-        state={quickCreate}
-        onClose={() => {
-          setQuickCreate(null)
-          setQuickCreateProductItemId(null)
-        }}
-        onCreated={handleQuickCreated}
-      />
-
-      <QuotationConvertDialog
-        invoice={isEditing && editingInvoice?.type === 'quotation' ? editingInvoice : null}
-        open={showConvertDialog}
-        onOpenChange={setShowConvertDialog}
-        onConverted={() => {
-          onSaveSuccess?.()
-          onBackToList?.()
-        }}
-      />
+      {sharedDialogs}
 
       {(() => {
         const rateLine = rateHistory ? invoice.items.find((i) => i.id === rateHistory.itemId) : undefined
@@ -4836,37 +5221,6 @@ export function InvoicePanel({
         )
       })()}
 
-      {(() => {
-        const dialogItem = invoice.items.find((i) => i.id === serialDialogItemId)
-        if (!dialogItem) return null
-        const dialogProduct = products.find((p: any) => (p._id || p.id) === dialogItem.productId)
-
-        if (isUsedPhonesBucketProduct(dialogProduct)) {
-          return (
-            <UsedPhoneSelectDialog
-              open={!!serialDialogItemId}
-              onOpenChange={(open) => setSerialDialogItemId(open ? serialDialogItemId : '')}
-              onSelect={(buyback) => selectUsedPhoneForItem(dialogItem.id, buyback)}
-            />
-          )
-        }
-
-        return (
-          <SerialNumberDialog
-            open={!!serialDialogItemId}
-            onOpenChange={(open) => setSerialDialogItemId(open ? serialDialogItemId : '')}
-            productId={dialogItem.productId}
-            batchId={dialogItem.batchId}
-            batchIds={dialogItem.batchAllocations?.map((a) => a.batchId)}
-            itemName={dialogItem.name}
-            quantity={dialogItem.quantity}
-            selected={dialogItem.imeis || []}
-            isSerial={!!dialogProduct?.trackSerial}
-            onChange={(next, records) => updateItemImeis(dialogItem.id, next, records)}
-            onComplete={addNewRowAndOpenProduct}
-          />
-        )
-      })()}
 
       {/* Portaled straight to <body> — not just a sibling `<div>` here — for two reasons: (1) any
           ancestor with a CSS transform/filter would silently turn this `fixed` bar into a child
@@ -4875,8 +5229,6 @@ export function InvoicePanel({
           `hidden` attribute) and added a stray 16px gap below the last card even while this bar
           itself rendered nothing on desktop. */}
       {createPortal(mobileActionsBar, document.body)}
-      {duplicateGuardElement}
-      {creditGuardElement}
     </div>
   )
 }

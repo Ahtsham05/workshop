@@ -89,6 +89,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/hr/attendance', anyPermission: ['getAttendance'] },
   { prefix: '/hr/leaves', anyPermission: ['getLeaves'] },
   { prefix: '/hr/payroll', anyPermission: ['getPayroll'] },
+  { prefix: '/hr/employee-ledger', anyPermission: ['getPayroll', 'getEmployees'] },
   { prefix: '/hr/settings', anyPermission: ['getEmployees'] },
   { prefix: '/hr', anyPermission: ['getEmployees'] },
 

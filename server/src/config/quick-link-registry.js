@@ -1233,6 +1233,16 @@ const QUICK_LINK_ACTIONS = [
     excludeBusinessTypes: ['school'],
   },
   {
+    actionKey: 'hr_employee_ledger',
+    label: 'Employee Ledger',
+    iconKey: 'IconBook',
+    route: '/hr/employee-ledger',
+    category: 'Human Resources',
+    color: 'bg-indigo-600 hover:bg-indigo-700',
+    permission: 'getPayroll',
+    excludeBusinessTypes: ['school'],
+  },
+  {
     actionKey: 'hr_settings',
     label: 'HR Settings',
     iconKey: 'IconSettings',

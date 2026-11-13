@@ -1,5 +1,7 @@
 const httpStatus = require('http-status');
-const { EmployeeLedger, Employee, Customer, Wallet } = require('../models');
+const mongoose = require('mongoose');
+const { EmployeeLedger, Employee, Customer, Wallet, Expense } = require('../models');
+const { VOUCHER_REFERENCE_MODELS } = require('../models/employeeLedger.model');
 const ApiError = require('../utils/ApiError');
 const { formatMoney } = require('../utils/money');
 const cashBookService = require('./cashBook.service');
@@ -9,7 +11,14 @@ const walletEntryService = require('./walletEntry.service');
 const { addTokenSearch } = require('../utils/searchQuery');
 
 const EXPENSE_SYNC_TYPES = new Set(['salary_payment']);
-const CASHBOOK_SYNC_TYPES = new Set(['salary_payment', 'advance_payment']);
+const CASHBOOK_SYNC_TYPES = new Set(['salary_payment', 'advance_payment', 'payment_received']);
+const VOUCHER_MODELS = new Set(VOUCHER_REFERENCE_MODELS);
+
+/** True for a row a Payment / Receipt Voucher posted (and therefore owns). */
+const isVoucherOwned = (entry) => VOUCHER_MODELS.has(entry?.referenceModel);
+
+/** Money comes IN for cash received from the employee; every other cash row pays them OUT. */
+const cashDirection = (entry) => (entry?.transactionType === 'payment_received' ? 'in' : 'out');
 
 const shouldSyncCashBook = (entry) => {
   if (!entry) return false;
@@ -23,9 +32,32 @@ const shouldSyncCashBook = (entry) => {
   return CASHBOOK_SYNC_TYPES.has(String(entry.transactionType || '').toLowerCase());
 };
 
+/** The cash this row moved: a receipt is a debit, a payment a credit. */
 const getCashBookAmount = (entry) => {
   if (!entry) return 0;
-  return Number(entry.credit || 0);
+  return cashDirection(entry) === 'in' ? Number(entry.debit || 0) : Number(entry.credit || 0);
+};
+
+const entryLabel = (entry) => {
+  if (entry.transactionType === 'payment_received') return 'Cash received';
+  if (entry.transactionType === 'advance_payment') return 'Advance payment';
+  return 'Salary payment';
+};
+
+const employeeNameOf = (entry) =>
+  entry.employee?.firstName ? `${entry.employee.firstName} ${entry.employee.lastName || ''}`.trim() : 'Employee';
+
+/**
+ * Wording of the Cash Book / bank rows this ledger row owns. A voucher row already carries the
+ * voucher's own wording ("Payment voucher PMT-000012 — Ali Raza (May salary)"), which is what a
+ * person reading the Cash Book needs to find the voucher again.
+ */
+const bookDescription = (entry) => {
+  if (isVoucherOwned(entry) && entry.description) return entry.description;
+  const name = employeeNameOf(entry);
+  const preposition = cashDirection(entry) === 'in' ? 'from' : 'to';
+  const referenceText = entry.reference ? ` (${entry.reference})` : '';
+  return `${entryLabel(entry)} ${preposition} ${name}${referenceText}`;
 };
 
 const getTenantFilter = (data = {}) => {
@@ -76,17 +108,12 @@ const syncCashBookFromEmployeeLedger = async (entry) => {
     return null;
   }
 
-  const employeeName = entry.employee?.firstName
-    ? `${entry.employee.firstName} ${entry.employee.lastName || ''}`.trim()
-    : 'Employee';
-  const label = entry.transactionType === 'advance_payment' ? 'Advance payment' : 'Salary payment';
-  const referenceText = entry.reference ? ` (${entry.reference})` : '';
-
+  const incoming = cashDirection(entry) === 'in';
   return cashBookService.upsertReferenceEntry({
     organizationId: entry.organizationId,
     branchId: entry.branchId,
-    type: 'expense',
-    source: 'expense',
+    type: incoming ? 'income' : 'expense',
+    source: incoming ? 'other' : 'expense',
     amount,
     // Reaching this line means isRealWalletPayment was false — genuinely cash either way
     // (a plain cash payment, or a wallet payment from the cash-type "Cash in Hand"
@@ -96,12 +123,19 @@ const syncCashBookFromEmployeeLedger = async (entry) => {
     paymentMethod: 'cash',
     referenceId: entry._id,
     referenceModel: 'EmployeeLedger',
-    description: `${label} to ${employeeName}${referenceText}`,
+    description: bookDescription(entry),
     notes: entry.notes || '',
     date: entry.transactionDate || new Date(),
     createdBy: entry.updatedBy || entry.createdBy,
   });
 };
+
+/** What a row's wallet leg looked like, for an edit to reverse exactly that. */
+const walletSnapshotOf = (entry) => ({
+  paymentMethod: entry.paymentMethod,
+  walletType: entry.walletType,
+  amount: shouldSyncCashBook(entry) ? getCashBookAmount(entry) : 0,
+});
 
 /**
  * Wallet ledger + real Wallet.balance leg for a salary/advance payment paid via a real
@@ -115,28 +149,104 @@ const syncCashBookFromEmployeeLedger = async (entry) => {
 const syncWalletFromEmployeeLedger = async (entry, previousSnapshot = null) => {
   if (!entry) return null;
   const syncable = shouldSyncCashBook(entry);
-  const employeeName = entry.employee?.firstName
-    ? `${entry.employee.firstName} ${entry.employee.lastName || ''}`.trim()
-    : 'Employee';
-  const label = entry.transactionType === 'advance_payment' ? 'Advance payment' : 'Salary payment';
 
   return walletEntryService.syncWalletPayment({
     organizationId: entry.organizationId,
     branchId: entry.branchId,
     referenceId: entry._id,
     referenceModel: 'EmployeeLedger',
-    direction: 'out',
+    direction: cashDirection(entry),
     amount: syncable ? getCashBookAmount(entry) : 0,
     paymentMethod: syncable ? String(entry.paymentMethod || '').trim().toLowerCase() : undefined,
     walletType: syncable ? entry.walletType : undefined,
     previousPaymentMethod: previousSnapshot ? String(previousSnapshot.paymentMethod || '').trim().toLowerCase() : undefined,
     previousWalletType: previousSnapshot?.walletType,
     previousAmount: previousSnapshot?.amount,
-    description: `${label} to ${employeeName}`,
+    description: bookDescription(entry),
     date: entry.transactionDate || new Date(),
     createdBy: entry.createdBy,
     updatedBy: entry.updatedBy || entry.createdBy,
   });
+};
+
+/**
+ * Post (or re-post) both money legs of a row — bank and Cash Book — in the order that keeps the
+ * balance check honest, and all-or-nothing.
+ *
+ * Order matters for a cash-type account ("Cash in Hand"): its spendable balance IS the live Cash
+ * Book. Money going OUT must pass the wallet check first — posting the Cash Book entry first would
+ * subtract the same payment twice and refuse one the till can cover. Money coming IN is written to
+ * the Cash Book first (nothing to check), then the wallet. Same order the vouchers use.
+ *
+ * `previousSnapshot` is the wallet leg as it was before an edit (null for a new row): a failure
+ * puts the wallet back exactly there.
+ */
+const syncMoneyLegs = async (entry, previousSnapshot = null) => {
+  const restoreWallet = async () => {
+    if (previousSnapshot) {
+      // Re-sync from what it is now back to what it was.
+      await walletEntryService.syncWalletPayment({
+        organizationId: entry.organizationId,
+        branchId: entry.branchId,
+        referenceId: entry._id,
+        referenceModel: 'EmployeeLedger',
+        direction: cashDirection(entry),
+        amount: previousSnapshot.amount,
+        paymentMethod: String(previousSnapshot.paymentMethod || '').trim().toLowerCase(),
+        walletType: previousSnapshot.walletType,
+        previousPaymentMethod: shouldSyncCashBook(entry) ? String(entry.paymentMethod || '').trim().toLowerCase() : undefined,
+        previousWalletType: shouldSyncCashBook(entry) ? entry.walletType : undefined,
+        previousAmount: shouldSyncCashBook(entry) ? getCashBookAmount(entry) : 0,
+        description: bookDescription(entry),
+        date: entry.transactionDate || new Date(),
+        createdBy: entry.createdBy,
+        updatedBy: entry.updatedBy || entry.createdBy,
+      });
+      return;
+    }
+    if (shouldSyncCashBook(entry)) {
+      await walletEntryService.reverseWalletPayment({
+        organizationId: entry.organizationId,
+        branchId: entry.branchId,
+        referenceId: entry._id,
+        referenceModel: 'EmployeeLedger',
+        direction: cashDirection(entry),
+        amount: getCashBookAmount(entry),
+        paymentMethod: String(entry.paymentMethod || '').trim().toLowerCase(),
+        walletType: entry.walletType,
+        userId: entry.updatedBy || entry.createdBy,
+      });
+    }
+  };
+
+  if (cashDirection(entry) === 'out') {
+    try {
+      await syncWalletFromEmployeeLedger(entry, previousSnapshot);
+    } catch (error) {
+      // A brand-new row's wallet entry is written before the balance moves; if the move is what
+      // failed, don't leave a bank row for money that never left.
+      if (!previousSnapshot) await walletEntryService.deleteEntriesByReference(entry._id, 'EmployeeLedger');
+      throw error;
+    }
+    try {
+      await syncCashBookFromEmployeeLedger(entry);
+    } catch (error) {
+      await restoreWallet().catch(() => {});
+      throw error;
+    }
+    return;
+  }
+
+  await syncCashBookFromEmployeeLedger(entry);
+  try {
+    await syncWalletFromEmployeeLedger(entry, previousSnapshot);
+  } catch (error) {
+    if (!previousSnapshot) {
+      await walletEntryService.deleteEntriesByReference(entry._id, 'EmployeeLedger');
+      await cashBookService.deleteEntriesByReference(entry._id, 'EmployeeLedger');
+    }
+    throw error;
+  }
 };
 
 const syncExpenseFromEmployeePayment = async ({ ledgerEntry, employeeDoc }) => {
@@ -188,6 +298,10 @@ const recalculateBalances = async (employeeId) => {
   }
 };
 
+/**
+ * Add a ledger row and post its money legs. All-or-nothing: if the bank / Cash Book side is
+ * refused (e.g. not enough balance) the row is taken back out, so nothing is left half-posted.
+ */
 const createLedgerEntry = async (ledgerBody) => {
   const employee = await Employee.findOne({ _id: ledgerBody.employee, ...getTenantFilter(ledgerBody) });
   if (!employee) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
@@ -198,10 +312,23 @@ const createLedgerEntry = async (ledgerBody) => {
   });
   await recalculateBalances(ledgerBody.employee);
   const updatedEntry = await EmployeeLedger.findById(entry._id).populate('employee', 'firstName lastName employeeId');
-  await syncCashBookFromEmployeeLedger(updatedEntry);
-  await syncWalletFromEmployeeLedger(updatedEntry);
+  try {
+    await syncMoneyLegs(updatedEntry);
+  } catch (error) {
+    await EmployeeLedger.deleteOne({ _id: entry._id });
+    await recalculateBalances(ledgerBody.employee);
+    throw error;
+  }
   return updatedEntry;
 };
+
+const voucherOwnedError = (entry) =>
+  new ApiError(
+    httpStatus.CONFLICT,
+    `This entry was posted by ${entry.referenceModel === 'ReceiptVoucher' ? 'Receipt' : 'Payment'} Voucher ${
+      entry.reference || ''
+    }`.trim() + ' — edit or delete it from Payments & Receipts'
+  );
 
 const updateLedgerEntryById = async (ledgerId, updateBody, scope = {}) => {
   const entry = await EmployeeLedger.findOne({ _id: ledgerId, ...getTenantFilter(scope) }).populate(
@@ -211,14 +338,11 @@ const updateLedgerEntryById = async (ledgerId, updateBody, scope = {}) => {
   if (!entry) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Ledger entry not found');
   }
+  if (isVoucherOwned(entry)) throw voucherOwnedError(entry);
 
-  // Captured before the save so syncWalletFromEmployeeLedger can reverse whatever wallet
-  // effect the entry actually had — not what its new paymentMethod/amount happen to be.
-  const previousWalletSnapshot = {
-    paymentMethod: entry.paymentMethod,
-    walletType: entry.walletType,
-    amount: shouldSyncCashBook(entry) ? getCashBookAmount(entry) : 0,
-  };
+  // Captured before the save so the money legs can reverse whatever wallet effect the entry
+  // actually had — not what its new paymentMethod/amount happen to be.
+  const previousWalletSnapshot = walletSnapshotOf(entry);
 
   Object.assign(entry, updateBody);
   await entry.save();
@@ -226,13 +350,19 @@ const updateLedgerEntryById = async (ledgerId, updateBody, scope = {}) => {
   const employeeId = entry.employee?._id || entry.employee;
   await recalculateBalances(employeeId);
   const updatedEntry = await EmployeeLedger.findById(entry._id).populate('employee', 'firstName lastName employeeId');
-  await syncCashBookFromEmployeeLedger(updatedEntry);
-  await syncWalletFromEmployeeLedger(updatedEntry, previousWalletSnapshot);
+  await syncMoneyLegs(updatedEntry, previousWalletSnapshot);
   await syncExpenseForLedgerEntry(updatedEntry);
   return updatedEntry;
 };
 
-const deleteLedgerEntryById = async (ledgerId, scope = {}) => {
+/**
+ * Remove a row and everything it posted (bank leg, Cash Book line, mirrored salary expense).
+ * Money that came IN is taken back out first — that is the step that can be refused (already
+ * spent), so nothing is deleted when it is.
+ * @param {Object} [options]
+ * @param {boolean} [options.fromVoucher] - the owning voucher is doing the delete
+ */
+const deleteLedgerEntryById = async (ledgerId, scope = {}, options = {}) => {
   const entry = await EmployeeLedger.findOne({ _id: ledgerId, ...getTenantFilter(scope) }).populate(
     'employee',
     'firstName lastName employeeId'
@@ -240,32 +370,118 @@ const deleteLedgerEntryById = async (ledgerId, scope = {}) => {
   if (!entry) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Ledger entry not found');
   }
+  const voucherOwned = isVoucherOwned(entry);
+  if (voucherOwned && !options.fromVoucher) throw voucherOwnedError(entry);
 
   const employeeId = entry.employee?._id || entry.employee;
-  const employeeName = entry.employee?.firstName
-    ? `${entry.employee.firstName} ${entry.employee.lastName || ''}`.trim()
-    : '';
+  // The description-matching fallbacks below exist for legacy rows that predate referenceId
+  // links. A voucher row is always linked — and two lines of one voucher can share a wording, so
+  // a fallback could take out its sibling's records.
+  const employeeName = voucherOwned ? '' : employeeNameOf(entry);
 
-  await cashBookService.deleteEmployeeLedgerPaymentCashBook(entry, employeeName);
-  // Only reverse the wallet balance if this entry was actually eligible to move it in
-  // the first place (shouldSyncCashBook) — otherwise (e.g. "Affect Expense & Cash Book"
-  // was off) no wallet deduction was ever applied for it to reverse.
-  if (shouldSyncCashBook(entry)) {
+  const reverseWallet = async () => {
+    // Only if this entry was actually eligible to move it in the first place
+    // (shouldSyncCashBook) — otherwise (e.g. "Affect Expense & Cash Book" was off)
+    // no wallet movement was ever applied for it to reverse.
+    if (!shouldSyncCashBook(entry)) return;
     await walletEntryService.reverseWalletPayment({
       organizationId: entry.organizationId,
       branchId: entry.branchId,
       referenceId: entry._id,
       referenceModel: 'EmployeeLedger',
-      direction: 'out',
+      direction: cashDirection(entry),
       amount: getCashBookAmount(entry),
       paymentMethod: String(entry.paymentMethod || '').trim().toLowerCase(),
       walletType: entry.walletType,
       userId: entry.updatedBy || entry.createdBy,
     });
+  };
+
+  if (cashDirection(entry) === 'in') {
+    await reverseWallet();
+    await cashBookService.deleteEntriesByReference(entry._id, 'EmployeeLedger');
+  } else {
+    await cashBookService.deleteEmployeeLedgerPaymentCashBook(entry, employeeName);
+    await reverseWallet();
   }
-  await expenseService.deleteExpenseByLedgerReference(entry._id, entry, entry.employee);
+  await expenseService.deleteExpenseByLedgerReference(
+    entry._id,
+    voucherOwned ? null : entry,
+    voucherOwned ? null : entry.employee
+  );
   await entry.deleteOne();
   await recalculateBalances(employeeId);
+  return entry;
+};
+
+/**
+ * One voucher line → one ledger row (+ its mirrored salary expense). Used by the Payment and
+ * Receipt Voucher services, which own these rows from then on.
+ * @param {Object} params
+ * @param {'salary_payment'|'advance_payment'|'payment_received'} params.transactionType
+ * @param {Object} params.voucher - header: _id, voucherNumber, date, bankAccountName, notes, createdBy, updatedBy
+ * @param {'PaymentVoucher'|'ReceiptVoucher'} params.referenceModel
+ */
+const postVoucherEntry = async ({ organizationId, branchId, employeeId, transactionType, amount, description, voucher, referenceModel }) => {
+  const incoming = transactionType === 'payment_received';
+  const entry = await createLedgerEntry({
+    organizationId,
+    branchId,
+    employee: employeeId,
+    transactionType,
+    transactionDate: voucher.date || voucher.createdAt || new Date(),
+    reference: voucher.voucherNumber,
+    referenceId: voucher._id,
+    referenceModel,
+    description,
+    debit: incoming ? Number(amount) : 0,
+    credit: incoming ? 0 : Number(amount),
+    // Always the account by name — a cash-type account is still routed to the Cash Book by
+    // isRealWalletPayment, a bank / mobile wallet moves its own balance.
+    paymentMethod: 'wallet',
+    walletType: voucher.bankAccountName,
+    notes: voucher.notes || '',
+    createdBy: voucher.updatedBy || voucher.createdBy,
+    updatedBy: voucher.updatedBy || voucher.createdBy,
+  });
+  if (EXPENSE_SYNC_TYPES.has(transactionType)) {
+    try {
+      await syncExpenseForLedgerEntry(entry);
+    } catch (error) {
+      await deleteLedgerEntryById(entry._id, { organizationId, branchId }, { fromVoucher: true });
+      throw error;
+    }
+  }
+  return entry;
+};
+
+/** Undo `postVoucherEntry`. A row that is already gone is not an error — there is nothing to undo. */
+const removeVoucherEntry = async (ledgerId, scope = {}) => {
+  if (!ledgerId) return null;
+  const exists = await EmployeeLedger.exists({ _id: ledgerId, ...getTenantFilter(scope) });
+  if (!exists) return null;
+  return deleteLedgerEntryById(ledgerId, scope, { fromVoucher: true });
+};
+
+/**
+ * Reword a voucher-owned row (and the bank / Cash Book / expense rows it owns) without moving any
+ * money — the voucher's equivalent of supplierLedger's updateLedgerEntryText.
+ */
+const updateVoucherEntryText = async (ledgerId, { description, notes }, scope = {}) => {
+  const entry = await EmployeeLedger.findOne({ _id: ledgerId, ...getTenantFilter(scope) }).populate(
+    'employee',
+    'firstName lastName employeeId'
+  );
+  if (!entry) return null;
+  if (description !== undefined) entry.description = description;
+  if (notes !== undefined) entry.notes = notes;
+  await entry.save();
+  const wording = bookDescription(entry);
+  await walletEntryService.updateDescriptionByReference(entry._id, 'EmployeeLedger', wording);
+  await cashBookService.updateDescriptionByReference(entry._id, 'EmployeeLedger', wording);
+  if (notes !== undefined) {
+    await Expense.updateMany({ referenceId: entry._id, referenceModel: 'EmployeeLedger' }, { $set: { notes } });
+  }
   return entry;
 };
 
@@ -290,69 +506,207 @@ const queryLedgerEntries = async (filter, options) => {
   return EmployeeLedger.paginate(filter, options);
 };
 
-const getEmployeeLedgerSummary = async (employeeId, scope = {}) => {
-  const filter = { employee: employeeId };
-  if (scope.organizationId) filter.organizationId = scope.organizationId;
-  if (scope.branchId) filter.branchId = scope.branchId;
-
-  const entries = await EmployeeLedger.find(filter);
+/**
+ * The figures every employee screen shows, from a list of ledger rows.
+ *
+ * Sign convention (same as the stored running balance): + = the business owes the employee
+ * (salary payable), − = the employee owes the business (advance / loan outstanding).
+ */
+const summarizeEntries = (entries) => {
   let totalPayable = 0;
   let totalSalaryPaid = 0;
   let totalAdvancePaid = 0;
   let totalAdvanceRecovered = 0;
+  let totalCashReceived = 0;
+  let currentBalance = 0;
 
   entries.forEach((entry) => {
-    if (entry.transactionType === 'salary_payable') totalPayable += Number(entry.debit || 0);
-    if (entry.transactionType === 'salary_payment') totalSalaryPaid += Number(entry.credit || 0);
-    if (entry.transactionType === 'advance_payment') totalAdvancePaid += Number(entry.credit || 0);
-    if (entry.transactionType === 'advance_recovery') totalAdvanceRecovered += Number(entry.credit || 0);
+    const debit = Number(entry.debit || 0);
+    const credit = Number(entry.credit || 0);
+    if (entry.transactionType === 'salary_payable') totalPayable += debit;
+    if (entry.transactionType === 'salary_payment') totalSalaryPaid += credit;
+    if (entry.transactionType === 'advance_payment') totalAdvancePaid += credit;
+    if (entry.transactionType === 'advance_recovery') totalAdvanceRecovered += credit;
+    if (entry.transactionType === 'payment_received') totalCashReceived += debit;
+    // advance_recovery is a memo (see recalculateBalances) — every other row moves the balance.
+    if (entry.transactionType !== 'advance_recovery') currentBalance += debit - credit;
   });
 
+  const round = (n) => Math.round(n * 100) / 100;
+  currentBalance = round(currentBalance);
   // Advance is real cash paid out, so it reduces the running ledger balance
   // immediately (same as a salary payment). advance_recovery is a bookkeeping
   // memo only used to track how much of that advance is considered "settled" —
   // it does not touch the balance again (that would double-count the cash).
-  const outstandingAdvance = Math.max(0, totalAdvancePaid - totalAdvanceRecovered);
-  const currentBalance = totalPayable - totalSalaryPaid - totalAdvancePaid;
+  // Cash the employee handed back settles their advance too.
+  const outstandingAdvance = round(Math.max(0, totalAdvancePaid - totalAdvanceRecovered - totalCashReceived));
   // payableNow is the actual cash cap the Pay button enforces — it accounts for
   // advances already given, so the same cash can't be paid out twice.
   const payableNow = Math.max(0, currentBalance);
   // remainingPayable is a display-only figure: gross salary that hasn't gone
   // through a salary_payment yet, deliberately ignoring any advance given.
-  const remainingPayable = Math.max(0, totalPayable - totalSalaryPaid);
+  const remainingPayable = round(Math.max(0, totalPayable - totalSalaryPaid));
   return {
-    totalPayable,
-    totalSalaryPaid,
-    totalAdvancePaid,
-    totalAdvanceRecovered,
+    totalPayable: round(totalPayable),
+    totalSalaryPaid: round(totalSalaryPaid),
+    totalAdvancePaid: round(totalAdvancePaid),
+    totalAdvanceRecovered: round(totalAdvanceRecovered),
+    totalCashReceived: round(totalCashReceived),
     outstandingAdvance,
     remainingPayable,
     payableNow,
+    // What the employee owes the business right now (the − side of the balance).
+    receivableNow: Math.max(0, -currentBalance),
     currentBalance,
     transactionCount: entries.length,
   };
 };
 
+const getEmployeeLedgerSummary = async (employeeId, scope = {}) => {
+  const filter = { employee: employeeId };
+  if (scope.organizationId) filter.organizationId = scope.organizationId;
+  if (scope.branchId) filter.branchId = scope.branchId;
+
+  const entries = await EmployeeLedger.find(filter).select('transactionType debit credit').lean();
+  return summarizeEntries(entries);
+};
+
+const toObjectId = (value) =>
+  value && mongoose.Types.ObjectId.isValid(String(value)) ? new mongoose.Types.ObjectId(String(value)) : value;
+
+/**
+ * Every employee of the branch with their ledger figures — ONE query for the rows (it used to be
+ * one query per employee, which made the employee picker on a voucher slow for a big staff).
+ */
 const getAllEmployeesWithBalances = async (scope = {}) => {
   const employeeFilter = {};
   if (scope.organizationId) employeeFilter.organizationId = scope.organizationId;
   if (scope.branchId) employeeFilter.branchId = scope.branchId;
 
-  const employees = await Employee.find(employeeFilter).select('firstName lastName employeeId');
-  const result = await Promise.all(
-    employees.map(async (employee) => {
-      const summary = await getEmployeeLedgerSummary(employee._id, scope);
-      return {
-        id: employee.id,
-        _id: employee._id,
-        employeeId: employee.employeeId,
-        name: `${employee.firstName} ${employee.lastName}`,
-        ...summary,
-      };
-    })
-  );
+  const employees = await Employee.find(employeeFilter)
+    .select('firstName lastName employeeId phone employmentStatus designation department salary')
+    .populate('designation', 'name title')
+    .populate('department', 'name')
+    .lean();
+  if (employees.length === 0) return [];
 
-  return result;
+  const match = { employee: { $in: employees.map((employee) => employee._id) } };
+  if (scope.organizationId) match.organizationId = toObjectId(scope.organizationId);
+  if (scope.branchId) match.branchId = toObjectId(scope.branchId);
+  const rows = await EmployeeLedger.find(match).select('employee transactionType debit credit transactionDate').lean();
+
+  const byEmployee = new Map();
+  rows.forEach((row) => {
+    const key = String(row.employee);
+    if (!byEmployee.has(key)) byEmployee.set(key, []);
+    byEmployee.get(key).push(row);
+  });
+
+  return employees.map((employee) => {
+    const entries = byEmployee.get(String(employee._id)) || [];
+    const lastActivity = entries.reduce((latest, row) => {
+      const at = row.transactionDate ? new Date(row.transactionDate).getTime() : 0;
+      return at > latest ? at : latest;
+    }, 0);
+    return {
+      id: String(employee._id),
+      _id: employee._id,
+      employeeId: employee.employeeId,
+      name: `${employee.firstName} ${employee.lastName || ''}`.trim(),
+      phone: employee.phone || '',
+      employmentStatus: employee.employmentStatus || 'Active',
+      designation: employee.designation?.name || employee.designation?.title || '',
+      department: employee.department?.name || '',
+      monthlySalary: Number(employee.salary?.basicSalary || 0) + Number(employee.salary?.allowances || 0),
+      lastActivity: lastActivity ? new Date(lastActivity) : null,
+      ...summarizeEntries(entries),
+    };
+  });
+};
+
+/**
+ * A proper account statement for one employee over a period: opening balance (everything before
+ * the period), each row with its running balance, period totals and the closing balance.
+ * Running balances are worked out here, not read from the stored `balance`, so a statement is
+ * right even for rows whose stored balance is stale.
+ */
+const getEmployeeStatement = async (employeeId, { startDate, endDate } = {}, scope = {}) => {
+  const employee = await Employee.findOne({ _id: employeeId, ...getTenantFilter(scope) })
+    .select('firstName lastName employeeId phone employmentStatus designation department joiningDate salary')
+    .populate('designation', 'name title')
+    .populate('department', 'name')
+    .lean();
+  if (!employee) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+
+  const entries = await EmployeeLedger.find({ employee: employeeId, ...getTenantFilter(scope) })
+    .sort({ transactionDate: 1, createdAt: 1 })
+    .populate('createdBy', 'name')
+    .lean();
+
+  const from = startDate ? new Date(startDate) : null;
+  const to = endDate ? new Date(endDate) : null;
+  const movesBalance = (row) => row.transactionType !== 'advance_recovery';
+
+  let running = 0;
+  let openingBalance = 0;
+  const rows = [];
+  const totals = { debit: 0, credit: 0 };
+  entries.forEach((row) => {
+    const at = new Date(row.transactionDate);
+    const effect = movesBalance(row) ? Number(row.debit || 0) - Number(row.credit || 0) : 0;
+    if (from && at < from) {
+      running += effect;
+      openingBalance = running;
+      return;
+    }
+    if (to && at > to) return;
+    running += effect;
+    if (movesBalance(row)) {
+      totals.debit += Number(row.debit || 0);
+      totals.credit += Number(row.credit || 0);
+    }
+    rows.push({
+      id: String(row._id),
+      transactionDate: row.transactionDate,
+      transactionType: row.transactionType,
+      description: row.description,
+      reference: row.reference || '',
+      referenceId: row.referenceId ? String(row.referenceId) : null,
+      referenceModel: row.referenceModel || null,
+      paymentMethod: row.paymentMethod || '',
+      walletType: row.walletType || '',
+      notes: row.notes || '',
+      debit: Number(row.debit || 0),
+      credit: Number(row.credit || 0),
+      // A memo row shows its amount but leaves the balance where it was.
+      memo: !movesBalance(row),
+      runningBalance: Math.round(running * 100) / 100,
+      voucherOwned: isVoucherOwned(row),
+      createdBy: row.createdBy?.name || '',
+      createdAt: row.createdAt,
+    });
+  });
+
+  const round = (n) => Math.round(n * 100) / 100;
+  return {
+    employee: {
+      id: String(employee._id),
+      employeeId: employee.employeeId,
+      name: `${employee.firstName} ${employee.lastName || ''}`.trim(),
+      phone: employee.phone || '',
+      employmentStatus: employee.employmentStatus || 'Active',
+      designation: employee.designation?.name || employee.designation?.title || '',
+      department: employee.department?.name || '',
+      joiningDate: employee.joiningDate || null,
+      monthlySalary: Number(employee.salary?.basicSalary || 0) + Number(employee.salary?.allowances || 0),
+    },
+    period: { startDate: from, endDate: to },
+    openingBalance: round(from ? openingBalance : 0),
+    totals: { debit: round(totals.debit), credit: round(totals.credit) },
+    closingBalance: round((from ? openingBalance : 0) + totals.debit - totals.credit),
+    rows,
+    summary: summarizeEntries(entries),
+  };
 };
 
 const createAdvancePayment = async (advanceBody) => {
@@ -711,6 +1065,11 @@ const deletePurchaseAdvanceForInvoice = (invoiceId) => deletePurchaseAdvanceForR
 
 module.exports = {
   createLedgerEntry,
+  postVoucherEntry,
+  removeVoucherEntry,
+  updateVoucherEntryText,
+  getEmployeeStatement,
+  summarizeEntries,
   updateLedgerEntryById,
   deleteLedgerEntryById,
   queryLedgerEntries,

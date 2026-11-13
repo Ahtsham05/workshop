@@ -12,14 +12,22 @@ const PAYEE_TYPE_LABEL: Record<string, string> = {
   expense: 'Expense',
   supplier: 'Supplier',
   customer: 'Customer',
+  employee: 'Employee',
   other: 'Other',
 }
 
+const lineTypeLabel = (line: PrintableVoucherLine) =>
+  line.payeeType === 'employee'
+    ? `Employee (${line.employeePurpose === 'advance' ? 'Advance' : 'Salary'})`
+    : PAYEE_TYPE_LABEL[line.payeeType] || line.payeeType
+
 export interface PrintableVoucherLine {
-  payeeType: 'expense' | 'supplier' | 'customer' | 'other'
+  payeeType: 'expense' | 'supplier' | 'customer' | 'employee' | 'other'
   category?: string
   supplierName?: string
   customerName?: string
+  employeeName?: string
+  employeePurpose?: 'salary' | 'advance'
   payeeName: string
   amount: number
   /** Ledger discount given/received with this line (no cash). */
@@ -308,7 +316,7 @@ const generateVoucherHTML = (voucher: PrintablePaymentVoucher, company: PrintCom
           (line) => `
       <tr>
         <td>${escapeHtml(line.payeeName)}</td>
-        <td>${escapeHtml(PAYEE_TYPE_LABEL[line.payeeType] || line.payeeType)}</td>
+        <td>${escapeHtml(lineTypeLabel(line))}</td>
         <td>${escapeHtml(line.description || '-')}</td>
         <td class="amount-col">${formatCurrency(line.amount)}</td>
         ${hasDiscount ? `<td class="amount-col">${Number(line.discountAmount) > 0 ? `${formatCurrency(Number(line.discountAmount))}<div style="font-size:9px;font-weight:500">${escapeHtml(discountReasonLabel(line.discountReason))}</div>` : '-'}</td>` : ''}

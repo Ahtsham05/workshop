@@ -19,7 +19,8 @@ import type { LineAccountState } from '../utils/line-account-state'
 const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100
 
 /** What the party owes before this line. Customer: owes us. Supplier: we owe them. */
-export function PartyBalanceCell({ side, owing }: { side: 'customer' | 'supplier'; owing: number | undefined }) {
+/** Employee: + = salary payable to them, − = advance they owe back (same reading as a supplier). */
+export function PartyBalanceCell({ side, owing }: { side: 'customer' | 'supplier' | 'employee'; owing: number | undefined }) {
   const formatMoney = useFormatMoney()
   const { t } = useLanguage()
   if (owing === undefined) return <span className='block pt-2 text-right text-xs text-muted-foreground'>—</span>

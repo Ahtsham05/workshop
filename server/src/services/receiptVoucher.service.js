@@ -1,12 +1,13 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { ReceiptVoucher, Wallet, Customer } = require('../models');
+const { ReceiptVoucher, Wallet, Customer, Employee } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
 const walletEntryService = require('./walletEntry.service');
 const customerLedgerService = require('./customerLedger.service');
 const voucherEdit = require('./voucherEdit');
 const ledgerDiscountService = require('./ledgerDiscount.service');
+const employeeLedgerService = require('./employeeLedger.service');
 
 /** Discount fields only ever belong on a customer line. */
 const DISCOUNT_FIELDS = ['discountAmount', 'discountReason', 'discountPercent', 'discountBaseAmount', 'discountApprovalNote', 'discountNote'];
@@ -126,6 +127,25 @@ const syncCustomerLine = async (voucher, line, ctx = {}) => {
 };
 
 /**
+ * Cash an employee handed back (returning an advance, repaying a loan or an over-payment) —
+ * posted on their Employee Ledger as Cash Received, which owns the bank / Cash Book legs. Must
+ * NOT also go through `syncLineCashEntry`, or the account would be credited twice.
+ */
+const syncEmployeeLine = async (voucher, line) => {
+  const entry = await employeeLedgerService.postVoucherEntry({
+    organizationId: voucher.organizationId,
+    branchId: voucher.branchId,
+    employeeId: line.employeeId,
+    transactionType: 'payment_received',
+    amount: line.amount,
+    description: lineDescription(voucher, line),
+    voucher,
+    referenceModel: 'ReceiptVoucher',
+  });
+  return entry._id;
+};
+
+/**
  * Post every ledger record one line owns, recording the id a later reversal has to find
  * (`customerLedgerEntryId`) on the line. `voucher` only needs the header fields, so an edit can
  * pass the voucher as it WILL be (or as it WAS) without touching the stored document.
@@ -133,6 +153,8 @@ const syncCustomerLine = async (voucher, line, ctx = {}) => {
 const postLine = async (voucher, line, isCashAccount, ctx = {}) => {
   if (line.sourceType === 'customer') {
     line.customerLedgerEntryId = await syncCustomerLine(voucher, line, ctx);
+  } else if (line.sourceType === 'employee') {
+    line.employeeLedgerEntryId = await syncEmployeeLine(voucher, line);
   } else {
     await syncLineCashEntry(voucher, line, isCashAccount);
   }
@@ -152,6 +174,15 @@ const reverseLine = async (voucher, line) => {
     if (line.customerLedgerEntryId) {
       await customerLedgerService.deleteLedgerEntry(line.customerLedgerEntryId);
     }
+    return;
+  }
+  if (line.sourceType === 'employee') {
+    // The ledger takes the money back out of the account first and refuses (deleting nothing)
+    // if it has already been spent.
+    await employeeLedgerService.removeVoucherEntry(line.employeeLedgerEntryId, {
+      organizationId: voucher.organizationId,
+      branchId: voucher.branchId,
+    });
     return;
   }
 
@@ -191,16 +222,25 @@ const annotateLine = async (voucher, existing, line) => {
     }
     return;
   }
+  if (line.sourceType === 'employee') {
+    await employeeLedgerService.updateVoucherEntryText(
+      existing.employeeLedgerEntryId,
+      { description, notes: voucher.notes || '' },
+      { organizationId: voucher.organizationId, branchId: voucher.branchId }
+    );
+    return;
+  }
 
   await cashBookService.updateDescriptionByReference(line._id, 'ReceiptVoucher', description);
   await walletEntryService.updateDescriptionByReference(line._id, 'ReceiptVoucher', description);
 };
 
 /** Where a line's bank-side WalletEntry lives — used to refuse edits to reconciled entries. */
-const receiptLegRef = (line) =>
-  line.sourceType === 'customer'
-    ? { referenceModel: 'CustomerLedger', referenceId: line.customerLedgerEntryId }
-    : { referenceModel: 'ReceiptVoucher', referenceId: line._id };
+const receiptLegRef = (line) => {
+  if (line.sourceType === 'customer') return { referenceModel: 'CustomerLedger', referenceId: line.customerLedgerEntryId };
+  if (line.sourceType === 'employee') return { referenceModel: 'EmployeeLedger', referenceId: line.employeeLedgerEntryId };
+  return { referenceModel: 'ReceiptVoucher', referenceId: line._id };
+};
 
 const reverseVoucherLines = async (voucher) => {
   for (const line of voucher.lines) {
@@ -208,9 +248,22 @@ const reverseVoucherLines = async (voucher) => {
   }
 };
 
-/** Who paid: the customer's name, or the income category label. Customers are looked up once
- * per submission via `cache`. */
-const resolveLinePayerName = async (line, organizationId, cache) => {
+/** Who paid: the customer's or employee's name, or the income category label. Parties are looked
+ * up once per submission via `cache`. */
+const resolveLinePayerName = async (line, organizationId, cache, branchId) => {
+  if (line.sourceType === 'employee') {
+    const key = `employee:${line.employeeId}`;
+    if (!cache.has(key)) {
+      // Employees belong to a branch — receive only from this branch's staff.
+      const employee = await Employee.findOne({ _id: line.employeeId, organizationId, branchId }).select('firstName lastName');
+      if (!employee) {
+        throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+      }
+      cache.set(key, `${employee.firstName} ${employee.lastName || ''}`.trim());
+    }
+    const name = cache.get(key);
+    return { payerName: name, employeeName: name };
+  }
   if (line.sourceType !== 'customer') {
     return { payerName: line.category };
   }
@@ -244,7 +297,9 @@ const createVoucher = async (voucherBody, userId, ctx = {}) => {
   const customerCache = new Map();
   const lines = [];
   for (const line of voucherBody.lines) {
-    lines.push({ ...cleanLineDiscount(line), ...(await resolveLinePayerName(line, voucherBody.organizationId, customerCache)) });
+    const clean = cleanLineDiscount(line);
+    if (clean.sourceType !== 'employee') delete clean.employeeId;
+    lines.push({ ...clean, ...(await resolveLinePayerName(line, voucherBody.organizationId, customerCache, voucherBody.branchId)) });
   }
 
   await preflightDiscounts(voucherBody.organizationId, lines, ctx);
@@ -302,6 +357,7 @@ const getVoucherDetailById = async (id, scope = {}) => {
 };
 
 const headerOf = (voucher) => ({
+  _id: voucher._id,
   organizationId: voucher.organizationId,
   branchId: voucher.branchId,
   voucherNumber: voucher.voucherNumber,
@@ -319,6 +375,7 @@ const lineMoneyChanged = (existing, line) =>
   !voucherEdit.sameAmount(existing.amount, line.amount) ||
   (line.sourceType === 'income' && !voucherEdit.sameText(existing.category, line.category)) ||
   (line.sourceType === 'customer' && !voucherEdit.sameId(existing.customerId, line.customerId)) ||
+  (line.sourceType === 'employee' && !voucherEdit.sameId(existing.employeeId, line.employeeId)) ||
   // A changed discount is a changed settlement: re-post the line (payment + its discount).
   !voucherEdit.sameAmount(lineDiscountAmount(existing), lineDiscountAmount(line)) ||
   (lineDiscountAmount(line) > 0 && !voucherEdit.sameText(existing.discountReason, line.discountReason));
@@ -332,9 +389,16 @@ const resolveEditedLine = async (input, existing, voucher, customerCache) => {
     existing.sourceType === 'customer' &&
     voucherEdit.sameId(existing.customerId, input.customerId);
 
-  const names = unchangedCustomer
-    ? { payerName: existing.payerName, customerName: existing.customerName }
-    : await resolveLinePayerName(input, voucher.organizationId, customerCache);
+  const unchangedEmployee =
+    existing &&
+    input.sourceType === 'employee' &&
+    existing.sourceType === 'employee' &&
+    voucherEdit.sameId(existing.employeeId, input.employeeId);
+
+  let names;
+  if (unchangedCustomer) names = { payerName: existing.payerName, customerName: existing.customerName };
+  else if (unchangedEmployee) names = { payerName: existing.payerName, employeeName: existing.employeeName || existing.payerName };
+  else names = await resolveLinePayerName(input, voucher.organizationId, customerCache, voucher.branchId);
 
   const discount = cleanLineDiscount(input);
   return {
@@ -344,6 +408,8 @@ const resolveEditedLine = async (input, existing, voucher, customerCache) => {
     category: input.sourceType === 'income' ? input.category : undefined,
     customerId: input.sourceType === 'customer' ? input.customerId : undefined,
     customerName: input.sourceType === 'customer' ? names.customerName : undefined,
+    employeeId: input.sourceType === 'employee' ? input.employeeId : undefined,
+    employeeName: input.sourceType === 'employee' ? names.employeeName : undefined,
     payerName: names.payerName,
     amount: Number(input.amount),
     description: input.description || undefined,
@@ -428,6 +494,7 @@ const updateVoucher = async (voucherId, scope, body, userId, ctx = {}) => {
   pairs.forEach((pair) => {
     if (pair.existing && !replaced.has(pair)) {
       pair.line.customerLedgerEntryId = pair.existing.customerLedgerEntryId;
+      pair.line.employeeLedgerEntryId = pair.existing.employeeLedgerEntryId;
       pair.line.discountLedgerEntryId = pair.existing.discountLedgerEntryId;
     }
   });

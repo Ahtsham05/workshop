@@ -87,6 +87,9 @@ interface CustomerRateHistoryPanelProps {
   onAutoOpenChange: (value: boolean) => void
   /** Put the caret back in the rate field (after "Use" or closing the invoice view). */
   onReturnFocus: () => void
+  /** 'popover' (default) hangs from the rate field; 'inline' renders the same box in the page
+   *  flow — the phone line editor, where a floating box would fight the keyboard. */
+  variant?: 'popover' | 'inline'
 }
 
 const sameUnit = (a?: string, b?: string) =>
@@ -143,6 +146,7 @@ export function CustomerRateHistoryPanel({
   autoOpen,
   onAutoOpenChange,
   onReturnFocus,
+  variant = 'popover',
 }: CustomerRateHistoryPanelProps) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
@@ -264,6 +268,486 @@ export function CustomerRateHistoryPanel({
         ? 'text-emerald-600 dark:text-emerald-400'
         : 'text-muted-foreground'
 
+  const inline = variant === 'inline'
+  const panelBody = (
+    <>
+      {/* Header: product + customer (name, phone, balance) — laptop box only; the phone line
+          editor already shows the product, and the customer + balance sit on the invoice form. */}
+      {!inline ? (
+        <div className='flex items-start gap-3 border-b px-3.5 py-2.5'>
+          <ContactPhotoCell
+            picture={customer.picture as never}
+            name={customer.name}
+            className='mt-0.5 h-8 w-8 shrink-0 rounded-full'
+          />
+          <div className='min-w-0 flex-1'>
+            <div className='flex min-w-0 items-center gap-1.5 text-sm leading-tight font-semibold'>
+              <History className='text-primary h-3.5 w-3.5 shrink-0' />
+              <span
+                className={getTextClasses(line.name, 'truncate')}
+                title={line.name}
+              >
+                {line.name}
+              </span>
+              <span className='text-muted-foreground shrink-0 font-normal'>
+                · {currentUnit}
+              </span>
+            </div>
+            <div className='text-muted-foreground mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs'>
+              <span
+                className={getTextClasses(
+                  customer.name,
+                  'text-foreground max-w-[150px] truncate font-medium'
+                )}
+                title={customer.name}
+              >
+                {customer.name}
+              </span>
+              {customer.phone ? (
+                <span className='inline-flex items-center gap-1'>
+                  <Phone className='h-3 w-3' />
+                  {customer.phone}
+                </span>
+              ) : null}
+              {customerBalance !== undefined || loadingBalance ? (
+                <span>
+                  {t('Balance')}{' '}
+                  {loadingBalance ? (
+                    <Loader2 className='inline h-3 w-3 animate-spin' />
+                  ) : (
+                    <span
+                      className={cn(
+                        'font-semibold tabular-nums',
+                        balanceTone
+                      )}
+                    >
+                      {formatMoney(Math.abs(balance))}
+                      {balance > 0
+                        ? isSale
+                          ? ' Dr'
+                          : ' Cr'
+                        : balance < 0
+                          ? isSale
+                            ? ' Cr'
+                            : ' Dr'
+                          : ''}
+                    </span>
+                  )}
+                </span>
+              ) : null}
+            </div>
+          </div>
+          <Button
+            type='button'
+            variant='ghost'
+            size='icon'
+            className='-mt-0.5 -mr-1 h-7 w-7 shrink-0'
+            onClick={() => {
+              onOpenChange(false)
+              onReturnFocus()
+            }}
+            aria-label={t('Close')}
+          >
+            <X className='h-4 w-4' />
+          </Button>
+        </div>
+      ) : null}
+
+      <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain'>
+        {/* This line now — laptop box only; on a phone the editor right above already shows it */}
+        {!inline ? (
+          <div className='space-y-1.5 border-b px-3.5 py-2'>
+            <div className='flex items-baseline justify-between gap-3'>
+              <span className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+                {copy.thisDoc}
+              </span>
+              <span className='text-sm tabular-nums'>
+                {line.quantity} {currentUnit} ×{' '}
+                <span className='font-semibold'>
+                  {formatMoney(line.unitPrice)}
+                </span>
+              </span>
+            </div>
+            <div className='flex flex-wrap items-center gap-1.5 text-xs'>
+              {diffVsLast !== null ? (
+                <span
+                  data-testid='rate-vs-last'
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ring-1 ring-inset',
+                    Math.abs(diffVsLast) < 0.005
+                      ? 'bg-muted text-muted-foreground ring-border'
+                      : isGoodChange(diffVsLast)
+                        ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300'
+                        : 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-950/40 dark:text-amber-300'
+                  )}
+                >
+                  {Math.abs(diffVsLast) < 0.005 ? (
+                    <Minus className='h-3 w-3' />
+                  ) : diffVsLast > 0 ? (
+                    <ArrowUpRight className='h-3 w-3' />
+                  ) : (
+                    <ArrowDownRight className='h-3 w-3' />
+                  )}
+                  {Math.abs(diffVsLast) < 0.005
+                    ? t('Same as last time')
+                    : `${diffVsLast > 0 ? '+' : '−'}${Math.abs(diffVsLast).toFixed(1)}% ${copy.vsLast}`}
+                </span>
+              ) : null}
+              {listPrice !== undefined && listPrice > 0 ? (
+                <span className='bg-muted text-muted-foreground rounded-full px-2 py-0.5'>
+                  {t('List')}{' '}
+                  <span className='text-foreground font-medium tabular-nums'>
+                    {formatMoney(listPrice * currentFactor)}
+                  </span>
+                </span>
+              ) : null}
+              {showCost && line.cost > 0 ? (
+                <span
+                  className={cn(
+                    'rounded-full px-2 py-0.5',
+                    belowCost
+                      ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                      : 'bg-muted text-muted-foreground'
+                  )}
+                >
+                  {t('Cost')}{' '}
+                  <span className='font-medium tabular-nums'>
+                    {formatMoney(line.cost * currentFactor)}
+                  </span>
+                  {margin !== null ? (
+                    <span className='tabular-nums'>
+                      {' '}
+                      ·{' '}
+                      {belowCost
+                        ? t('below cost')
+                        : `+${formatMoney(margin)}`}
+                    </span>
+                  ) : null}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Stats */}
+        {stats && !inline ? (
+          <div className='grid grid-cols-4 divide-x border-b'>
+            <Stat
+              label={copy.lastRate}
+              value={lastRate !== null ? formatMoney(lastRate) : '—'}
+              hint={
+                lastCharged ? daysAgoLabel(lastCharged.date) : undefined
+              }
+              emphasis
+            />
+            <Stat
+              label={t('Average')}
+              value={fmtOrDash(
+                formatMoney,
+                perStockToCurrent(stats.avgRatePerStockUnit)
+              )}
+            />
+            <Stat
+              label={t('Lowest')}
+              value={fmtOrDash(
+                formatMoney,
+                perStockToCurrent(stats.minRatePerStockUnit)
+              )}
+            />
+            <Stat
+              label={t('Highest')}
+              value={fmtOrDash(
+                formatMoney,
+                perStockToCurrent(stats.maxRatePerStockUnit)
+              )}
+            />
+          </div>
+        ) : null}
+        {stats ? (
+          <p className='text-muted-foreground border-b px-4 py-2 text-xs'>
+            {copy.times(stats.invoiceCount)} ·{' '}
+            {formatQty(stats.totalStockQuantity / currentFactor)}{' '}
+            {currentUnit} ·{' '}
+            <span className='tabular-nums'>
+              {formatMoney(stats.totalAmount)}
+            </span>
+            {stats.firstDate ? (
+              <>
+                {' '}
+                · {t('since')} {formatAppDate(new Date(stats.firstDate))}
+              </>
+            ) : null}
+          </p>
+        ) : null}
+
+        {/* Previous sales */}
+        <div className='px-2 py-2'>
+          <div className='flex items-center justify-between px-2 pb-1.5'>
+            <span className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+              {copy.previous}
+            </span>
+            {isFetching && history ? (
+              <Loader2 className='text-muted-foreground h-3 w-3 animate-spin' />
+            ) : null}
+          </div>
+
+          {!history ? (
+            isError ? (
+              <div className='px-2 py-8 text-center text-sm'>
+                <p className='text-destructive'>
+                  {t('Could not load the rate history.')}
+                </p>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  className='mt-3'
+                  onClick={() => refetch()}
+                >
+                  {t('Try again')}
+                </Button>
+              </div>
+            ) : (
+              <div className='space-y-2 px-2' aria-busy='true'>
+                {[0, 1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className='bg-muted/60 h-14 animate-pulse rounded-lg'
+                  />
+                ))}
+              </div>
+            )
+          ) : lines.length === 0 ? (
+            <div className='px-2 py-6 text-center'>
+              <Package className='text-muted-foreground/50 mx-auto h-8 w-8' />
+              <p className='mt-2 text-sm font-medium'>{copy.firstTime}</p>
+              <p className='text-muted-foreground mt-1 text-xs'>
+                {copy.noEarlier}
+              </p>
+            </div>
+          ) : (
+            <ul className='space-y-1' data-testid='rate-history-rows'>
+              {lines.map((rate, index) => {
+                const next = lines
+                  .slice(index + 1)
+                  .find((l) => l.subtotal > 0)
+                const delta =
+                  next && rate.subtotal > 0
+                    ? rate.netRatePerStockUnit - next.netRatePerStockUnit
+                    : 0
+                const rateHere = inCurrentUnit(rate, 'gross')
+                const netHere = inCurrentUnit(rate, 'net')
+                const unitDiffers =
+                  !sameUnit(rate.unit || 'pcs', currentUnit) &&
+                  rate.conversionFactor !== currentFactor
+                const isCurrentRate =
+                  Math.abs(rateHere - line.unitPrice) < 0.005
+                return (
+                  <li
+                    key={`${rate.invoiceId}-${index}`}
+                    className='group hover:border-border hover:bg-muted/40 rounded-lg border border-transparent px-2 py-2 transition-colors'
+                  >
+                    <div className='flex items-center gap-2'>
+                      <button
+                        type='button'
+                        onClick={() => setViewInvoiceId(rate.invoiceId)}
+                        className='text-primary min-w-0 truncate text-left text-sm font-semibold underline-offset-2 hover:underline'
+                        title={copy.openDoc}
+                      >
+                        {rate.invoiceNumber || '—'}
+                      </button>
+                      <span
+                        className={cn(
+                          'shrink-0 rounded px-1.5 py-px text-[10px] font-medium capitalize ring-1 ring-inset',
+                          TYPE_TONE[rate.type] ??
+                            'bg-muted text-muted-foreground ring-border'
+                        )}
+                      >
+                        {t(rate.type)}
+                      </span>
+                      <button
+                        type='button'
+                        onClick={() => setViewInvoiceId(rate.invoiceId)}
+                        className='text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 rounded p-0.5'
+                        title={copy.openDoc}
+                        aria-label={copy.openDoc}
+                      >
+                        <Eye className='h-3.5 w-3.5' />
+                      </button>
+                      <a
+                        href={copy.newTabHref(rate.invoiceId)}
+                        target='_blank'
+                        rel='noopener noreferrer'
+                        className='text-muted-foreground hover:bg-muted hover:text-foreground -ml-1 shrink-0 rounded p-0.5'
+                        title={t('Open in a new tab')}
+                        aria-label={t('Open in a new tab')}
+                      >
+                        <ExternalLink className='h-3.5 w-3.5' />
+                      </a>
+                      <span
+                        className='text-muted-foreground ml-auto shrink-0 text-xs tabular-nums'
+                        title={daysAgoLabel(rate.date)}
+                      >
+                        {formatAppDate(new Date(rate.date))}
+                      </span>
+                    </div>
+
+                    <div className='mt-1 flex items-center gap-2'>
+                      <div className='text-muted-foreground min-w-0 flex-1 text-xs'>
+                        <span className='tabular-nums'>
+                          {formatQty(rate.quantity)} {rate.unit || 'pcs'} ×{' '}
+                          <span className='text-foreground text-sm font-semibold'>
+                            {formatMoney(rate.unitPrice)}
+                          </span>
+                        </span>
+                        {rate.discountAmount <= 0 && rate.subtotal > 0 ? (
+                          <span className='tabular-nums'>
+                            {' '}
+                            = {formatMoney(rate.subtotal)}
+                          </span>
+                        ) : null}
+                        {rate.discountAmount > 0 ? (
+                          <span className='tabular-nums'>
+                            {' '}
+                            −{' '}
+                            {rate.discountType === 'percentage'
+                              ? `${rate.discountValue}%`
+                              : formatMoney(rate.discountAmount)}{' '}
+                            = {t('net')} {formatMoney(rate.netUnitPrice)}
+                          </span>
+                        ) : null}
+                        {rate.subtotal <= 0 ? (
+                          <span className='ml-1 font-medium text-emerald-600'>
+                            {t('free')}
+                          </span>
+                        ) : null}
+                        {unitDiffers ? (
+                          <span className='block tabular-nums'>
+                            ≈ {formatMoney(rateHere)} / {currentUnit}
+                            {rate.discountAmount > 0
+                              ? ` (${t('net')} ${formatMoney(netHere)})`
+                              : ''}
+                          </span>
+                        ) : null}
+                      </div>
+                      {delta !== 0 && Math.abs(delta) >= 0.005 ? (
+                        <span
+                          className={cn(
+                            'inline-flex shrink-0 items-center text-[11px] font-medium tabular-nums',
+                            isGoodChange(delta)
+                              ? 'text-emerald-600'
+                              : 'text-amber-600'
+                          )}
+                          title={copy.changeTitle}
+                        >
+                          {delta > 0 ? (
+                            <ArrowUpRight className='h-3 w-3' />
+                          ) : (
+                            <ArrowDownRight className='h-3 w-3' />
+                          )}
+                          {formatMoney(Math.abs(delta * currentFactor))}
+                        </span>
+                      ) : null}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant={
+                              isCurrentRate ? 'secondary' : 'outline'
+                            }
+                            disabled={rate.subtotal <= 0 || isCurrentRate}
+                            onClick={() => applyRate(rateHere)}
+                            className='h-7 shrink-0 px-2.5 text-xs'
+                            data-testid='use-rate'
+                          >
+                            {isCurrentRate ? t('In use') : t('Use')}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side='top'>
+                          {t('Set this line to {{rate}} / {{unit}}', {
+                            rate: formatMoney(rateHere),
+                            unit: currentUnit,
+                          })}
+                          {rate.discountAmount > 0
+                            ? ` — ${t('the discount stays as it is on this line')}`
+                            : ''}
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          {history?.truncated ? (
+            <p className='text-muted-foreground px-2 pt-2 text-center text-xs'>
+              {t(
+                'Showing the latest {{n}} invoices — totals above cover all of them.',
+                { n: new Set(lines.map((l) => l.invoiceId)).size }
+              )}
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Footer (desktop box only — auto-open on rate click and Esc don't apply inline) */}
+      {variant === 'popover' ? (
+        <div className='bg-muted/30 flex items-center justify-between gap-3 border-t px-4 py-2.5'>
+          <label className='text-muted-foreground flex cursor-pointer items-center gap-2 text-xs'>
+            <Switch
+              checked={autoOpen}
+              onCheckedChange={onAutoOpenChange}
+              className='scale-90'
+            />
+            {copy.autoOpen}
+          </label>
+          <kbd className='bg-background text-muted-foreground rounded border px-1.5 py-0.5 text-[10px]'>
+            Esc
+          </kbd>
+        </div>
+      ) : null}
+
+      {/* Rendered inside the panel so Radix treats it as a child layer (clicks in it are not
+        "outside" the panel). */}
+      {isSale ? (
+        <InvoiceDetailDialog
+          invoiceId={viewInvoiceId ?? undefined}
+          open={Boolean(viewInvoiceId)}
+          onOpenChange={(next) => !next && setViewInvoiceId(null)}
+          onCloseAutoFocus={(e) => {
+            e.preventDefault()
+            onReturnFocus()
+          }}
+        />
+      ) : (
+        <PurchaseViewDrawer
+          purchaseId={viewInvoiceId}
+          open={Boolean(viewInvoiceId)}
+          onOpenChange={(next) => !next && setViewInvoiceId(null)}
+          onCloseAutoFocus={(e: Event) => {
+            e.preventDefault()
+            onReturnFocus()
+          }}
+        />
+      )}
+    </>
+  )
+
+  // Phone line editor: the same box, laid into the page under the rate field instead of
+  // floating over it (a popover fights the on-screen keyboard).
+  if (variant === 'inline') {
+    return (
+      <section
+        data-testid='rate-history-panel'
+        aria-label={t('Rate history')}
+        className='bg-popover text-popover-foreground mt-3 flex flex-col overflow-hidden rounded-xl border shadow-sm'
+      >
+        {panelBody}
+      </section>
+    )
+  }
+
   return (
     <PopoverPrimitive.Root
       open={open}
@@ -298,459 +782,7 @@ export function CustomerRateHistoryPanel({
           }}
           className='bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1 data-[side=right]:slide-in-from-left-1 data-[side=left]:slide-in-from-right-1 z-50 flex max-h-[min(520px,var(--radix-popover-content-available-height))] origin-(--radix-popover-content-transform-origin) flex-col overflow-hidden rounded-xl border shadow-2xl ring-1 ring-black/5 outline-none dark:ring-white/10'
         >
-          {/* Header: product + customer (name, phone, balance) */}
-          <div className='flex items-start gap-3 border-b px-3.5 py-2.5'>
-            <ContactPhotoCell
-              picture={customer.picture as never}
-              name={customer.name}
-              className='mt-0.5 h-8 w-8 shrink-0 rounded-full'
-            />
-            <div className='min-w-0 flex-1'>
-              <div className='flex min-w-0 items-center gap-1.5 text-sm leading-tight font-semibold'>
-                <History className='text-primary h-3.5 w-3.5 shrink-0' />
-                <span
-                  className={getTextClasses(line.name, 'truncate')}
-                  title={line.name}
-                >
-                  {line.name}
-                </span>
-                <span className='text-muted-foreground shrink-0 font-normal'>
-                  · {currentUnit}
-                </span>
-              </div>
-              <div className='text-muted-foreground mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs'>
-                <span
-                  className={getTextClasses(
-                    customer.name,
-                    'text-foreground max-w-[150px] truncate font-medium'
-                  )}
-                  title={customer.name}
-                >
-                  {customer.name}
-                </span>
-                {customer.phone ? (
-                  <span className='inline-flex items-center gap-1'>
-                    <Phone className='h-3 w-3' />
-                    {customer.phone}
-                  </span>
-                ) : null}
-                {customerBalance !== undefined || loadingBalance ? (
-                  <span>
-                    {t('Balance')}{' '}
-                    {loadingBalance ? (
-                      <Loader2 className='inline h-3 w-3 animate-spin' />
-                    ) : (
-                      <span
-                        className={cn(
-                          'font-semibold tabular-nums',
-                          balanceTone
-                        )}
-                      >
-                        {formatMoney(Math.abs(balance))}
-                        {balance > 0
-                          ? isSale
-                            ? ' Dr'
-                            : ' Cr'
-                          : balance < 0
-                            ? isSale
-                              ? ' Cr'
-                              : ' Dr'
-                            : ''}
-                      </span>
-                    )}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            <Button
-              type='button'
-              variant='ghost'
-              size='icon'
-              className='-mt-0.5 -mr-1 h-7 w-7 shrink-0'
-              onClick={() => {
-                onOpenChange(false)
-                onReturnFocus()
-              }}
-              aria-label={t('Close')}
-            >
-              <X className='h-4 w-4' />
-            </Button>
-          </div>
-
-          <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain'>
-            {/* This line now */}
-            <div className='space-y-1.5 border-b px-3.5 py-2'>
-              <div className='flex items-baseline justify-between gap-3'>
-                <span className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                  {copy.thisDoc}
-                </span>
-                <span className='text-sm tabular-nums'>
-                  {line.quantity} {currentUnit} ×{' '}
-                  <span className='font-semibold'>
-                    {formatMoney(line.unitPrice)}
-                  </span>
-                </span>
-              </div>
-              <div className='flex flex-wrap items-center gap-1.5 text-xs'>
-                {diffVsLast !== null ? (
-                  <span
-                    data-testid='rate-vs-last'
-                    className={cn(
-                      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ring-1 ring-inset',
-                      Math.abs(diffVsLast) < 0.005
-                        ? 'bg-muted text-muted-foreground ring-border'
-                        : isGoodChange(diffVsLast)
-                          ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300'
-                          : 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-950/40 dark:text-amber-300'
-                    )}
-                  >
-                    {Math.abs(diffVsLast) < 0.005 ? (
-                      <Minus className='h-3 w-3' />
-                    ) : diffVsLast > 0 ? (
-                      <ArrowUpRight className='h-3 w-3' />
-                    ) : (
-                      <ArrowDownRight className='h-3 w-3' />
-                    )}
-                    {Math.abs(diffVsLast) < 0.005
-                      ? t('Same as last time')
-                      : `${diffVsLast > 0 ? '+' : '−'}${Math.abs(diffVsLast).toFixed(1)}% ${copy.vsLast}`}
-                  </span>
-                ) : null}
-                {listPrice !== undefined && listPrice > 0 ? (
-                  <span className='bg-muted text-muted-foreground rounded-full px-2 py-0.5'>
-                    {t('List')}{' '}
-                    <span className='text-foreground font-medium tabular-nums'>
-                      {formatMoney(listPrice * currentFactor)}
-                    </span>
-                  </span>
-                ) : null}
-                {showCost && line.cost > 0 ? (
-                  <span
-                    className={cn(
-                      'rounded-full px-2 py-0.5',
-                      belowCost
-                        ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
-                        : 'bg-muted text-muted-foreground'
-                    )}
-                  >
-                    {t('Cost')}{' '}
-                    <span className='font-medium tabular-nums'>
-                      {formatMoney(line.cost * currentFactor)}
-                    </span>
-                    {margin !== null ? (
-                      <span className='tabular-nums'>
-                        {' '}
-                        ·{' '}
-                        {belowCost
-                          ? t('below cost')
-                          : `+${formatMoney(margin)}`}
-                      </span>
-                    ) : null}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-
-            {/* Stats */}
-            {stats ? (
-              <div className='grid grid-cols-4 divide-x border-b'>
-                <Stat
-                  label={copy.lastRate}
-                  value={lastRate !== null ? formatMoney(lastRate) : '—'}
-                  hint={
-                    lastCharged ? daysAgoLabel(lastCharged.date) : undefined
-                  }
-                  emphasis
-                />
-                <Stat
-                  label={t('Average')}
-                  value={fmtOrDash(
-                    formatMoney,
-                    perStockToCurrent(stats.avgRatePerStockUnit)
-                  )}
-                />
-                <Stat
-                  label={t('Lowest')}
-                  value={fmtOrDash(
-                    formatMoney,
-                    perStockToCurrent(stats.minRatePerStockUnit)
-                  )}
-                />
-                <Stat
-                  label={t('Highest')}
-                  value={fmtOrDash(
-                    formatMoney,
-                    perStockToCurrent(stats.maxRatePerStockUnit)
-                  )}
-                />
-              </div>
-            ) : null}
-            {stats ? (
-              <p className='text-muted-foreground border-b px-4 py-2 text-xs'>
-                {copy.times(stats.invoiceCount)} ·{' '}
-                {formatQty(stats.totalStockQuantity / currentFactor)}{' '}
-                {currentUnit} ·{' '}
-                <span className='tabular-nums'>
-                  {formatMoney(stats.totalAmount)}
-                </span>
-                {stats.firstDate ? (
-                  <>
-                    {' '}
-                    · {t('since')} {formatAppDate(new Date(stats.firstDate))}
-                  </>
-                ) : null}
-              </p>
-            ) : null}
-
-            {/* Previous sales */}
-            <div className='px-2 py-2'>
-              <div className='flex items-center justify-between px-2 pb-1.5'>
-                <span className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                  {copy.previous}
-                </span>
-                {isFetching && history ? (
-                  <Loader2 className='text-muted-foreground h-3 w-3 animate-spin' />
-                ) : null}
-              </div>
-
-              {!history ? (
-                isError ? (
-                  <div className='px-2 py-8 text-center text-sm'>
-                    <p className='text-destructive'>
-                      {t('Could not load the rate history.')}
-                    </p>
-                    <Button
-                      type='button'
-                      variant='outline'
-                      size='sm'
-                      className='mt-3'
-                      onClick={() => refetch()}
-                    >
-                      {t('Try again')}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className='space-y-2 px-2' aria-busy='true'>
-                    {[0, 1, 2, 3].map((i) => (
-                      <div
-                        key={i}
-                        className='bg-muted/60 h-14 animate-pulse rounded-lg'
-                      />
-                    ))}
-                  </div>
-                )
-              ) : lines.length === 0 ? (
-                <div className='px-2 py-6 text-center'>
-                  <Package className='text-muted-foreground/50 mx-auto h-8 w-8' />
-                  <p className='mt-2 text-sm font-medium'>{copy.firstTime}</p>
-                  <p className='text-muted-foreground mt-1 text-xs'>
-                    {copy.noEarlier}
-                  </p>
-                </div>
-              ) : (
-                <ul className='space-y-1' data-testid='rate-history-rows'>
-                  {lines.map((rate, index) => {
-                    const next = lines
-                      .slice(index + 1)
-                      .find((l) => l.subtotal > 0)
-                    const delta =
-                      next && rate.subtotal > 0
-                        ? rate.netRatePerStockUnit - next.netRatePerStockUnit
-                        : 0
-                    const rateHere = inCurrentUnit(rate, 'gross')
-                    const netHere = inCurrentUnit(rate, 'net')
-                    const unitDiffers =
-                      !sameUnit(rate.unit || 'pcs', currentUnit) &&
-                      rate.conversionFactor !== currentFactor
-                    const isCurrentRate =
-                      Math.abs(rateHere - line.unitPrice) < 0.005
-                    return (
-                      <li
-                        key={`${rate.invoiceId}-${index}`}
-                        className='group hover:border-border hover:bg-muted/40 rounded-lg border border-transparent px-2 py-2 transition-colors'
-                      >
-                        <div className='flex items-center gap-2'>
-                          <button
-                            type='button'
-                            onClick={() => setViewInvoiceId(rate.invoiceId)}
-                            className='text-primary min-w-0 truncate text-left text-sm font-semibold underline-offset-2 hover:underline'
-                            title={copy.openDoc}
-                          >
-                            {rate.invoiceNumber || '—'}
-                          </button>
-                          <span
-                            className={cn(
-                              'shrink-0 rounded px-1.5 py-px text-[10px] font-medium capitalize ring-1 ring-inset',
-                              TYPE_TONE[rate.type] ??
-                                'bg-muted text-muted-foreground ring-border'
-                            )}
-                          >
-                            {t(rate.type)}
-                          </span>
-                          <button
-                            type='button'
-                            onClick={() => setViewInvoiceId(rate.invoiceId)}
-                            className='text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 rounded p-0.5'
-                            title={copy.openDoc}
-                            aria-label={copy.openDoc}
-                          >
-                            <Eye className='h-3.5 w-3.5' />
-                          </button>
-                          <a
-                            href={copy.newTabHref(rate.invoiceId)}
-                            target='_blank'
-                            rel='noopener noreferrer'
-                            className='text-muted-foreground hover:bg-muted hover:text-foreground -ml-1 shrink-0 rounded p-0.5'
-                            title={t('Open in a new tab')}
-                            aria-label={t('Open in a new tab')}
-                          >
-                            <ExternalLink className='h-3.5 w-3.5' />
-                          </a>
-                          <span
-                            className='text-muted-foreground ml-auto shrink-0 text-xs tabular-nums'
-                            title={daysAgoLabel(rate.date)}
-                          >
-                            {formatAppDate(new Date(rate.date))}
-                          </span>
-                        </div>
-
-                        <div className='mt-1 flex items-center gap-2'>
-                          <div className='text-muted-foreground min-w-0 flex-1 text-xs'>
-                            <span className='tabular-nums'>
-                              {formatQty(rate.quantity)} {rate.unit || 'pcs'} ×{' '}
-                              <span className='text-foreground text-sm font-semibold'>
-                                {formatMoney(rate.unitPrice)}
-                              </span>
-                            </span>
-                            {rate.discountAmount <= 0 && rate.subtotal > 0 ? (
-                              <span className='tabular-nums'>
-                                {' '}
-                                = {formatMoney(rate.subtotal)}
-                              </span>
-                            ) : null}
-                            {rate.discountAmount > 0 ? (
-                              <span className='tabular-nums'>
-                                {' '}
-                                −{' '}
-                                {rate.discountType === 'percentage'
-                                  ? `${rate.discountValue}%`
-                                  : formatMoney(rate.discountAmount)}{' '}
-                                = {t('net')} {formatMoney(rate.netUnitPrice)}
-                              </span>
-                            ) : null}
-                            {rate.subtotal <= 0 ? (
-                              <span className='ml-1 font-medium text-emerald-600'>
-                                {t('free')}
-                              </span>
-                            ) : null}
-                            {unitDiffers ? (
-                              <span className='block tabular-nums'>
-                                ≈ {formatMoney(rateHere)} / {currentUnit}
-                                {rate.discountAmount > 0
-                                  ? ` (${t('net')} ${formatMoney(netHere)})`
-                                  : ''}
-                              </span>
-                            ) : null}
-                          </div>
-                          {delta !== 0 && Math.abs(delta) >= 0.005 ? (
-                            <span
-                              className={cn(
-                                'inline-flex shrink-0 items-center text-[11px] font-medium tabular-nums',
-                                isGoodChange(delta)
-                                  ? 'text-emerald-600'
-                                  : 'text-amber-600'
-                              )}
-                              title={copy.changeTitle}
-                            >
-                              {delta > 0 ? (
-                                <ArrowUpRight className='h-3 w-3' />
-                              ) : (
-                                <ArrowDownRight className='h-3 w-3' />
-                              )}
-                              {formatMoney(Math.abs(delta * currentFactor))}
-                            </span>
-                          ) : null}
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                type='button'
-                                size='sm'
-                                variant={
-                                  isCurrentRate ? 'secondary' : 'outline'
-                                }
-                                disabled={rate.subtotal <= 0 || isCurrentRate}
-                                onClick={() => applyRate(rateHere)}
-                                className='h-7 shrink-0 px-2.5 text-xs'
-                                data-testid='use-rate'
-                              >
-                                {isCurrentRate ? t('In use') : t('Use')}
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side='top'>
-                              {t('Set this line to {{rate}} / {{unit}}', {
-                                rate: formatMoney(rateHere),
-                                unit: currentUnit,
-                              })}
-                              {rate.discountAmount > 0
-                                ? ` — ${t('the discount stays as it is on this line')}`
-                                : ''}
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-              {history?.truncated ? (
-                <p className='text-muted-foreground px-2 pt-2 text-center text-xs'>
-                  {t(
-                    'Showing the latest {{n}} invoices — totals above cover all of them.',
-                    { n: new Set(lines.map((l) => l.invoiceId)).size }
-                  )}
-                </p>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className='bg-muted/30 flex items-center justify-between gap-3 border-t px-4 py-2.5'>
-            <label className='text-muted-foreground flex cursor-pointer items-center gap-2 text-xs'>
-              <Switch
-                checked={autoOpen}
-                onCheckedChange={onAutoOpenChange}
-                className='scale-90'
-              />
-              {copy.autoOpen}
-            </label>
-            <kbd className='bg-background text-muted-foreground rounded border px-1.5 py-0.5 text-[10px]'>
-              Esc
-            </kbd>
-          </div>
-
-          {/* Rendered inside the panel so Radix treats it as a child layer (clicks in it are not
-            "outside" the panel). */}
-          {isSale ? (
-            <InvoiceDetailDialog
-              invoiceId={viewInvoiceId ?? undefined}
-              open={Boolean(viewInvoiceId)}
-              onOpenChange={(next) => !next && setViewInvoiceId(null)}
-              onCloseAutoFocus={(e) => {
-                e.preventDefault()
-                onReturnFocus()
-              }}
-            />
-          ) : (
-            <PurchaseViewDrawer
-              purchaseId={viewInvoiceId}
-              open={Boolean(viewInvoiceId)}
-              onOpenChange={(next) => !next && setViewInvoiceId(null)}
-              onCloseAutoFocus={(e: Event) => {
-                e.preventDefault()
-                onReturnFocus()
-              }}
-            />
-          )}
+          {panelBody}
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>

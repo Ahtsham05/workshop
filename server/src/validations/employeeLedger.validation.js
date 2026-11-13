@@ -40,7 +40,14 @@ const payEmployee = {
 const getLedgerEntries = {
   query: Joi.object().keys({
     employee: Joi.string().custom(objectId),
-    transactionType: Joi.string().valid('salary_payable', 'salary_payment', 'advance_payment', 'advance_recovery', 'adjustment'),
+    transactionType: Joi.string().valid(
+      'salary_payable',
+      'salary_payment',
+      'advance_payment',
+      'advance_recovery',
+      'adjustment',
+      'payment_received'
+    ),
     search: Joi.string().allow(''),
     startDate: Joi.date(),
     endDate: Joi.date(),
@@ -53,6 +60,16 @@ const getLedgerEntries = {
 const getEmployeeSummary = {
   params: Joi.object().keys({
     employeeId: Joi.string().custom(objectId).required(),
+  }),
+};
+
+const getEmployeeStatement = {
+  params: Joi.object().keys({
+    employeeId: Joi.string().custom(objectId).required(),
+  }),
+  query: Joi.object().keys({
+    startDate: Joi.date(),
+    endDate: Joi.date(),
   }),
 };
 
@@ -87,6 +104,7 @@ module.exports = {
   payEmployee,
   getLedgerEntries,
   getEmployeeSummary,
+  getEmployeeStatement,
   updateLedgerEntry,
   deleteLedgerEntry,
 };

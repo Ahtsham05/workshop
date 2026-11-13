@@ -78,6 +78,12 @@ export function useInvoicePrinter({ lookupCustomer }: UseInvoicePrinterOptions =
     async (invoice: any) => {
       const customer = customerOf(invoice)
       const isWalkIn = invoice.customerId === 'walk-in' || !customer.id
+      // The customer's phone/WhatsApp lookup runs alongside the balance lookup below instead
+      // of after it — one network round trip less before a print/PDF can start.
+      const customerIdStr = resolveCustomerIdString(invoice.customerId)
+      const contactLookup = customerIdStr
+        ? fetchAndStashPrintContact(customerIdStr).catch(() => null)
+        : Promise.resolve(null)
       const customerName = isWalkIn
         ? invoice.walkInCustomerName || t('walk_in_customer')
         : customer.name || invoice.customerName || t('unknown_customer')
@@ -147,17 +153,15 @@ export function useInvoicePrinter({ lookupCustomer }: UseInvoicePrinterOptions =
         invoice
       )
 
-      const customerIdStr = resolveCustomerIdString(invoice.customerId)
       let contactPhone = printData.customerPhone
       let contactWhatsapp = printData.customerWhatsapp
       if (customerIdStr) {
         stashPrintContact({ customerId: customerIdStr, phone: contactPhone, whatsapp: contactWhatsapp })
-        try {
-          const fetched = await fetchAndStashPrintContact(customerIdStr)
+        // null = lookup failed → the print window prompts for a number if still missing.
+        const fetched = await contactLookup
+        if (fetched) {
           contactPhone = fetched.phone || contactPhone
           contactWhatsapp = fetched.whatsapp || contactWhatsapp
-        } catch {
-          /* prompt in print window if still missing */
         }
       }
       const printContact: PrintWindowContact = {

@@ -17,9 +17,21 @@ router
   .patch(auth('managePayroll', 'processPayroll'), validate(employeeLedgerValidation.updateLedgerEntry), employeeLedgerController.updateLedgerEntry)
   .delete(auth('managePayroll', 'processPayroll'), validate(employeeLedgerValidation.deleteLedgerEntry), employeeLedgerController.deleteLedgerEntry);
 
+// Also the employee picker (with balances) on Payment / Receipt Vouchers.
 router
   .route('/employees-with-balances')
-  .get(auth('getPayroll', 'getEmployees'), employeeLedgerController.getEmployeesWithBalances);
+  .get(
+    auth('getPayroll', 'getEmployees', 'managePaymentVouchers', 'viewLedgerFromVouchers'),
+    employeeLedgerController.getEmployeesWithBalances
+  );
+
+router
+  .route('/employee/:employeeId/statement')
+  .get(
+    auth('getPayroll', 'getEmployees', 'viewLedgerFromVouchers'),
+    validate(employeeLedgerValidation.getEmployeeStatement),
+    employeeLedgerController.getEmployeeStatement
+  );
 
 router
   .route('/employee/:employeeId/summary')

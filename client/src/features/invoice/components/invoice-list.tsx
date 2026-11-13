@@ -44,6 +44,7 @@ import {
   AlertTriangle,
   FileDown,
   History,
+  Share2,
 } from 'lucide-react'
 import { useGetInvoicesListQuery, useGetInvoicesSummaryQuery, useLazyExportInvoicesQuery, useUpdateInvoiceFlagMutation } from '@/stores/invoice.api'
 import { FlagBadge, FlagPickerPopover } from '@/components/flag-badge'
@@ -84,6 +85,7 @@ import { formatAppDate } from '@/lib/date-format'
 import { InvoiceDetailDialog } from '@/components/invoice-detail-dialog'
 import { PaymentMethodBadge } from '@/components/payment-method-badge'
 import { useInvoicePrinter } from '../hooks/use-invoice-printer'
+import { InvoiceShareDialog } from './invoice-share-dialog'
 
 import { useNativeLanguageName } from '@/hooks/use-native-language-name'
 interface InvoiceListProps {
@@ -194,6 +196,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   }, [])
 
   const [viewingInvoice, setViewingInvoice] = useState<any>(null)
+  const [sharingInvoiceId, setSharingInvoiceId] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [limit, setLimit] = usePersistedPageSize('invoices', 10)
   /** id → invoice number, so a selection survives paging and can be matched to export rows. */
@@ -904,6 +907,15 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                           />
                         )}
 
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSharingInvoiceId(String(id))}
+                          title={t('Share') || 'Share'}
+                        >
+                          <Share2 className="h-4 w-4" />
+                        </Button>
+
                         {canDelete && (
                           <Button
                             variant="ghost"
@@ -988,6 +1000,11 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         }}
       />
 
+      <InvoiceShareDialog
+        open={Boolean(sharingInvoiceId)}
+        onOpenChange={(next) => !next && setSharingInvoiceId(null)}
+        invoiceId={sharingInvoiceId}
+      />
       <CustomerPaymentDialog
         open={paymentDialogOpen}
         onOpenChange={setPaymentDialogOpen}

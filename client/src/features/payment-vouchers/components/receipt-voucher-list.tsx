@@ -174,7 +174,7 @@ export function ReceiptVoucherList({ onCreateVoucher }: Props) {
   const queryArgs = {
     search: search || undefined,
     bankAccountId: bankAccountId === ALL_ACCOUNTS ? undefined : bankAccountId,
-    sourceType: sourceType === ALL_TYPES ? undefined : (sourceType as 'customer' | 'income'),
+    sourceType: sourceType === ALL_TYPES ? undefined : (sourceType as 'customer' | 'income' | 'employee'),
     startDate,
     endDate,
     minAmount,
@@ -352,6 +352,7 @@ export function ReceiptVoucherList({ onCreateVoucher }: Props) {
               <SelectContent>
                 <SelectItem value={ALL_TYPES}>All types</SelectItem>
                 <SelectItem value='customer'>Customer</SelectItem>
+                <SelectItem value='employee'>Employee</SelectItem>
                 <SelectItem value='income'>Income</SelectItem>
               </SelectContent>
             </Select>

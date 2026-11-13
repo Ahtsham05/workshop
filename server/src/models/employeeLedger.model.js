@@ -7,7 +7,15 @@ const transactionTypes = {
   ADVANCE_PAYMENT: 'advance_payment',
   ADVANCE_RECOVERY: 'advance_recovery',
   ADJUSTMENT: 'adjustment',
+  // Cash the employee handed back to the business (returning an advance, repaying a loan or an
+  // over-payment) — posted by a Receipt Voucher "Employee" line. A debit: it lowers what the
+  // employee owes / raises what the business owes them, and money comes INTO the account.
+  PAYMENT_RECEIVED: 'payment_received',
 };
+
+// Source documents that own their ledger rows: such a row is edited / deleted from the voucher,
+// never directly on the ledger (the voucher's bank leg and line would fall out of step).
+const VOUCHER_REFERENCE_MODELS = ['PaymentVoucher', 'ReceiptVoucher'];
 
 const employeeLedgerSchema = new mongoose.Schema(
   {
@@ -114,3 +122,4 @@ const EmployeeLedger = mongoose.model('EmployeeLedger', employeeLedgerSchema);
 
 module.exports = EmployeeLedger;
 module.exports.transactionTypes = transactionTypes;
+module.exports.VOUCHER_REFERENCE_MODELS = VOUCHER_REFERENCE_MODELS;

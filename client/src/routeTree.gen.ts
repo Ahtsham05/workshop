@@ -196,6 +196,7 @@ import { Route as AuthenticatedHrSettingsIndexImport } from './routes/_authentic
 import { Route as AuthenticatedHrPayrollIndexImport } from './routes/_authenticated/hr/payroll/index'
 import { Route as AuthenticatedHrLeavesIndexImport } from './routes/_authenticated/hr/leaves/index'
 import { Route as AuthenticatedHrEmployeesIndexImport } from './routes/_authenticated/hr/employees/index'
+import { Route as AuthenticatedHrEmployeeLedgerIndexImport } from './routes/_authenticated/hr/employee-ledger/index'
 import { Route as AuthenticatedHrDesignationsIndexImport } from './routes/_authenticated/hr/designations/index'
 import { Route as AuthenticatedHrDepartmentsIndexImport } from './routes/_authenticated/hr/departments/index'
 import { Route as AuthenticatedHrAttendanceIndexImport } from './routes/_authenticated/hr/attendance/index'
@@ -1492,6 +1493,13 @@ const AuthenticatedHrEmployeesIndexRoute =
   AuthenticatedHrEmployeesIndexImport.update({
     id: '/hr/employees/',
     path: '/hr/employees/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedHrEmployeeLedgerIndexRoute =
+  AuthenticatedHrEmployeeLedgerIndexImport.update({
+    id: '/hr/employee-ledger/',
+    path: '/hr/employee-ledger/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -2949,6 +2957,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrDesignationsIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/hr/employee-ledger/': {
+      id: '/_authenticated/hr/employee-ledger/'
+      path: '/hr/employee-ledger'
+      fullPath: '/hr/employee-ledger'
+      preLoaderRoute: typeof AuthenticatedHrEmployeeLedgerIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/hr/employees/': {
       id: '/_authenticated/hr/employees/'
       path: '/hr/employees'
@@ -3723,6 +3738,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedHrAttendanceIndexRoute: typeof AuthenticatedHrAttendanceIndexRoute
   AuthenticatedHrDepartmentsIndexRoute: typeof AuthenticatedHrDepartmentsIndexRoute
   AuthenticatedHrDesignationsIndexRoute: typeof AuthenticatedHrDesignationsIndexRoute
+  AuthenticatedHrEmployeeLedgerIndexRoute: typeof AuthenticatedHrEmployeeLedgerIndexRoute
   AuthenticatedHrEmployeesIndexRoute: typeof AuthenticatedHrEmployeesIndexRoute
   AuthenticatedHrLeavesIndexRoute: typeof AuthenticatedHrLeavesIndexRoute
   AuthenticatedHrPayrollIndexRoute: typeof AuthenticatedHrPayrollIndexRoute
@@ -3837,6 +3853,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedHrAttendanceIndexRoute: AuthenticatedHrAttendanceIndexRoute,
   AuthenticatedHrDepartmentsIndexRoute: AuthenticatedHrDepartmentsIndexRoute,
   AuthenticatedHrDesignationsIndexRoute: AuthenticatedHrDesignationsIndexRoute,
+  AuthenticatedHrEmployeeLedgerIndexRoute:
+    AuthenticatedHrEmployeeLedgerIndexRoute,
   AuthenticatedHrEmployeesIndexRoute: AuthenticatedHrEmployeesIndexRoute,
   AuthenticatedHrLeavesIndexRoute: AuthenticatedHrLeavesIndexRoute,
   AuthenticatedHrPayrollIndexRoute: AuthenticatedHrPayrollIndexRoute,
@@ -4023,6 +4041,7 @@ export interface FileRoutesByFullPath {
   '/hr/attendance': typeof AuthenticatedHrAttendanceIndexRoute
   '/hr/departments': typeof AuthenticatedHrDepartmentsIndexRoute
   '/hr/designations': typeof AuthenticatedHrDesignationsIndexRoute
+  '/hr/employee-ledger': typeof AuthenticatedHrEmployeeLedgerIndexRoute
   '/hr/employees': typeof AuthenticatedHrEmployeesIndexRoute
   '/hr/leaves': typeof AuthenticatedHrLeavesIndexRoute
   '/hr/payroll': typeof AuthenticatedHrPayrollIndexRoute
@@ -4239,6 +4258,7 @@ export interface FileRoutesByTo {
   '/hr/attendance': typeof AuthenticatedHrAttendanceIndexRoute
   '/hr/departments': typeof AuthenticatedHrDepartmentsIndexRoute
   '/hr/designations': typeof AuthenticatedHrDesignationsIndexRoute
+  '/hr/employee-ledger': typeof AuthenticatedHrEmployeeLedgerIndexRoute
   '/hr/employees': typeof AuthenticatedHrEmployeesIndexRoute
   '/hr/leaves': typeof AuthenticatedHrLeavesIndexRoute
   '/hr/payroll': typeof AuthenticatedHrPayrollIndexRoute
@@ -4462,6 +4482,7 @@ export interface FileRoutesById {
   '/_authenticated/hr/attendance/': typeof AuthenticatedHrAttendanceIndexRoute
   '/_authenticated/hr/departments/': typeof AuthenticatedHrDepartmentsIndexRoute
   '/_authenticated/hr/designations/': typeof AuthenticatedHrDesignationsIndexRoute
+  '/_authenticated/hr/employee-ledger/': typeof AuthenticatedHrEmployeeLedgerIndexRoute
   '/_authenticated/hr/employees/': typeof AuthenticatedHrEmployeesIndexRoute
   '/_authenticated/hr/leaves/': typeof AuthenticatedHrLeavesIndexRoute
   '/_authenticated/hr/payroll/': typeof AuthenticatedHrPayrollIndexRoute
@@ -4686,6 +4707,7 @@ export interface FileRouteTypes {
     | '/hr/attendance'
     | '/hr/departments'
     | '/hr/designations'
+    | '/hr/employee-ledger'
     | '/hr/employees'
     | '/hr/leaves'
     | '/hr/payroll'
@@ -4901,6 +4923,7 @@ export interface FileRouteTypes {
     | '/hr/attendance'
     | '/hr/departments'
     | '/hr/designations'
+    | '/hr/employee-ledger'
     | '/hr/employees'
     | '/hr/leaves'
     | '/hr/payroll'
@@ -5122,6 +5145,7 @@ export interface FileRouteTypes {
     | '/_authenticated/hr/attendance/'
     | '/_authenticated/hr/departments/'
     | '/_authenticated/hr/designations/'
+    | '/_authenticated/hr/employee-ledger/'
     | '/_authenticated/hr/employees/'
     | '/_authenticated/hr/leaves/'
     | '/_authenticated/hr/payroll/'
@@ -5324,6 +5348,7 @@ export const routeTree = rootRoute
         "/_authenticated/hr/attendance/",
         "/_authenticated/hr/departments/",
         "/_authenticated/hr/designations/",
+        "/_authenticated/hr/employee-ledger/",
         "/_authenticated/hr/employees/",
         "/_authenticated/hr/leaves/",
         "/_authenticated/hr/payroll/",
@@ -6125,6 +6150,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/hr/designations/": {
       "filePath": "_authenticated/hr/designations/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/hr/employee-ledger/": {
+      "filePath": "_authenticated/hr/employee-ledger/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/hr/employees/": {

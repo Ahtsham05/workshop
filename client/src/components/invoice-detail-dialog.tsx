@@ -16,6 +16,7 @@ import {
   Mail,
   MapPin,
   Trash2,
+  Share2,
 } from 'lucide-react'
 import { useGetInvoiceByIdQuery, useUpdateInvoiceFlagMutation } from '@/stores/invoice.api'
 import { useGetInvoicePaymentsQuery } from '@/stores/customerPayment.api'
@@ -51,6 +52,7 @@ import {
 } from '@/features/invoice/utils/invoice-settlement'
 import { InvoiceDeleteDialog } from '@/features/invoice/components/invoice-delete-dialog'
 import { CustomerPaymentDialog } from '@/features/invoice/components/customer-payment-dialog'
+import { InvoiceShareDialog } from '@/features/invoice/components/invoice-share-dialog'
 import { QuotationConvertDialog } from '@/features/invoice/components/quotation-convert-dialog'
 import { TaxBreakdownSummary } from '@/features/invoice/components/tax-breakdown-summary'
 
@@ -167,6 +169,7 @@ export function InvoiceDetailDialog({
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [convertOpen, setConvertOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
 
   const settlement = useMemo(
     () => (invoice ? resolveInvoiceSettlement({ ...invoice, ...(settlementDetail || {}) }) : null),
@@ -360,6 +363,10 @@ export function InvoiceDetailDialog({
                     {t('Edit')}
                   </Button>
                 )}
+                <Button size='sm' variant='outline' className='h-8' onClick={() => setShareOpen(true)}>
+                  <Share2 className='mr-1.5 h-4 w-4' />
+                  {t('Share') || 'Share'}
+                </Button>
                 {printer.canPrint && (
                   <PrintFormatButton
                     size='sm'
@@ -892,6 +899,7 @@ export function InvoiceDetailDialog({
         />
       )}
       <CustomerPaymentDialog open={paymentOpen} onOpenChange={setPaymentOpen} defaultCustomerId={customerIdStr} />
+      <InvoiceShareDialog open={shareOpen} onOpenChange={setShareOpen} invoice={invoice ?? null} />
       <QuotationConvertDialog
         invoice={convertOpen ? invoice : null}
         open={convertOpen}

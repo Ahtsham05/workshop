@@ -57,6 +57,7 @@ import {
   Clock,
   Users,
   Building2,
+  Lock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -106,6 +107,22 @@ const loadPayAffectsBooksPreference = () => {
   const stored = window.localStorage.getItem(PAY_AFFECTS_BOOKS_STORAGE_KEY);
   return stored === null ? true : stored === 'true';
 };
+
+/** Rows a Payment / Receipt Voucher posted are edited or deleted from the voucher, not here. */
+type VoucherRef = { referenceModel?: string; reference?: string }
+const isVoucherEntry = (entry: VoucherRef | null | undefined) => entry?.referenceModel === 'PaymentVoucher' || entry?.referenceModel === 'ReceiptVoucher';
+
+function VoucherLockedTag({ entry }: { entry: VoucherRef }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground"
+      title="Posted from Payments & Receipts — edit or delete it there"
+    >
+      <Lock className="h-3 w-3" />
+      {entry.reference || 'Voucher'}
+    </span>
+  );
+}
 
 export default function PayrollManagement() {
   const { t } = useLanguage();
@@ -532,8 +549,11 @@ export default function PayrollManagement() {
   }, [employeeLedgerData?.results]);
 
   const advanceLedgerEntries = useMemo(() => {
+    // Cash the employee handed back (Receipt Voucher) settles their advance, so it shows here too.
     return sortedLedgerEntries.filter((entry: any) =>
-      entry.transactionType === 'advance_payment' || entry.transactionType === 'advance_recovery'
+      entry.transactionType === 'advance_payment' ||
+      entry.transactionType === 'advance_recovery' ||
+      entry.transactionType === 'payment_received'
     );
   }, [sortedLedgerEntries]);
 
@@ -1015,13 +1035,14 @@ export default function PayrollManagement() {
                                 <TableCell className="font-medium">{formatCurrency(entry.balance || 0)}</TableCell>
                                 <TableCell className="text-right">
                                   <div className="flex justify-end gap-2">
-                                    {canEdit && (
+                                    {isVoucherEntry(entry) && <VoucherLockedTag entry={entry} />}
+                                      {!isVoucherEntry(entry) && canEdit && (
                                       <Button size="sm" variant="outline" onClick={() => openLedgerEditDialog(entry)}>
                                         <Pencil className="h-4 w-4 mr-1" />
                                         {t('Edit')}
                                       </Button>
                                     )}
-                                    {canDelete && (
+                                    {!isVoucherEntry(entry) && canDelete && (
                                       <Button
                                         size="sm"
                                         variant="outline"
@@ -1115,6 +1136,8 @@ export default function PayrollManagement() {
                                   </Badge>
                                 ) : entry.transactionType === 'advance_payment' ? (
                                   t('Advance Given')
+                                ) : entry.transactionType === 'payment_received' ? (
+                                  t('Cash Received')
                                 ) : (
                                   t('Advance Recovered')
                                 )}
@@ -1127,16 +1150,17 @@ export default function PayrollManagement() {
                                   ) : null}
                                 </div>
                               </TableCell>
-                              <TableCell>{formatCurrency(entry.credit || 0)}</TableCell>
+                              <TableCell>{formatCurrency(entry.transactionType === 'payment_received' ? entry.debit || 0 : entry.credit || 0)}</TableCell>
                               <TableCell className="text-right">
                                 <div className="flex justify-end gap-2">
-                                  {canEdit && (
+                                  {isVoucherEntry(entry) && <VoucherLockedTag entry={entry} />}
+                                    {!isVoucherEntry(entry) && canEdit && (
                                     <Button size="sm" variant="outline" onClick={() => openLedgerEditDialog(entry)}>
                                       <Pencil className="h-4 w-4 mr-1" />
                                       {t('Edit')}
                                     </Button>
                                   )}
-                                  {canDelete && (
+                                  {!isVoucherEntry(entry) && canDelete && (
                                     <Button
                                       size="sm"
                                       variant="outline"

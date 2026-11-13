@@ -18,9 +18,10 @@ import {
 } from '@/features/accounting/utils/ledger-display'
 import { isManualLedgerEntry } from '@/features/accounting/utils/customer-ledger-categories'
 import { sumDiscounts } from '@/features/ledger-discounts/lib/ledger-discounts'
+import { EmployeeStatementPanel } from '@/features/hr/employee-ledger/components/employee-statement-panel'
 
 export interface QuickViewParty {
-  side: 'customer' | 'supplier'
+  side: 'customer' | 'supplier' | 'employee'
   id: string
   name: string
   phone?: string
@@ -47,12 +48,65 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 /**
+ * Read-only look at a party's ledger from inside a voucher, without leaving it — the employee
+ * statement for an employee line, the customer / supplier ledger otherwise. Both stay mounted so
+ * switching from one kind of party to another never mixes hook state.
+ */
+export function PartyLedgerQuickView({ party, onClose }: { party: QuickViewParty | null; onClose: () => void }) {
+  return (
+    <>
+      <CounterpartyLedgerQuickView party={party && party.side !== 'employee' ? party : null} onClose={onClose} />
+      <EmployeeLedgerQuickView party={party && party.side === 'employee' ? party : null} onClose={onClose} />
+    </>
+  )
+}
+
+function EmployeeLedgerQuickView({ party, onClose }: { party: QuickViewParty | null; onClose: () => void }) {
+  const { t } = useLanguage()
+  const { hasAnyPermission } = usePermissions()
+  const canOpenFullLedger = hasAnyPermission('getPayroll', 'getEmployees')
+  return (
+    <Sheet open={Boolean(party)} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent side='right' className='flex w-full flex-col gap-0 p-0 sm:max-w-5xl'>
+        <SheetHeader className='shrink-0 border-b px-5 py-4'>
+          <SheetTitle className='flex items-center gap-2'>
+            <BookOpen className='h-5 w-5 text-primary' />
+            {party?.name} — {t('Employee Ledger')}
+          </SheetTitle>
+          <SheetDescription>
+            {t('Quick view — your voucher is kept exactly as it is. Close this to continue.')}
+            {party?.phone ? ` · ${party.phone}` : ''}
+          </SheetDescription>
+        </SheetHeader>
+        <div className='min-h-0 flex-1 overflow-y-auto px-5 py-4'>
+          {party && <EmployeeStatementPanel employeeId={party.id} fallbackName={party.name} hideHeader />}
+        </div>
+        <div className='flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-5 py-3'>
+          <Button type='button' onClick={onClose}>
+            <ArrowLeft className='mr-2 h-4 w-4' />
+            {t('Back to voucher')}
+          </Button>
+          {canOpenFullLedger && party ? (
+            <Button asChild variant='outline' size='sm'>
+              <Link to='/hr/employee-ledger' search={{ employeeId: party.id } as never} target='_blank'>
+                <ExternalLink className='mr-2 h-4 w-4' />
+                {t('Open full ledger in new tab')}
+              </Link>
+            </Button>
+          ) : null}
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+/**
  * Read-only look at a customer's / supplier's ledger from inside a voucher, without leaving it.
  * The voucher dialog stays mounted underneath, so closing this returns to exactly what was typed.
  * Gated by viewLedgerFromVouchers (or the full ledger permissions) — the server allows the
  * same keys on the ledger read routes.
  */
-export function PartyLedgerQuickView({ party, onClose }: { party: QuickViewParty | null; onClose: () => void }) {
+function CounterpartyLedgerQuickView({ party, onClose }: { party: QuickViewParty | null; onClose: () => void }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
   const currencyMeta = useCurrencyMeta()
@@ -109,7 +163,7 @@ export function PartyLedgerQuickView({ party, onClose }: { party: QuickViewParty
     return { debit, credit, discount: sumDiscounts(entries) }
   }, [entries])
 
-  const side = party?.side ?? 'customer'
+  const side = party?.side === 'supplier' ? 'supplier' : 'customer'
   const typeLabel = (e: LedgerStatementEntry) => {
     const manual = isManualLedgerEntry(e)
     if (side === 'customer' && e.transactionType === 'sale' && manual) return t('Cash Paid')

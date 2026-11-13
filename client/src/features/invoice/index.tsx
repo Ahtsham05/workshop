@@ -34,7 +34,9 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
-import { ArrowLeft, Check, Clock, Columns2, History, LayoutGrid, PauseCircle, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, Clock, Columns2, FolderOpen, History, LayoutGrid, PauseCircle, Trash2 } from 'lucide-react'
+import { useIsPhone } from '@/hooks/use-mobile'
+import type { MobilePageAction } from './components/mobile/mobile-invoice-form'
 import { cn } from '@/lib/utils'
 import {
   clearSaleWorkspace,
@@ -421,6 +423,7 @@ export default function InvoicePage() {
 
   // Settings → Invoice & Purchase screens: toolbar buttons / cards this person turned off.
   const layout = useTransactionLayout('sale')
+  const isPhone = useIsPhone()
   // Catalog button turned off = the catalog stays closed (otherwise it could get stuck open).
   const catalogToggleShown = layout.isShown('catalog-toggle')
   useEffect(() => {
@@ -1928,6 +1931,29 @@ export default function InvoicePage() {
     )
   }
 
+  // Phones get the Odoo-style form (InvoicePanel); the desktop title, toolbar, catalog and
+  // autosave banner are hidden and their actions move into the form's ⋮ menu.
+  const phoneActions: MobilePageAction[] = [
+    ...(canViewList && layout.isShown('history')
+      ? [{ key: 'history', label: t('invoice_history'), icon: <History className='h-5 w-5' />, onSelect: () => setCurrentView('list') }]
+      : []),
+    ...(canConvertPending && layout.isShown('convert-pending')
+      ? [{ key: 'convert', label: t('convert_pending_invoices'), icon: <Clock className='h-5 w-5' />, onSelect: handleConvertPending }]
+      : []),
+    ...(layout.isShown('hold')
+      ? [{ key: 'hold', label: t('hold_invoice'), icon: <PauseCircle className='h-5 w-5' />, onSelect: manualHoldSale }]
+      : []),
+    ...(layout.isShown('held-drafts')
+      ? [{
+          key: 'held',
+          label: t('held_drafts'),
+          icon: <FolderOpen className='h-5 w-5' />,
+          badge: saleHeldList.length || undefined,
+          onSelect: () => setHeldSheetOpen(true),
+        }]
+      : []),
+  ]
+
   // Create/Edit view
   return (
     <div className='flex-1 flex flex-col'>
@@ -1935,13 +1961,14 @@ export default function InvoicePage() {
         className={cn(
           'pb-6',
           showProductCatalog ? 'pt-3 md:pt-4' : 'pt-2 md:pt-2.5',
+          isPhone && 'pt-0 pb-0 md:pt-0',
         )}
       >
-        <div className={cn('space-y-3', !showProductCatalog && 'space-y-2')}>
+        <div className={cn('space-y-3', !showProductCatalog && 'space-y-2', isPhone && 'space-y-0')}>
           {/* Title + type badge, its own row now — the toolbar below carries the action
               buttons (including the primary Preview/Save Draft/Save & Print actions,
               compact mode only) instead of sharing this row with them. */}
-          <div className='flex items-center gap-2'>
+          <div className={cn('flex items-center gap-2', isPhone && 'hidden')}>
             {currentView === 'edit' && (
               <Button type='button' variant='ghost' size='sm' className='-ml-2 h-8 w-8 p-0' onClick={handleBackToList}>
                 <ArrowLeft className='h-4 w-4' aria-hidden />
@@ -1963,7 +1990,9 @@ export default function InvoicePage() {
               those primary actions live inline in the Payment & Amount card instead —
               so the utility actions move to the right on their own instead of sitting
               flush left with empty space beside them. */}
-          <div className={cn('flex flex-wrap items-center gap-2', headerActions ? 'justify-between' : 'justify-end')}>
+          {/* Hidden (not unmounted) on phones: the held-drafts sheet and history shortcuts
+              live in here and are opened from the phone form's ⋮ menu. */}
+          <div className={cn('flex flex-wrap items-center gap-2', headerActions ? 'justify-between' : 'justify-end', isPhone && 'hidden')}>
             <div className='flex flex-wrap items-center gap-2'>
               {canViewList && (
                 <>
@@ -2163,10 +2192,11 @@ export default function InvoicePage() {
               showProductCatalog={showProductCatalog}
               stickyActionsContainer={headerActionsSlot}
               onBarcodeSearch={handleBarcodeSearch}
+              mobilePageActions={phoneActions}
             />
           </div>
 
-          {showProductCatalog && (
+          {showProductCatalog && !isPhone && (
           <div className='min-w-0 space-y-4 max-h-[2000px] overflow-y-auto pb-6'>
             <ProductCatalog
               categorizedProducts={categorizedProducts}
@@ -2193,7 +2223,7 @@ export default function InvoicePage() {
         {/* Autosave banner — same info the old muted hint line carried (this device
             drafts to local storage as you type; see pos-hold-storage). Moved to the
             bottom of the page per request, out of the way of the header/toolbar. */}
-        {layout.isShown('autosave-hint') && (
+        {layout.isShown('autosave-hint') && !isPhone && (
         <div className='mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'>
           <Check className='h-3.5 w-3.5 shrink-0' aria-hidden />
           {t('autosave_hint')}

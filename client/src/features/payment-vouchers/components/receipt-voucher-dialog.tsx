@@ -13,6 +13,7 @@ import {
   useUpdateReceiptVoucherMutation,
   type ReceiptVoucherRecord,
 } from '@/stores/receiptVoucher.api'
+import { hrApi } from '@/stores/hr.api'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 import { TransactionCategoryPicker } from '@/features/accounting/components/transaction-category-picker'
 import {
@@ -49,15 +50,20 @@ import { PartyLedgerQuickView, type QuickViewParty } from './party-ledger-quick-
 import { BalanceAfterCell, LineDiscountCell, PartyBalanceCell, QuickLedgerButton } from './voucher-line-cells'
 import { lineAccountState, type LineAccountState } from '../utils/line-account-state'
 import { normalizeCustomersList } from '../utils/customer-list'
+import { useVoucherEmployees } from '../hooks/use-voucher-employees'
+
+type SourceType = 'customer' | 'income' | 'employee'
 
 
 const lineSchema = z
   .object({
     // Id of the stored line this row edits ('' for a row that is new).
     lineId: z.string(),
-    sourceType: z.enum(['customer', 'income']),
+    sourceType: z.enum(['customer', 'income', 'employee']),
     category: z.string(),
     customerId: z.string(),
+    // Employee line: cash a staff member handed back (advance returned, loan repaid…).
+    employeeId: z.string(),
     // Untouched rows (the default 8) sit at 0 and are silently dropped on submit — only a
     // row the user actually put an amount into needs its source filled in.
     amount: z.coerce.number().min(0),
@@ -75,6 +81,10 @@ const lineSchema = z
     message: 'Select a customer',
     path: ['customerId'],
   })
+  .refine((d) => Number(d.amount) <= 0 || d.sourceType !== 'employee' || !!d.employeeId, {
+    message: 'Select an employee',
+    path: ['employeeId'],
+  })
 
 const voucherSchema = z.object({
   date: z.date(),
@@ -87,9 +97,10 @@ type VoucherFormValues = z.infer<typeof voucherSchema>
 
 const emptyLine = () => ({
   lineId: '',
-  sourceType: 'customer' as 'customer' | 'income',
+  sourceType: 'customer' as SourceType,
   category: '',
   customerId: '',
+  employeeId: '',
   amount: 0,
   description: '',
   discountAmount: 0,
@@ -116,6 +127,7 @@ const valuesFromVoucher = (voucher: ReceiptVoucherRecord): VoucherFormValues => 
     sourceType: line.sourceType,
     category: line.category ?? '',
     customerId: line.customerId ?? '',
+    employeeId: line.employeeId ?? '',
     amount: line.amount,
     description: line.description ?? '',
     discountAmount: Number(line.discountAmount) || 0,
@@ -138,6 +150,7 @@ const fingerprint = (values: VoucherFormValues) =>
         line.sourceType,
         line.category,
         line.customerId,
+        line.sourceType === 'employee' ? line.employeeId : '',
         Number(line.amount) || 0,
         line.description,
         Number(line.discountAmount) || 0,
@@ -146,17 +159,29 @@ const fingerprint = (values: VoucherFormValues) =>
       ]),
   })
 
+/** A line to start a NEW voucher with — e.g. "Receive" from the Employee Ledger page. */
+export type InitialReceiptLine = Partial<ReturnType<typeof emptyLine>> & { sourceType: SourceType }
+
+const valuesWithInitialLines = (initial: InitialReceiptLine[]): VoucherFormValues => {
+  const base = defaultFormValues()
+  const filled = initial.map((line) => ({ ...emptyLine(), ...line }))
+  return { ...base, lines: [...filled, ...base.lines.slice(filled.length)] }
+}
+
 interface ReceiptVoucherDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Pass a stored voucher to edit it; omit for a new one. */
   voucher?: ReceiptVoucherRecord | null
+  /** Pre-filled lines for a new voucher (ignored when editing). The draft is not restored over them. */
+  initialLines?: InitialReceiptLine[]
   onCreated?: (voucherId: string) => void
   onUpdated?: (voucherId: string) => void
 }
 
-export function ReceiptVoucherDialog({ open, onOpenChange, voucher, onCreated, onUpdated }: ReceiptVoucherDialogProps) {
+export function ReceiptVoucherDialog({ open, onOpenChange, voucher, initialLines, onCreated, onUpdated }: ReceiptVoucherDialogProps) {
   const isEdit = !!voucher
+  const prefilled = !isEdit && !!initialLines?.length
   const formatMoney = useFormatMoney()
   const dispatch = useDispatch<AppDispatch>()
   const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !open })
@@ -184,16 +209,29 @@ export function ReceiptVoucherDialog({ open, onOpenChange, voucher, onCreated, o
 
   useEffect(() => {
     if (open) {
-      const values = voucher ? valuesFromVoucher(voucher) : defaultFormValues()
+      const values = voucher
+        ? valuesFromVoucher(voucher)
+        : initialLines?.length
+          ? valuesWithInitialLines(initialLines)
+          : defaultFormValues()
       form.reset(values)
       prevLineCountRef.current = values.lines.length
     }
+    // initialLines is read only when the dialog opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, voucher, form])
 
-  const draft = useFormDraft(form, { key: 'receipt-voucher', enabled: open && !isEdit, label: 'receipt voucher' })
+  const draft = useFormDraft(form, { key: 'receipt-voucher', enabled: open && !isEdit && !prefilled, label: 'receipt voucher' })
 
   const lines = form.watch('lines')
   const totalAmount = lines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0)
+  const needsEmployees = open && lines.some((line) => line.sourceType === 'employee')
+  const employeesOnVoucher = useMemo(
+    () => (voucher?.lines ?? []).filter((line) => line.employeeId).map((line) => ({ id: line.employeeId, name: line.employeeName || line.payerName })),
+    [voucher]
+  )
+  const staff = useVoucherEmployees(needsEmployees, employeesOnVoucher)
+  const receivedFromStaff = lines.reduce((sum, line) => sum + (line.sourceType === 'employee' ? Number(line.amount) || 0 : 0), 0)
 
   // ── Balances, discounts, quick ledger ──
   const { hasAnyPermission } = usePermissions()
@@ -222,10 +260,29 @@ export function ReceiptVoucherDialog({ open, onOpenChange, voucher, onCreated, o
     })
     return map
   }, [voucher])
+  // On edit the live employee balance already includes this voucher's own receipts — take them off.
+  const storedByEmployee = useMemo(() => {
+    const map = new Map<string, number>()
+    voucher?.lines.forEach((line) => {
+      if (line.sourceType !== 'employee' || !line.employeeId) return
+      map.set(line.employeeId, (map.get(line.employeeId) || 0) + Number(line.amount || 0))
+    })
+    return map
+  }, [voucher])
   const discountColumn = discountRules.available || lines.some((l) => Number(l.discountAmount) > 0)
   const lineStates: (LineAccountState | null)[] = (() => {
     const consumed = new Map<string, number>()
+    const receivedFrom = new Map<string, number>()
     return lines.map((line) => {
+      if (line.sourceType === 'employee' && line.employeeId) {
+        const live = staff.balances[line.employeeId]
+        if (live === undefined) return null
+        // + = salary payable to them, − = advance they owe. Cash received from them raises it.
+        const before = Math.round((live - (storedByEmployee.get(line.employeeId) || 0) + (receivedFrom.get(line.employeeId) || 0)) * 100) / 100
+        const amount = Number(line.amount) || 0
+        receivedFrom.set(line.employeeId, (receivedFrom.get(line.employeeId) || 0) + amount)
+        return { owingBefore: before, remaining: Math.round((before + amount) * 100) / 100, overLimit: false, error: null }
+      }
       if (line.sourceType !== 'customer' || !line.customerId) return null
       const live = liveBalances[line.customerId]
       const before = live === undefined ? undefined : live + (storedByCustomer.get(line.customerId) || 0) - (consumed.get(line.customerId) || 0)
@@ -328,6 +385,7 @@ export function ReceiptVoucherDialog({ open, onOpenChange, voucher, onCreated, o
         sourceType: line.sourceType,
         category: line.sourceType === 'income' ? line.category : undefined,
         customerId: line.sourceType === 'customer' ? line.customerId : undefined,
+        employeeId: line.sourceType === 'employee' ? line.employeeId : undefined,
         amount: line.amount,
         description: line.description || undefined,
         ...(line.sourceType === 'customer' && Number(line.discountAmount) > 0
@@ -358,6 +416,10 @@ export function ReceiptVoucherDialog({ open, onOpenChange, voucher, onCreated, o
       dispatch(invoiceApi.util.invalidateTags(['Invoice']))
       dispatch(customerPaymentApi.util.invalidateTags(['CustomerPayment', 'CustomerAccount']))
       dispatch(ledgerDiscountsApi.util.invalidateTags(['DiscountRegister']))
+      // Employee lines move the employee ledger (Payroll / Employee Ledger pages).
+      if (payload.lines.some((line) => line.sourceType === 'employee') || voucher?.lines.some((line) => line.sourceType === 'employee')) {
+        dispatch(hrApi.util.invalidateTags(['EmployeeLedger', 'Payroll']))
+      }
       onOpenChange(false)
     } catch (error: any) {
       toast.error(error?.data?.message || `Failed to ${isEdit ? 'update' : 'create'} receipt voucher`)
@@ -391,8 +453,8 @@ export function ReceiptVoucherDialog({ open, onOpenChange, voucher, onCreated, o
             <Alert className='shrink-0 border-amber-500/30 bg-amber-500/5'>
               <Info className='h-4 w-4' />
               <AlertDescription>
-                Saving updates the bank balance, Cash Book and any linked customer ledger entry. Only the lines you change
-                are re-posted. Money already spent from the account can&apos;t be taken back.
+                Saving updates the bank balance, Cash Book and any linked customer or employee ledger entry. Only the lines
+                you change are re-posted. Money already spent from the account can&apos;t be taken back.
               </AlertDescription>
             </Alert>
           )}
@@ -485,13 +547,15 @@ export function ReceiptVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                   const lineState = lineStates[index]
                   const customerId = form.watch(`lines.${index}.customerId`)
                   const customerOption = customerOptions.find((o) => o.value === customerId)
+                  const employeeId = form.watch(`lines.${index}.employeeId`)
+                  const employeeOption = staff.options.find((o) => o.value === employeeId)
                   return (
                     <TableRow key={field.id}>
                       <TableCell className='p-1.5 align-top'>
                         <Select
                           value={form.watch(`lines.${index}.sourceType`)}
                           onValueChange={(v) =>
-                            form.setValue(`lines.${index}.sourceType`, v as 'customer' | 'income', { shouldValidate: true, shouldDirty: true })
+                            form.setValue(`lines.${index}.sourceType`, v as SourceType, { shouldValidate: true, shouldDirty: true })
                           }
                         >
                           <SelectTrigger
@@ -503,6 +567,7 @@ export function ReceiptVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value='customer'>Customer</SelectItem>
+                            <SelectItem value='employee'>Employee</SelectItem>
                             <SelectItem value='income'>Income</SelectItem>
                           </SelectContent>
                         </Select>
@@ -522,6 +587,32 @@ export function ReceiptVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                             hideTitle
                             allowManage={false}
                           />
+                        ) : sourceType === 'employee' ? (
+                          <div className='flex gap-1'>
+                            <div className='min-w-0 flex-1'>
+                              <SearchableSelect
+                                options={staff.options}
+                                value={employeeId}
+                                onValueChange={(v) => form.setValue(`lines.${index}.employeeId`, v, { shouldValidate: true, shouldDirty: true })}
+                                placeholder={staff.loading ? 'Loading employees...' : 'Select an employee...'}
+                                searchPlaceholder='Search name or employee ID...'
+                                emptyText={staff.failed ? 'Could not load employees.' : 'No employees found.'}
+                                id={`line-${index}-source`}
+                                data-enter-field={`line-${index}-source`}
+                                onKeyDown={sourceEnterProps.onKeyDown}
+                                onKeyDownCapture={sourceEnterProps.onKeyDownCapture}
+                                onSelected={() => voucherEnter.advance(`line-${index}-source`)}
+                                popoverClassName='w-[320px]'
+                              />
+                            </div>
+                            {canQuickView && employeeId && (
+                              <QuickLedgerButton
+                                onClick={() =>
+                                  setQuickParty({ side: 'employee', id: employeeId, name: employeeOption?.label || 'Employee', phone: employeeOption?.sublabel, balance: staff.balances[employeeId] })
+                                }
+                              />
+                            )}
+                          </div>
                         ) : (
                           <div className='flex gap-1'>
                           <div className='min-w-0 flex-1'>
@@ -549,22 +640,26 @@ export function ReceiptVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                           )}
                           </div>
                         )}
-                        {(lineError?.category || lineError?.customerId) && (
+                        {(lineError?.category || lineError?.customerId || lineError?.employeeId) && (
                           <p className='mt-1 text-xs text-red-500'>
-                            {lineError.category?.message || lineError.customerId?.message}
+                            {lineError.category?.message || lineError.customerId?.message || lineError.employeeId?.message}
                           </p>
                         )}
                       </TableCell>
 
                       {canQuickView && (
                         <TableCell className='p-1.5 align-top'>
-                          {lineState ? <PartyBalanceCell side='customer' owing={lineState.owingBefore} /> : <span className='block pt-2 text-right text-xs text-muted-foreground'>—</span>}
+                          {lineState ? (
+                            <PartyBalanceCell side={sourceType === 'employee' ? 'employee' : 'customer'} owing={lineState.owingBefore} />
+                          ) : (
+                            <span className='block pt-2 text-right text-xs text-muted-foreground'>—</span>
+                          )}
                         </TableCell>
                       )}
 
                       <TableCell className='p-1.5 align-top'>
                         <Input
-                          placeholder='e.g., Advance payment'
+                          placeholder={sourceType === 'employee' ? 'e.g., Advance returned' : 'e.g., Advance payment'}
                           id={`line-${index}-description`}
                           {...voucherEnter.enterProps(`line-${index}-description`)}
                           {...form.register(`lines.${index}.description`)}
@@ -612,6 +707,7 @@ export function ReceiptVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                         <TableCell className='p-1.5 align-top'>
                           <BalanceAfterCell
                             state={lineState}
+                            owingLabel={sourceType === 'employee' ? 'payable' : undefined}
                             active={(Number(form.watch(`lines.${index}.amount`)) || 0) + (Number(form.watch(`lines.${index}.discountAmount`)) || 0) > 0}
                           />
                         </TableCell>
@@ -647,6 +743,11 @@ export function ReceiptVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                   Settled on ledgers: <span className='font-semibold text-foreground'>{formatMoney(totalAmount + totalDiscount)}</span>
                 </span>
               </>
+            )}
+            {receivedFromStaff > 0 && (
+              <span className='text-sm text-muted-foreground' title='Posted on the employee ledger as Cash Received — it settles their advance first'>
+                From staff: <span className='font-semibold text-foreground'>{formatMoney(receivedFromStaff)}</span>
+              </span>
             )}
             <span className='flex items-center gap-2'>
               <span className='text-sm font-medium text-muted-foreground'>{totalDiscount > 0 ? 'Cash received:' : 'Total:'}</span>

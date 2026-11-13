@@ -12,8 +12,10 @@ import { normalizeSuppliersList, resolveEntityId } from '@/features/purchase-inv
 import {
   useCreatePaymentVoucherMutation,
   useUpdatePaymentVoucherMutation,
+  type EmployeePaymentPurpose,
   type PaymentVoucherRecord,
 } from '@/stores/paymentVoucher.api'
+import { hrApi } from '@/stores/hr.api'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 import { TransactionCategoryPicker } from '@/features/accounting/components/transaction-category-picker'
 import {
@@ -51,18 +53,22 @@ import { PartyLedgerQuickView, type QuickViewParty } from './party-ledger-quick-
 import { BalanceAfterCell, LineDiscountCell, PartyBalanceCell, QuickLedgerButton } from './voucher-line-cells'
 import { lineAccountState, type LineAccountState } from '../utils/line-account-state'
 import { normalizeCustomersList } from '../utils/customer-list'
+import { useVoucherEmployees } from '../hooks/use-voucher-employees'
 
-type PayeeType = 'expense' | 'supplier' | 'customer' | 'other'
+type PayeeType = 'expense' | 'supplier' | 'customer' | 'employee' | 'other'
 
 const lineSchema = z
   .object({
     // Id of the stored line this row edits ('' for a row that is new).
     lineId: z.string(),
-    payeeType: z.enum(['expense', 'supplier', 'customer', 'other']),
+    payeeType: z.enum(['expense', 'supplier', 'customer', 'employee', 'other']),
     category: z.string(),
     supplierId: z.string(),
     // Customer line: cash handed to a customer (refund of their advance / paid on account).
     customerId: z.string(),
+    // Employee line: salary (up to what is payable — a staff expense) or an advance they owe back.
+    employeeId: z.string(),
+    employeePurpose: z.enum(['salary', 'advance']),
     // Only for a legacy 'other' line (free-text payee) — this dialog never offers to create one.
     payeeName: z.string(),
     // Untouched rows (the default 8) sit at 0 and are silently dropped on submit — only a
@@ -86,6 +92,10 @@ const lineSchema = z
     message: 'Select a customer',
     path: ['customerId'],
   })
+  .refine((d) => Number(d.amount) <= 0 || d.payeeType !== 'employee' || !!d.employeeId, {
+    message: 'Select an employee',
+    path: ['employeeId'],
+  })
   .refine((d) => Number(d.amount) <= 0 || d.payeeType !== 'other' || !!d.payeeName.trim(), {
     message: 'Enter a payee name',
     path: ['payeeName'],
@@ -106,6 +116,8 @@ const emptyLine = () => ({
   category: '',
   supplierId: '',
   customerId: '',
+  employeeId: '',
+  employeePurpose: 'salary' as EmployeePaymentPurpose,
   payeeName: '',
   amount: 0,
   description: '',
@@ -134,6 +146,8 @@ const valuesFromVoucher = (voucher: PaymentVoucherRecord): VoucherFormValues => 
     category: line.category ?? '',
     supplierId: line.supplierId ?? '',
     customerId: line.customerId ?? '',
+    employeeId: line.employeeId ?? '',
+    employeePurpose: line.employeePurpose === 'advance' ? 'advance' : 'salary',
     payeeName: line.payeeType === 'other' ? line.payeeName : '',
     amount: line.amount,
     description: line.description ?? '',
@@ -158,6 +172,8 @@ const fingerprint = (values: VoucherFormValues) =>
         line.category,
         line.supplierId,
         line.customerId,
+        line.payeeType === 'employee' ? line.employeeId : '',
+        line.payeeType === 'employee' ? line.employeePurpose : '',
         line.payeeName,
         Number(line.amount) || 0,
         line.description,
@@ -167,17 +183,30 @@ const fingerprint = (values: VoucherFormValues) =>
       ]),
   })
 
+/** A line to start a NEW voucher with — e.g. "Pay" from the Employee Ledger page. */
+export type InitialPaymentLine = Partial<ReturnType<typeof emptyLine>> & { payeeType: PayeeType }
+
+/** A new voucher's form, with `initial` lines first and the usual spare blank rows after them. */
+const valuesWithInitialLines = (initial: InitialPaymentLine[]): VoucherFormValues => {
+  const base = defaultFormValues()
+  const filled = initial.map((line) => ({ ...emptyLine(), ...line }))
+  return { ...base, lines: [...filled, ...base.lines.slice(filled.length)] }
+}
+
 interface PaymentVoucherDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Pass a stored voucher to edit it; omit for a new one. */
   voucher?: PaymentVoucherRecord | null
+  /** Pre-filled lines for a new voucher (ignored when editing). The draft is not restored over them. */
+  initialLines?: InitialPaymentLine[]
   onCreated?: (voucherId: string) => void
   onUpdated?: (voucherId: string) => void
 }
 
-export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, onUpdated }: PaymentVoucherDialogProps) {
+export function PaymentVoucherDialog({ open, onOpenChange, voucher, initialLines, onCreated, onUpdated }: PaymentVoucherDialogProps) {
   const isEdit = !!voucher
+  const prefilled = !isEdit && !!initialLines?.length
   const formatMoney = useFormatMoney()
   const dispatch = useDispatch<AppDispatch>()
   const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !open })
@@ -208,13 +237,19 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
 
   useEffect(() => {
     if (open) {
-      const values = voucher ? valuesFromVoucher(voucher) : defaultFormValues()
+      const values = voucher
+        ? valuesFromVoucher(voucher)
+        : initialLines?.length
+          ? valuesWithInitialLines(initialLines)
+          : defaultFormValues()
       form.reset(values)
       prevLineCountRef.current = values.lines.length
     }
+    // initialLines is read only when the dialog opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, voucher, form])
 
-  const draft = useFormDraft(form, { key: 'payment-voucher', enabled: open && !isEdit, label: 'payment voucher' })
+  const draft = useFormDraft(form, { key: 'payment-voucher', enabled: open && !isEdit && !prefilled, label: 'payment voucher' })
 
   const lines = form.watch('lines')
   // Customers are only loaded once a row is switched to "Customer" (most vouchers never need them).
@@ -228,6 +263,13 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
     }
   }, [open, needsCustomers, dispatch])
   const totalAmount = lines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0)
+  // Employees (with balances) are only loaded once a row is an Employee line.
+  const needsEmployees = open && lines.some((line) => line.payeeType === 'employee')
+  const employeesOnVoucher = useMemo(
+    () => (voucher?.lines ?? []).filter((line) => line.employeeId).map((line) => ({ id: line.employeeId, name: line.employeeName || line.payeeName })),
+    [voucher]
+  )
+  const staff = useVoucherEmployees(needsEmployees, employeesOnVoucher)
 
   // ── Balances, discounts, quick ledger ──
   const { hasAnyPermission } = usePermissions()
@@ -276,11 +318,46 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
     })
     return map
   }, [voucher])
+  // On edit the live employee balance already has this voucher's own employee lines taken off.
+  const storedByEmployee = useMemo(() => {
+    const map = new Map<string, number>()
+    voucher?.lines.forEach((line) => {
+      if (line.payeeType !== 'employee' || !line.employeeId) return
+      map.set(line.employeeId, (map.get(line.employeeId) || 0) + Number(line.amount || 0))
+    })
+    return map
+  }, [voucher])
   const discountColumn = discountRules.available || lines.some((l) => Number(l.discountAmount) > 0)
   const lineStates: (LineAccountState | null)[] = (() => {
     const consumed = new Map<string, number>()
     const paidToCustomer = new Map<string, number>()
+    const paidToEmployee = new Map<string, number>()
+    const salaryToEmployee = new Map<string, number>()
     return lines.map((line) => {
+      if (line.payeeType === 'employee' && line.employeeId) {
+        const live = staff.balances[line.employeeId]
+        if (live === undefined) return null
+        const restored = live + (storedByEmployee.get(line.employeeId) || 0)
+        // Balance (+ = salary payable) before this line, after earlier lines for the same person.
+        const before = Math.round((restored - (paidToEmployee.get(line.employeeId) || 0)) * 100) / 100
+        const amount = Number(line.amount) || 0
+        // Salary is capped like the server does: what's payable before any salary on this voucher
+        // (advances on the voucher don't use it up — they are "extra" by definition).
+        const salaryRoom = Math.max(0, Math.round((restored - (salaryToEmployee.get(line.employeeId) || 0)) * 100) / 100)
+        paidToEmployee.set(line.employeeId, (paidToEmployee.get(line.employeeId) || 0) + amount)
+        if (line.employeePurpose === 'salary') salaryToEmployee.set(line.employeeId, (salaryToEmployee.get(line.employeeId) || 0) + amount)
+        const overPaid = line.employeePurpose === 'salary' && amount > salaryRoom + 0.005
+        return {
+          owingBefore: before,
+          remaining: Math.round((before - amount) * 100) / 100,
+          overLimit: false,
+          error: overPaid
+            ? salaryRoom > 0
+              ? `Salary is more than the payable ${formatMoney(salaryRoom)} — pay the rest as Advance`
+              : 'No salary is payable — switch this line to Advance'
+            : null,
+        }
+      }
       if (line.payeeType === 'customer' && line.customerId) {
         const live = customerBalances[line.customerId]
         const before =
@@ -352,6 +429,9 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
       })
     }
   })
+  // Staff payments on this voucher.
+  const salaryTotal = lines.reduce((sum, line) => sum + (line.payeeType === 'employee' && line.employeePurpose === 'salary' ? Number(line.amount) || 0 : 0), 0)
+  const advanceTotal = lines.reduce((sum, line) => sum + (line.payeeType === 'employee' && line.employeePurpose === 'advance' ? Number(line.amount) || 0 : 0), 0)
   // Cash out to customers on this voucher — and how much of it hands back their advance.
   const customerPayout = lines.reduce((sum, line) => sum + (line.payeeType === 'customer' ? Number(line.amount) || 0 : 0), 0)
   const advanceReturned = lines.reduce((sum, line, i) => {
@@ -407,7 +487,7 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
     }
     const badDiscount = data.lines.findIndex((line, i) => Number(line.amount) > 0 && lineStates[i]?.error)
     if (badDiscount >= 0) {
-      toast.error(lineStates[badDiscount]?.error || 'Check the discount')
+      toast.error(lineStates[badDiscount]?.error || 'Check the line')
       return
     }
     const nonEmptyLines = data.lines.filter((line) => Number(line.amount) > 0)
@@ -424,6 +504,8 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
         category: line.payeeType === 'expense' ? line.category : undefined,
         supplierId: line.payeeType === 'supplier' ? line.supplierId : undefined,
         customerId: line.payeeType === 'customer' ? line.customerId : undefined,
+        employeeId: line.payeeType === 'employee' ? line.employeeId : undefined,
+        employeePurpose: line.payeeType === 'employee' ? line.employeePurpose : undefined,
         payeeName: line.payeeType === 'other' ? line.payeeName.trim() : undefined,
         amount: line.amount,
         description: line.description || undefined,
@@ -459,6 +541,10 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
       if (payload.lines.some((line) => line.payeeType === 'customer') || voucher?.lines.some((line) => line.payeeType === 'customer')) {
         dispatch(customerPaymentApi.util.invalidateTags(['CustomerPayment', 'CustomerAccount']))
       }
+      // Employee lines move the employee ledger (Payroll / Employee Ledger pages).
+      if (payload.lines.some((line) => line.payeeType === 'employee') || voucher?.lines.some((line) => line.payeeType === 'employee')) {
+        dispatch(hrApi.util.invalidateTags(['EmployeeLedger', 'Payroll']))
+      }
       onOpenChange(false)
     } catch (error: any) {
       toast.error(error?.data?.message || `Failed to ${isEdit ? 'update' : 'create'} payment voucher`)
@@ -492,8 +578,8 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
             <Alert className='shrink-0 border-amber-500/30 bg-amber-500/5'>
               <Info className='h-4 w-4' />
               <AlertDescription>
-                Saving updates the bank balance, Cash Book and any linked expense, supplier or customer ledger entry. Only
-                the lines you change are re-posted.
+                Saving updates the bank balance, Cash Book and any linked expense, supplier, customer or employee ledger
+                entry. Only the lines you change are re-posted.
               </AlertDescription>
             </Alert>
           )}
@@ -588,6 +674,8 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                   const supplierOption = supplierOptions.find((o) => o.value === supplierId)
                   const customerId = form.watch(`lines.${index}.customerId`)
                   const customerOption = customerOptions.find((o) => o.value === customerId)
+                  const employeeId = form.watch(`lines.${index}.employeeId`)
+                  const employeeOption = staff.options.find((o) => o.value === employeeId)
                   return (
                     <TableRow key={field.id}>
                       <TableCell className='p-1.5 align-top'>
@@ -610,6 +698,7 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                           <SelectContent>
                             <SelectItem value='supplier'>Supplier</SelectItem>
                             <SelectItem value='customer'>Customer</SelectItem>
+                            <SelectItem value='employee'>Employee</SelectItem>
                             <SelectItem value='expense'>Expense</SelectItem>
                             {/* Only ever shown for a legacy line that already is one. */}
                             {payeeType === 'other' && <SelectItem value='other'>Other</SelectItem>}
@@ -657,6 +746,46 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                               />
                             )}
                           </div>
+                        ) : payeeType === 'employee' ? (
+                          <div className='flex gap-1'>
+                            <div className='min-w-0 flex-1'>
+                              <SearchableSelect
+                                options={staff.options}
+                                value={employeeId}
+                                onValueChange={(v) => form.setValue(`lines.${index}.employeeId`, v, { shouldValidate: true, shouldDirty: true })}
+                                placeholder={staff.loading ? 'Loading employees...' : 'Select an employee...'}
+                                searchPlaceholder='Search name or employee ID...'
+                                emptyText={staff.failed ? 'Could not load employees.' : 'No employees found.'}
+                                id={`line-${index}-payee`}
+                                data-enter-field={`line-${index}-payee`}
+                                onKeyDown={payeeEnterProps.onKeyDown}
+                                onKeyDownCapture={payeeEnterProps.onKeyDownCapture}
+                                onSelected={() => voucherEnter.advance(`line-${index}-payee`)}
+                                popoverClassName='w-[320px]'
+                              />
+                            </div>
+                            <Select
+                              value={form.watch(`lines.${index}.employeePurpose`)}
+                              onValueChange={(v) =>
+                                form.setValue(`lines.${index}.employeePurpose`, v as EmployeePaymentPurpose, { shouldValidate: true, shouldDirty: true })
+                              }
+                            >
+                              <SelectTrigger className='w-[116px] shrink-0' aria-label='Payment purpose' title='Salary = earned pay (an expense). Advance = money the employee owes back.'>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value='salary'>Salary</SelectItem>
+                                <SelectItem value='advance'>Advance</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {canQuickView && employeeId && (
+                              <QuickLedgerButton
+                                onClick={() =>
+                                  setQuickParty({ side: 'employee', id: employeeId, name: employeeOption?.label || 'Employee', phone: employeeOption?.sublabel, balance: staff.balances[employeeId] })
+                                }
+                              />
+                            )}
+                          </div>
                         ) : payeeType === 'other' ? (
                           <Input
                             placeholder='Payee name'
@@ -691,25 +820,41 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                           )}
                           </div>
                         )}
-                        {(lineError?.category || lineError?.supplierId || lineError?.customerId || lineError?.payeeName) && (
+                        {(lineError?.category || lineError?.supplierId || lineError?.customerId || lineError?.employeeId || lineError?.payeeName) && (
                           <p className='mt-1 text-xs text-red-500'>
                             {lineError.category?.message ||
                               lineError.supplierId?.message ||
                               lineError.customerId?.message ||
+                              lineError.employeeId?.message ||
                               lineError.payeeName?.message}
                           </p>
+                        )}
+                        {payeeType === 'employee' && lineState?.error && Number(form.watch(`lines.${index}.amount`)) > 0 && (
+                          <p className='mt-1 text-xs font-medium text-red-600'>{lineState.error}</p>
                         )}
                       </TableCell>
 
                       {canQuickView && (
                         <TableCell className='p-1.5 align-top'>
-                          {lineState ? <PartyBalanceCell side={payeeType === 'customer' ? 'customer' : 'supplier'} owing={lineState.owingBefore} /> : <span className='block pt-2 text-right text-xs text-muted-foreground'>—</span>}
+                          {lineState ? (
+                            <PartyBalanceCell side={payeeType === 'customer' ? 'customer' : payeeType === 'employee' ? 'employee' : 'supplier'} owing={lineState.owingBefore} />
+                          ) : (
+                            <span className='block pt-2 text-right text-xs text-muted-foreground'>—</span>
+                          )}
                         </TableCell>
                       )}
 
                       <TableCell className='p-1.5 align-top'>
                         <Input
-                          placeholder={payeeType === 'customer' ? 'e.g., Advance returned' : 'e.g., August rent'}
+                          placeholder={
+                            payeeType === 'customer'
+                              ? 'e.g., Advance returned'
+                              : payeeType === 'employee'
+                                ? form.watch(`lines.${index}.employeePurpose`) === 'advance'
+                                  ? 'e.g., Loan for medical'
+                                  : 'e.g., October salary'
+                                : 'e.g., August rent'
+                          }
                           id={`line-${index}-description`}
                           {...voucherEnter.enterProps(`line-${index}-description`)}
                           {...form.register(`lines.${index}.description`)}
@@ -757,7 +902,7 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                         <TableCell className='p-1.5 align-top'>
                           <BalanceAfterCell
                             state={lineState}
-                            owingLabel={payeeType === 'customer' ? 'receivable' : undefined}
+                            owingLabel={payeeType === 'customer' ? 'receivable' : payeeType === 'employee' ? 'payable' : undefined}
                             active={
                               (Number(form.watch(`lines.${index}.amount`)) || 0) +
                                 (payeeType === 'supplier' ? Number(form.watch(`lines.${index}.discountAmount`)) || 0 : 0) >
@@ -797,6 +942,16 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                   Settled on ledgers: <span className='font-semibold text-foreground'>{formatMoney(totalAmount + totalDiscount)}</span>
                 </span>
               </>
+            )}
+            {salaryTotal + advanceTotal > 0 && (
+              <span className='text-sm text-muted-foreground' title='Salary is posted as a staff expense; an advance is money the employee owes back'>
+                Paid to staff: <span className='font-semibold text-foreground'>{formatMoney(salaryTotal + advanceTotal)}</span>
+                {salaryTotal > 0 && advanceTotal > 0 && (
+                  <span className='ml-1 text-xs'>
+                    ({formatMoney(salaryTotal)} salary · {formatMoney(advanceTotal)} advance)
+                  </span>
+                )}
+              </span>
             )}
             {customerPayout > 0 && (
               <span className='text-sm text-muted-foreground' title='Cash paid to customers is posted on their ledger as Payment Made'>

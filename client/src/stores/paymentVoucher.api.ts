@@ -44,7 +44,10 @@ interface PaginatedResult<T> {
   totalAmountSum: number
 }
 
-export type PaymentVoucherPayeeType = 'expense' | 'supplier' | 'customer' | 'other'
+export type PaymentVoucherPayeeType = 'expense' | 'supplier' | 'customer' | 'employee' | 'other'
+
+/** What money paid to an employee is: earned salary, or an advance they owe back. */
+export type EmployeePaymentPurpose = 'salary' | 'advance'
 
 export interface PaymentVoucherLine {
   id?: string
@@ -55,6 +58,10 @@ export interface PaymentVoucherLine {
   /** Customer lines: cash handed to a customer (refund of their advance / paid on account). */
   customerId?: string
   customerName?: string
+  /** Employee lines: salary or an advance, posted on their Employee Ledger. */
+  employeeId?: string
+  employeeName?: string
+  employeePurpose?: EmployeePaymentPurpose
   payeeName: string
   amount: number
   /** Settlement discount given with this line (no cash) — features/ledger-discounts. */
@@ -67,6 +74,7 @@ export interface PaymentVoucherLine {
   expenseId?: string
   supplierLedgerEntryId?: string
   customerLedgerEntryId?: string
+  employeeLedgerEntryId?: string
   /** Advance credit this customer line used up (per source payment). */
   creditDraws?: { paymentId: string; amount: number }[]
 }
@@ -101,6 +109,9 @@ export interface CreatePaymentVoucherLine {
   payeeType: PaymentVoucherPayeeType
   category?: string
   supplierId?: string
+  customerId?: string
+  employeeId?: string
+  employeePurpose?: EmployeePaymentPurpose
   payeeName?: string
   amount: number
   /** Settlement discount given with this line (no cash) — features/ledger-discounts. */

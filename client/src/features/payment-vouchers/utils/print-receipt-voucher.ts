@@ -11,12 +11,14 @@ const FONT_STACK = `system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Ro
 const SOURCE_TYPE_LABEL: Record<string, string> = {
   customer: 'Customer',
   income: 'Income',
+  employee: 'Employee',
 }
 
 export interface PrintableReceiptVoucherLine {
-  sourceType: 'customer' | 'income'
+  sourceType: 'customer' | 'income' | 'employee'
   category?: string
   customerName?: string
+  employeeName?: string
   payerName: string
   amount: number
   /** Ledger discount given/received with this line (no cash). */

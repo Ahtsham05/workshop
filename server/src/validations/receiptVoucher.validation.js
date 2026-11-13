@@ -3,7 +3,7 @@ const { objectId } = require('./custom.validation');
 const { LEDGER_DISCOUNT_REASONS } = require('../models/schemas/ledgerDiscount.schema');
 
 const voucherLine = Joi.object().keys({
-  sourceType: Joi.string().valid('customer', 'income').required(),
+  sourceType: Joi.string().valid('customer', 'income', 'employee').required(),
   category: Joi.string().trim().when('sourceType', {
     is: 'income',
     then: Joi.required(),
@@ -11,6 +11,11 @@ const voucherLine = Joi.object().keys({
   }),
   customerId: Joi.string().custom(objectId).when('sourceType', {
     is: 'customer',
+    then: Joi.required(),
+    otherwise: Joi.allow('', null).optional(),
+  }),
+  employeeId: Joi.string().custom(objectId).when('sourceType', {
+    is: 'employee',
     then: Joi.required(),
     otherwise: Joi.allow('', null).optional(),
   }),
@@ -56,7 +61,7 @@ const getVouchers = {
   query: Joi.object().keys({
     bankAccountId: Joi.string(),
     // Matches vouchers with at least one line of this source type.
-    sourceType: Joi.string().valid('customer', 'income'),
+    sourceType: Joi.string().valid('customer', 'income', 'employee'),
     search: Joi.string(),
     startDate: Joi.date(),
     endDate: Joi.date(),

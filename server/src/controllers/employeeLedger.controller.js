@@ -4,6 +4,7 @@ const pick = require('../utils/pick');
 const { employeeLedgerService } = require('../services');
 const { Employee } = require('../models');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+const { applyBusinessDateRange } = require('../utils/businessTimezone');
 
 const getLedgerScope = (req) => {
   const scope = {};
@@ -68,6 +69,20 @@ const getEmployeesWithBalances = catchAsync(async (req, res) => {
   res.send(data);
 });
 
+const getEmployeeStatement = catchAsync(async (req, res) => {
+  // Calendar dates from the period picker are boundaries in business time, not UTC midnight —
+  // same rule as the voucher lists.
+  const range = pick(req.query, ['startDate', 'endDate']);
+  applyBusinessDateRange(range);
+  const bounds = range.date || {};
+  const statement = await employeeLedgerService.getEmployeeStatement(
+    req.params.employeeId,
+    { startDate: bounds.$gte, endDate: bounds.$lte },
+    getBranchContext(req)
+  );
+  res.send(statement);
+});
+
 const deleteLedgerEntry = catchAsync(async (req, res) => {
   await employeeLedgerService.deleteLedgerEntryById(req.params.ledgerId, getLedgerScope(req));
   res.status(httpStatus.NO_CONTENT).send();
@@ -80,5 +95,6 @@ module.exports = {
   getLedgerEntries,
   getEmployeeLedgerSummary,
   getEmployeesWithBalances,
+  getEmployeeStatement,
   deleteLedgerEntry,
 };

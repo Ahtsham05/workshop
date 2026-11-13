@@ -3,7 +3,7 @@ const { objectId } = require('./custom.validation');
 const { LEDGER_DISCOUNT_REASONS } = require('../models/schemas/ledgerDiscount.schema');
 
 const voucherLine = Joi.object().keys({
-  payeeType: Joi.string().valid('expense', 'supplier', 'customer', 'other').required(),
+  payeeType: Joi.string().valid('expense', 'supplier', 'customer', 'employee', 'other').required(),
   category: Joi.string().trim().when('payeeType', {
     is: 'expense',
     then: Joi.required(),
@@ -17,6 +17,16 @@ const voucherLine = Joi.object().keys({
   customerId: Joi.string().custom(objectId).when('payeeType', {
     is: 'customer',
     then: Joi.required(),
+    otherwise: Joi.allow('', null).optional(),
+  }),
+  employeeId: Joi.string().custom(objectId).when('payeeType', {
+    is: 'employee',
+    then: Joi.required(),
+    otherwise: Joi.allow('', null).optional(),
+  }),
+  employeePurpose: Joi.string().when('payeeType', {
+    is: 'employee',
+    then: Joi.valid('salary', 'advance').default('salary'),
     otherwise: Joi.allow('', null).optional(),
   }),
   // Required for 'other' (free-text payee); auto-derived from `category`/supplier name for
@@ -68,7 +78,7 @@ const getVouchers = {
   query: Joi.object().keys({
     bankAccountId: Joi.string(),
     // Matches vouchers with at least one line of this payee type.
-    payeeType: Joi.string().valid('expense', 'supplier', 'customer', 'other'),
+    payeeType: Joi.string().valid('expense', 'supplier', 'customer', 'employee', 'other'),
     search: Joi.string(),
     startDate: Joi.date(),
     endDate: Joi.date(),

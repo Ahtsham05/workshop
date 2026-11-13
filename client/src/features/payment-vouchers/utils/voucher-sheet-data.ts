@@ -8,6 +8,7 @@ export const PAYEE_TYPE_BADGE_CLASS: Record<string, string> = {
   expense: 'bg-orange-100 text-orange-700 hover:bg-orange-100',
   supplier: 'bg-blue-100 text-blue-700 hover:bg-blue-100',
   customer: 'bg-teal-100 text-teal-700 hover:bg-teal-100',
+  employee: 'bg-indigo-100 text-indigo-700 hover:bg-indigo-100',
   other: 'bg-slate-100 text-slate-700 hover:bg-slate-100',
   mixed: 'bg-purple-100 text-purple-700 hover:bg-purple-100',
 }
@@ -16,18 +17,27 @@ export const PAYEE_TYPE_LABELS: Record<string, string> = {
   expense: 'Expense',
   supplier: 'Supplier',
   customer: 'Customer',
+  employee: 'Employee',
   other: 'Other',
 }
+
+/** "Employee · Salary" / "Employee · Advance" — what an employee payment line actually was. */
+export const paymentLineTypeLabel = (line: { payeeType: string; employeePurpose?: string }) =>
+  line.payeeType === 'employee'
+    ? `Employee · ${line.employeePurpose === 'advance' ? 'Advance' : 'Salary'}`
+    : PAYEE_TYPE_LABELS[line.payeeType] ?? line.payeeType
 
 export const SOURCE_TYPE_BADGE_CLASS: Record<string, string> = {
   customer: 'bg-blue-100 text-blue-700 hover:bg-blue-100',
   income: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100',
+  employee: 'bg-indigo-100 text-indigo-700 hover:bg-indigo-100',
   mixed: 'bg-purple-100 text-purple-700 hover:bg-purple-100',
 }
 
 export const SOURCE_TYPE_LABELS: Record<string, string> = {
   customer: 'Customer',
   income: 'Income',
+  employee: 'Employee',
 }
 
 export interface VoucherSheetLine {
@@ -82,7 +92,7 @@ export const toPaymentSheetData = (voucher: PaymentVoucherRecord): VoucherSheetD
   lines: voucher.lines.map((line, index) => ({
     id: line.id ?? String(index),
     partyName: line.payeeName,
-    typeLabel: PAYEE_TYPE_LABELS[line.payeeType] ?? line.payeeType,
+    typeLabel: paymentLineTypeLabel(line),
     typeClassName: PAYEE_TYPE_BADGE_CLASS[line.payeeType] ?? '',
     description: line.description,
     amount: Number(line.amount || 0),

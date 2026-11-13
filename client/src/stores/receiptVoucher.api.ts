@@ -44,7 +44,7 @@ interface PaginatedResult<T> {
   totalAmountSum: number
 }
 
-export type ReceiptVoucherSourceType = 'customer' | 'income'
+export type ReceiptVoucherSourceType = 'customer' | 'income' | 'employee'
 
 export interface ReceiptVoucherLine {
   id?: string
@@ -52,6 +52,9 @@ export interface ReceiptVoucherLine {
   category?: string
   customerId?: string
   customerName?: string
+  /** Employee lines: cash a staff member handed back, posted on their Employee Ledger. */
+  employeeId?: string
+  employeeName?: string
   payerName: string
   amount: number
   /** Settlement discount given with this line (no cash) — features/ledger-discounts. */
@@ -62,6 +65,7 @@ export interface ReceiptVoucherLine {
   discountNote?: string
   description?: string
   customerLedgerEntryId?: string
+  employeeLedgerEntryId?: string
 }
 
 /** `createdBy` / `updatedBy` come back as a populated user from the single-voucher endpoint,
@@ -94,6 +98,7 @@ export interface CreateReceiptVoucherLine {
   sourceType: ReceiptVoucherSourceType
   category?: string
   customerId?: string
+  employeeId?: string
   amount: number
   /** Settlement discount given with this line (no cash) — features/ledger-discounts. */
   discountAmount?: number

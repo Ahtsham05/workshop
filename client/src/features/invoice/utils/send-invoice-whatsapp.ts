@@ -31,11 +31,17 @@ async function blobToBase64(blob: Blob): Promise<string> {
  * own direction/text-align/margin rules to the actual app body, visibly mirroring the whole
  * app to RTL for as long as the PDF capture runs.
  */
-function extractPrintRootHtml(fullHtml: string): string {
+/** A `body {` rule — the type selector only. Not `\bbody`: a hyphen is a word boundary, so that
+ *  also matched the end of `.ds-terms-body {` and turned it into an invalid selector, which made
+ *  the browser drop the whole rule (the Distributor PDF's Terms row then stacked into one
+ *  column). */
+const BODY_RULE_RE = /(^|[^\w.#-])body(\s*\{)/g
+
+export function extractPrintRootHtml(fullHtml: string): string {
   const parser = new DOMParser()
   const doc = parser.parseFromString(fullHtml, 'text/html')
   const styles = Array.from(doc.querySelectorAll('style'))
-    .map((s) => `<style>${s.innerHTML.replace(/\bbody(\s*\{)/g, '#invoice-print-root$1')}</style>`)
+    .map((s) => `<style>${s.innerHTML.replace(BODY_RULE_RE, '$1#invoice-print-root$2')}</style>`)
     .join('\n')
   const root = doc.getElementById('invoice-print-root')
   if (root) return styles + root.outerHTML

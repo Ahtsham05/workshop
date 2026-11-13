@@ -15,7 +15,9 @@ const paymentVoucherLineSchema = new mongoose.Schema(
       type: String,
       // 'customer' = cash handed to a customer (refund of their advance, or money lent/paid out
       // to them) — posted as a Payment Made (debit) on their Customer Ledger.
-      enum: ['expense', 'supplier', 'customer', 'other'],
+      // 'employee' = salary or an advance paid to a staff member — posted on their Employee
+      // Ledger (salary also lands in Expenses as a staff cost; an advance is money they owe back).
+      enum: ['expense', 'supplier', 'customer', 'employee', 'other'],
       required: true,
     },
     // Expense category name when payeeType === 'expense' (free text — Expense.category
@@ -41,6 +43,22 @@ const paymentVoucherLineSchema = new mongoose.Schema(
     customerName: {
       type: String,
       trim: true,
+    },
+    employeeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employee',
+    },
+    // Denormalized employee name so the line stays readable if the employee is later renamed.
+    employeeName: {
+      type: String,
+      trim: true,
+    },
+    // What the money paid to an employee is: earned salary (capped at what is payable, counted as
+    // a staff expense) or an advance / loan (they owe it back — recovered from salary or received
+    // back on a Receipt Voucher).
+    employeePurpose: {
+      type: String,
+      enum: ['salary', 'advance'],
     },
     // Display name of who was paid: the expense category label, the supplier's or customer's
     // name, or the free-text payee name entered for 'other'.
@@ -72,6 +90,11 @@ const paymentVoucherLineSchema = new mongoose.Schema(
     customerLedgerEntryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'CustomerLedger',
+    },
+    // Set after employeeLedgerService.postVoucherEntry succeeds (payeeType === 'employee' only).
+    employeeLedgerEntryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'EmployeeLedger',
     },
     // Advance credit (unapplied CustomerPayment money) this customer payout used up, per source
     // payment — a payout first returns money the customer had paid us in advance, so that credit
