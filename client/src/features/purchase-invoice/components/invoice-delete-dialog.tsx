@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { IconAlertTriangle } from '@tabler/icons-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
@@ -19,7 +19,11 @@ interface Props {
 }
 
 export function InvoiceDeleteDialog({ open, onOpenChange, currentRow, onDeleted }: Props) {
-  const [value, setValue] = useState('')
+  // Auto-filled with the invoice number so the user only has to press Delete.
+  const [value, setValue] = useState<string>(currentRow?.invoiceNumber ?? '')
+  useEffect(() => {
+    if (open) setValue(currentRow?.invoiceNumber ?? '')
+  }, [open, currentRow?.invoiceNumber])
   const [deletePurchase, { isLoading }] = useDeletePurchaseMutation()
   // const { t } = useLanguage()
 
