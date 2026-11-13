@@ -11,12 +11,17 @@ const internalTaxProvider = require('./providers/internalTaxProvider');
  * service is never called again to "re-check" an already-saved, finalized transaction.
  */
 
+// `taxable: false` = this line pays no tax whatever its amount (no tax system, no category,
+// customer/category exempt, or no rate configured). Every zero result here is
+// amount-independent, which lets a live preview skip re-asking while only quantities or
+// prices change (see the tax preview effect in client/src/features/invoice/index.tsx).
 const zeroLineResult = (line, decimalPlaces) => ({
   lineId: line.lineId,
   taxableAmount: Money.roundMoney(line.amount, decimalPlaces),
   taxAmount: 0,
   effectiveRatePercent: 0,
   components: [],
+  taxable: false,
 });
 
 /**
@@ -168,6 +173,7 @@ const calculateTax = async ({
       taxAmount: Money.fromMinorUnits(lineTaxMinorUnits, currencyDecimalPlaces),
       effectiveRatePercent: taxableAmountMinorUnits > 0 ? Money.roundMoney((lineTaxMinorUnits / taxableAmountMinorUnits) * 100, 2) : 0,
       components,
+      taxable: true,
     });
   }
 

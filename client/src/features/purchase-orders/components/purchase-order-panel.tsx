@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useTradeProductFilter } from '@/hooks/use-trade-product-filter'
 import { Input } from '@/components/ui/input'
+import { NumericInput } from '@/components/ui/numeric-input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
@@ -1199,20 +1200,18 @@ export default function PurchaseOrderPanel({
                             >
                               <Minus className='h-3.5 w-3.5' />
                             </Button>
-                            <Input
+                            <NumericInput
                               ref={(el) => {
                                 qtyInputRefs.current[rk] = el
                               }}
-                              type='number'
+                              decimals={false}
                               min={1}
+                              emptyValue={null}
                               value={item.quantity}
-                              onChange={(e) =>
-                                updateQuantity(productId, parseInt(e.target.value, 10) || 1, item.variantId)
-                              }
+                              onValueChange={(qty) => updateQuantity(productId, qty, item.variantId)}
                               onKeyDown={(e) =>
                                 onEnterAdvance(e, () => focusField(costInputRefs.current[rk]))
                               }
-                              onFocus={(e) => e.target.select()}
                               className='h-7 w-16 border-0 text-center text-sm font-semibold focus-visible:ring-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
                               aria-label='Quantity'
                             />

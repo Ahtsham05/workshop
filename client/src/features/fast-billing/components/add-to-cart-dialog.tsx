@@ -2,12 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { NumericInput } from '@/components/ui/numeric-input'
 import { Label } from '@/components/ui/label'
 import { Minus, Package, Plus, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
-import { selectOnFocus } from '../utils/select-on-focus'
 import { stockBadgeClasses, stockDotClasses, stockLabel } from '../utils/stock-badge'
 import { getDefaultBatch } from '../types'
 
@@ -114,12 +113,12 @@ export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose }: Prop
               >
                 <Minus className='h-4 w-4' />
               </Button>
-              <Input
+              <NumericInput
                 ref={qtyRef}
-                type='number'
+                min={1}
+                emptyValue={null}
                 value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
-                onFocus={selectOnFocus}
+                onValueChange={setQuantity}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault()
@@ -157,12 +156,11 @@ export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose }: Prop
               <span className='flex h-11 select-none items-center border-r bg-muted px-3 text-sm font-medium text-muted-foreground'>
                 {currencySymbol}
               </span>
-              <Input
+              <NumericInput
                 ref={priceRef}
-                type='number'
+                min={0}
                 value={unitPrice}
-                onChange={(e) => setUnitPrice(Math.max(0, Number(e.target.value) || 0))}
-                onFocus={selectOnFocus}
+                onValueChange={setUnitPrice}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault()

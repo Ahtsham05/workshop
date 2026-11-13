@@ -26,6 +26,9 @@ import type { PrintInvoiceData } from './print-utils'
 import {
   DISTRIBUTOR_LICENSE_FIELDS,
   getActiveDistributorSettings,
+  pickedPrintHeaderStyle,
+  withDistributorSettings,
+  type DistributorHeaderStyle,
 } from './distributor-settings'
 import type { SheetSize } from './paper-format'
 
@@ -252,7 +255,8 @@ function dueDateText(data: PrintInvoiceData, ctx: DistributorPrintContext): stri
 function metaLines(data: PrintInvoiceData, ctx: DistributorPrintContext): string[] {
   const settings = getActiveDistributorSettings()
   const due = dueDateText(data, ctx)
-  const licences = DISTRIBUTOR_LICENSE_FIELDS.map(({ key, label }) => {
+  // "Without logo" prints nothing about the business, licence numbers included.
+  const licences = (showsCompany() ? DISTRIBUTOR_LICENSE_FIELDS : []).map(({ key, label }) => {
     // The organisation's tax number stands in for an empty State Tax Id.
     const value = settings[key] || (key === 'stateTaxId' ? data.companyTaxNumber?.trim() : '')
     return value ? `${label}: ${esc(value)}` : ''
@@ -286,7 +290,13 @@ function partyLines(data: PrintInvoiceData, native: boolean): string[] {
   ].filter(Boolean)
 }
 
-const hasLogo = (data: PrintInvoiceData) => Boolean(data.companyLogo || data.isTrial)
+/* ── Header style (Settings → Printing → Distributor details) ─────────────── */
+const headerStyle = (): DistributorHeaderStyle => getActiveDistributorSettings().headerStyle
+/** Business name / address / contact, licence numbers, business policies and the Terms ·
+ *  Status · Invoiced By · Tax ID band — all left off on "Without logo". */
+const showsCompany = () => headerStyle() !== 'no-logo'
+
+const hasLogo = (data: PrintInvoiceData) => headerStyle() === 'logo' && Boolean(data.companyLogo || data.isTrial)
 /* ── Barcode ──────────────────────────────────────────────────────────────
  * A real Code 39 drawn as SVG bars (JsBarcode), sized like the reference: about 8u of width per
  * character (start/stop * included) and a fixed bar height, so a short number gets a compact
@@ -337,12 +347,12 @@ const headingSizeU = (text: string) => Math.min(HEADING_U, DOC_COL_U / Math.max(
 
 /** Height (u) of everything above the first item row on page 1 — mirrors the CSS below. */
 function firstPageTopU(data: PrintInvoiceData, ctx: DistributorPrintContext): number {
-  const co = companyLines(data, ctx.nativeNames).length * 13.2
+  const co = showsCompany() ? companyLines(data, ctx.nativeNames).length * 13.2 : 0
   const logo = hasLogo(data) ? 97 : 0
   const heading = 24 // "INVOICE : number" line
   const doc = heading + (barcodeSafe(ctx.printNumber) ? BARCODE_H_U + 4 : 0) + metaLineCount(metaLines(data, ctx)) * 12
   const parties = 14 + 15 + partyLines(data, ctx.nativeNames).length * 12
-  const terms = 4 + 19.5 + 13
+  const terms = showsCompany() ? 4 + 19.5 + 13 : 0
   return PAGE_TOP_PAD_U + Math.max(co, logo, doc) + parties + terms + TABLE_HEAD_U
 }
 
@@ -350,11 +360,11 @@ function letterhead(data: PrintInvoiceData, ctx: DistributorPrintContext, title:
   const native = ctx.nativeNames
   const company = (native ? data.companyNameUrdu || data.companyName : data.companyName || data.companyNameUrdu) || ''
 
-  const logo = data.companyLogo
-    ? `<img class="ds-logo" src="${esc(data.companyLogo)}" alt="${esc(company)}" />`
-    : data.isTrial
-      ? `<img class="ds-logo" src="/images/logo-light.png" alt="Logix Plus solutions" />`
-      : ''
+  const logo = !hasLogo(data)
+    ? ''
+    : data.companyLogo
+      ? `<img class="ds-logo" src="${esc(data.companyLogo)}" alt="${esc(company)}" />`
+      : `<img class="ds-logo" src="/images/logo-light.png" alt="Logix Plus solutions" />`
 
   const barcodeValue = barcodeSafe(ctx.printNumber)
   // Title and number on one line (then the barcode).
@@ -363,10 +373,14 @@ function letterhead(data: PrintInvoiceData, ctx: DistributorPrintContext, title:
 
   const meta = metaLines(data, ctx)
 
+  // Left column: the business (empty on "Without logo"); the logo slot only takes room when a
+  // logo prints, so the business details get the full width otherwise.
+  const left = `<div class="ds-co">${showsCompany() ? companyLines(data, native).join('') : ''}</div>`
+
   return `
-  <header class="ds-head">
-    <div class="ds-co">${companyLines(data, native).join('')}</div>
-    <div class="ds-logo-slot">${logo}</div>
+  <header class="ds-head${logo ? '' : ' ds-head-nologo'}">
+    ${left}
+    ${logo ? `<div class="ds-logo-slot">${logo}</div>` : ''}
     <div class="ds-doc">
       ${heading}
       ${barcodeValue ? `<div class="ds-barcode-row">${barcodeHtml(barcodeValue, DOC_COL_U)}</div>` : ''}
@@ -459,13 +473,19 @@ function policyBlocks(data: PrintInvoiceData): Array<{ heading: string; html: st
   const settings = getActiveDistributorSettings()
   const plain = (text: string) => (text ? escapeHtml(text).replace(/\r?\n/g, '<br />') : '')
   const rich = (text: unknown) => (text && String(text).trim() ? invoiceTermsToSafeHtml(String(text)) : '')
+  // "Without logo" leaves the business's own policies off; the invoice's Terms & Conditions stay.
+  const policies = showsCompany()
   // A return only needs the policy that governs it.
-  if (isReturn(data)) return [{ heading: 'Return Policy', html: plain(settings.returnPolicy) }].filter((b) => b.html)
+  if (isReturn(data)) return policies ? [{ heading: 'Return Policy', html: plain(settings.returnPolicy) }].filter((b) => b.html) : []
   return [
     { heading: 'Terms &amp; Conditions', html: rich(data.termsAndConditions) },
-    { heading: 'General Policy', html: plain(settings.generalPolicy) },
-    { heading: 'Return Policy', html: plain(settings.returnPolicy) },
-    { heading: 'Buyers Guarantee', html: plain(settings.buyersGuarantee) },
+    ...(policies
+      ? [
+          { heading: 'General Policy', html: plain(settings.generalPolicy) },
+          { heading: 'Return Policy', html: plain(settings.returnPolicy) },
+          { heading: 'Buyers Guarantee', html: plain(settings.buyersGuarantee) },
+        ]
+      : []),
   ].filter((b) => b.html)
 }
 
@@ -608,7 +628,9 @@ const contNumberSizeU = (barcodeValue: string, number: string) => {
 /** Top of every page after the first: business, customer and address | barcode, number and dates. */
 function continuationHead(data: PrintInvoiceData, ctx: DistributorPrintContext): string {
   const native = ctx.nativeNames
-  const company = (native ? data.companyNameUrdu || data.companyName : data.companyName || data.companyNameUrdu) || ''
+  const company = showsCompany()
+    ? (native ? data.companyNameUrdu || data.companyName : data.companyName || data.companyNameUrdu) || ''
+    : ''
   const address = (data.customerAddress || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).join(', ')
   const barcodeValue = barcodeSafe(ctx.printNumber)
   const due = dueDateText(data, ctx)
@@ -643,7 +665,7 @@ export function buildDistributorPages(data: PrintInvoiceData, ctx: DistributorPr
   ${first
     ? `${letterhead(data, ctx, title)}
   <section class="ds-parties">${partyBlock('SOLD TO:', data, ctx)}</section>
-  ${termsBand(data, ctx)}`
+  ${showsCompany() ? termsBand(data, ctx) : ''}`
     : continuationHead(data, ctx)}
   ${itemsTable(rows, start, fmt, ctx.nativeNames, cols)}
   ${last ? summary(data, ctx, fmt) : ''}
@@ -688,6 +710,7 @@ function distributorCss(sheet: SheetKey, layout: Layout): string {
     .ds-head { display: grid; grid-template-columns: 1fr ${u(120)} 1fr; column-gap: ${u(10)}; padding: 0 ${u(20)}; align-items: start; }
     .ds-co { font-weight: 600; line-height: ${u(13.2)}; min-width: 0; overflow-wrap: anywhere; }
     .ds-co-name { font-weight: 600; }
+    .ds-head-nologo { grid-template-columns: 1fr auto; }
     .ds-logo-slot { display: flex; justify-content: center; }
     .ds-logo { max-width: ${u(120)}; max-height: ${u(97)}; object-fit: contain; display: block; }
     /* Pinned to the right margin (mirroring the business details on the left); its lines are
@@ -813,8 +836,18 @@ function documentShell(sheet: SheetKey, layout: Layout, title: string, bodyHtml:
 </html>`
 }
 
+/** Runs `fn` with the Print button's one-off header style applied, when one was picked. */
+function withPickedHeaderStyle<T>(fn: () => T): T {
+  const picked = pickedPrintHeaderStyle()
+  return picked ? withDistributorSettings({ ...getActiveDistributorSettings(), headerStyle: picked }, fn) : fn()
+}
+
 /** Full print document for one invoice on A4 / A5 / A5 landscape / half of a landscape A4. */
 export function generateDistributorInvoiceHTML(data: PrintInvoiceData, sheetSize: SheetSize, ctx: DistributorPrintContext): string {
+  return withPickedHeaderStyle(() => distributorInvoiceHTML(data, sheetSize, ctx))
+}
+
+function distributorInvoiceHTML(data: PrintInvoiceData, sheetSize: SheetSize, ctx: DistributorPrintContext): string {
   const layout: Layout = sheetSize === 'a4-half-left' ? 'half-left' : sheetSize === 'a4-half-right' ? 'half-right' : 'single'
   const sheet: SheetKey = layout !== 'single' ? 'a5' : (sheetSize as SheetKey)
   const pages = buildDistributorPages(data, ctx, sheet)
@@ -834,6 +867,13 @@ export function generateDistributorInvoiceHTML(data: PrintInvoiceData, sheetSize
 
 /** Two different invoices side by side on landscape A4 sheets (A5-sized each), page by page. */
 export function generateDistributorTwoUpHTML(
+  left: { data: PrintInvoiceData; ctx: DistributorPrintContext },
+  right: { data: PrintInvoiceData; ctx: DistributorPrintContext },
+): string {
+  return withPickedHeaderStyle(() => distributorTwoUpHTML(left, right))
+}
+
+function distributorTwoUpHTML(
   left: { data: PrintInvoiceData; ctx: DistributorPrintContext },
   right: { data: PrintInvoiceData; ctx: DistributorPrintContext },
 ): string {

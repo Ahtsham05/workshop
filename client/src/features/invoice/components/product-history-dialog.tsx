@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { History, TrendingUp, TrendingDown, Minus, Calendar, DollarSign, Package, FileText } from 'lucide-react'
 import {
   Dialog,
@@ -38,18 +37,12 @@ export function ProductHistoryDialog({
 }: ProductHistoryDialogProps) {
   const { t } = useLanguage()
 
-  // Fetch product history
-  const { data: historyData, isLoading, error, refetch } = useGetCustomerProductHistoryQuery(
+  // Cached per customer+product (see invoice.api.ts) — re-opening reuses it; a saved
+  // invoice invalidates it. Only re-asks if the cached copy is over a minute old.
+  const { data: historyData, isLoading, error } = useGetCustomerProductHistoryQuery(
     { customerId, productId },
-    { skip: !open || !customerId || !productId || customerId === 'walk-in' }
+    { skip: !open || !customerId || !productId || customerId === 'walk-in', refetchOnMountOrArgChange: 60 }
   )
-
-  // Refetch when dialog opens
-  useEffect(() => {
-    if (open && customerId && productId && customerId !== 'walk-in') {
-      refetch()
-    }
-  }, [open, customerId, productId, refetch])
 
   const formatCurrency = useFormatMoney()
 

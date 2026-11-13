@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useIsModuleHidden } from '@/hooks/use-hidden-modules'
 import { WarehouseTag } from '@/components/warehouse-tag'
-import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
+import { useFormatMoney } from '@/lib/format-money'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,17 +10,9 @@ import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { useLanguage } from '@/context/language-context'
 import { resolveBranchCompanyName } from '@/utils/branch-company-name'
-import { invoiceTermsToSafeHtml } from '@/lib/rich-text-utils'
 import { usePermissions } from '@/context/permission-context'
 import { permissionMessage } from '@/lib/permission-messages'
 import { cn } from '@/lib/utils'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
 import {
   Table,
   TableBody,
@@ -58,19 +51,11 @@ import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
-import { generateInvoiceHTML, generateA4InvoiceHTML, generateA4LandscapeTwoInvoicesHTML, openPrintWindowForFormat } from '../utils/print-utils'
+import { generateA4LandscapeTwoInvoicesHTML, openPrintWindowForFormat } from '../utils/print-utils'
 import { prepareSheetPrintData } from '@/features/invoice/utils/distributor-print-details'
-import { PAPER_FORMATS, resolveThermalSize, resolveSheetFormat, type PaperSize, type PrintOrientation } from '../utils/paper-format'
+import type { PaperSize } from '../utils/paper-format'
 import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
-import { fetchBalanceBeforeInvoice } from '../utils/invoice-print-balance'
-import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
-import {
-  fetchAndStashPrintContact,
-  resolveCustomerIdString,
-  stashPrintContact,
-  type PrintWindowContact,
-} from '../utils/invoice-print-contact-bridge'
 import { useGetAllCustomersQuery } from '../../../stores/customer.api'
 import { InvoiceDeleteDialog } from './invoice-delete-dialog'
 import { QuotationConvertDialog } from './quotation-convert-dialog'
@@ -92,11 +77,10 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-preferences'
-import { formatImeiEntries } from '@/stores/imei.api'
-import { TaxBreakdownSummary } from './tax-breakdown-summary'
-import type { TaxLine } from '@/stores/taxCalculator.api'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
-import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
+import { formatAppDate } from '@/lib/date-format'
+import { InvoiceDetailDialog } from '@/components/invoice-detail-dialog'
+import { useInvoicePrinter } from '../hooks/use-invoice-printer'
 
 import { useNativeLanguageName } from '@/hooks/use-native-language-name'
 interface InvoiceListProps {
@@ -165,15 +149,15 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const nativeLanguageName = useNativeLanguageName()
   const formatMoney = useFormatMoney()
   const { settings: ledgerSettings } = useLedgerAlertSettings()
-  const currencyMeta = useCurrencyMeta()
   const { hasExplicitPermission } = usePermissions()
   const canCreate = hasExplicitPermission('createInvoices')
   const canEdit = hasExplicitPermission('editInvoices')
   const canDelete = hasExplicitPermission('deleteInvoices')
   const canPrint = hasExplicitPermission('printInvoices')
   const canViewCreatedBy = useCanViewCreatedBy()
+  // Distributors (and any type hiding the salesman module) don't get a Salesman column.
+  const showSalesman = !useIsModuleHidden('salesmen')
   const [updateInvoiceFlag] = useUpdateInvoiceFlagMutation()
-  const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
 
   const {
     filters,
@@ -200,14 +184,13 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const [selectedInvoice, setSelectedInvoice] = useState<any>(null)
+  const [viewingInvoice, setViewingInvoice] = useState<any>(null)
   const [page, setPage] = useState(1)
   const [limit, setLimit] = usePersistedPageSize('invoices', 10)
   /** id → invoice number, so a selection survives paging and can be matched to export rows. */
   const [selected, setSelected] = useState<Record<string, string>>({})
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null)
-  const [printingInvoiceId, setPrintingInvoiceId] = useState<string | null>(null)
   const [printInUrdu, setPrintInUrdu] = useState(() => getInvoicePrintInUrdu())
   const [quotationToConvert, setQuotationToConvert] = useState<any>(null)
   const [twoUpMode, setTwoUpMode] = useState(false)
@@ -235,7 +218,6 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
   const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
-  const printOrientation: PrintOrientation = branchData?.printSettings?.printOrientation ?? 'portrait'
 
   // Create a customer lookup map for efficient customer name resolution
   const customerMap = new Map()
@@ -308,127 +290,20 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
     return '-'
   }
 
-  /** Builds sheet/thermal-agnostic print data + WhatsApp/SMS contact for one invoice. Shared by single and 2-per-page printing. */
-  const buildInvoicePrintData = async (invoice: any) => {
-      const customerName = getCustomerName(invoice)
-      const walkInCustomerName = invoice.walkInCustomerName
-      const customerNameUrdu = getCustomerUrdu(invoice)
-      const customerId =
-        typeof invoice.customerId === 'object'
-          ? invoice.customerId?._id || invoice.customerId?.id
-          : invoice.customerId
-      // A supplier's shadow-customer account has its own isolated CustomerLedger balance —
-      // pull the supplier's true net balance (purchases + sales combined) instead when linked.
-      const linkedSupplierId = customerMap.get(customerId)?.linkedSupplierId
-      const previousBalance = await fetchBalanceBeforeInvoice(customerId, invoice._id || invoice.id, linkedSupplierId)
-      const invoiceTotal = Number(invoice.total || 0)
-      const invoicePaid = Number(invoice.paidAmount || 0)
-
-      const printData = withCustomerContactForPrint({
-        invoiceNumber: invoice.invoiceNumber,
-        warehouseId: invoice.warehouseId,
-        items: (invoice.items || []).map((item: any) => ({
-          name: item.name,
-          nameUrdu: item.nameUrdu || (typeof item.productId === 'object' ? item.productId?.nameUrdu : undefined),
-          quantity: item.quantity,
-          unit: item.unit,
-          unitPrice: item.unitPrice,
-          subtotal: item.subtotal,
-          discountAmount: item.discountAmount,
-          imeis: item.imeis,
-        })),
-        customerId: invoice.customerId,
-        customerName: customerName,
-        customerNameUrdu: customerNameUrdu || undefined,
-        walkInCustomerName: walkInCustomerName,
-        type: invoice.type,
-        subtotal: invoice.subtotal || 0,
-        tax: invoice.tax || 0,
-        taxLines: invoice.taxLines || [],
-        discount: invoice.discount || 0,
-        total: invoice.total || 0,
-        paidAmount: invoice.paidAmount || 0,
-        balance: invoice.balance || 0,
-        notes: invoice.notes,
-        termsAndConditions: invoice.termsAndConditions,
-        invoiceAddress: branchData?.location?.address?.trim() || undefined,
-        invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
-        deliveryCharge: invoice.deliveryCharge || 0,
-        serviceCharge: invoice.serviceCharge || 0,
-        companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
-        companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
-        companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
-        companyPhone: branchData?.phone,
-        companyEmail: branchData?.email,
-        companyTaxNumber: undefined,
-        companyLogo: orgData?.logo?.url,
-        isTrial: orgData?.subscription?.isTrial,
-        language: invoice.language,
-        isUrduOnly: invoice.isUrduOnly,
-        userPreferredLanguage: preferredLanguage,
-        invoiceNote: branchData?.invoiceNote,
-        printInUrdu,
-        printAsQuotation: invoice.type === 'quotation',
-        previousBalance,
-        newBalance: previousBalance + invoiceTotal - invoicePaid,
-        currencyMeta,
-      }, invoice)
-
-      const customerIdStr = resolveCustomerIdString(invoice.customerId)
-      let contactPhone = printData.customerPhone
-      let contactWhatsapp = printData.customerWhatsapp
-      if (customerIdStr) {
-        stashPrintContact({ customerId: customerIdStr, phone: contactPhone, whatsapp: contactWhatsapp })
-        try {
-          const fetched = await fetchAndStashPrintContact(customerIdStr)
-          contactPhone = fetched.phone || contactPhone
-          contactWhatsapp = fetched.whatsapp || contactWhatsapp
-        } catch {
-          /* prompt in print window if still missing */
-        }
-      }
-      const printContact: PrintWindowContact = {
-        customerId: customerIdStr,
-        phone: contactPhone,
-        whatsapp: contactWhatsapp || contactPhone,
-      }
-      if (contactPhone || contactWhatsapp) {
-        Object.assign(printData, {
-          customerPhone: contactPhone,
-          customerWhatsapp: contactWhatsapp || contactPhone,
-        })
-      }
-
-      return { printData, printContact }
-  }
-
-  const handlePrintInvoice = async (invoice: any, paperSize: PaperSize = defaultPaperSize) => {
-    if (!canPrint) {
-      toast.error(permissionMessage(t, 'no_permission_print_invoice'))
-      return
-    }
-    try {
-      setPrintingInvoiceId(invoice.id || invoice._id)
-      const { printData, printContact } = await buildInvoicePrintData(invoice)
-
-      if (PAPER_FORMATS[paperSize].family === 'thermal') {
-        const htmlContent = generateInvoiceHTML(printData, resolveThermalSize(paperSize))
-        openPrintWindowForFormat(htmlContent, paperSize, printContact)
-      } else {
-        const sheetSize = resolveSheetFormat(paperSize, printOrientation)
-        const sheetData = await prepareSheetPrintData(printData, invoice, invoiceTemplate)
-        const htmlContent = generateA4InvoiceHTML(sheetData, sheetSize, invoiceTemplate)
-        openPrintWindowForFormat(htmlContent, sheetSize, printContact)
-      }
-
-      toast.success(`Printing invoice ${invoice.invoiceNumber}`)
-    } catch (error) {
-      console.error('Print error:', error)
-      toast.error('Failed to print invoice')
-    } finally {
-      setPrintingInvoiceId(null)
-    }
-  }
+  const lookupCustomer = useCallback(
+    (customerId: string) => {
+      const customer = customerMap.get(customerId)
+      return customer ? { name: customer.name, nameUrdu: customer.nameUrdu, linkedSupplierId: customer.linkedSupplierId } : undefined
+    },
+    // customerMap is rebuilt each render from customersData — key the callback on the data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [customersData]
+  )
+  const {
+    printInvoice: handlePrintInvoice,
+    buildInvoicePrintData,
+    printingId: printingInvoiceId,
+  } = useInvoicePrinter({ lookupCustomer })
 
   /** Combines two different invoices onto a single landscape A4 sheet (two A5-proportioned halves) — for printers that only carry A4 stock. */
   const handlePrintTwoUp = async () => {
@@ -559,7 +434,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
     )
   }
 
-  const columnCount = 13 + (twoUpMode ? 1 : 0) + (canViewCreatedBy ? 1 : 0)
+  const columnCount = 12 + (showSalesman ? 1 : 0) + (twoUpMode ? 1 : 0) + (canViewCreatedBy ? 1 : 0)
 
   return (
     <div className="space-y-6">
@@ -770,7 +645,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                   <TableHead className='text-right'>{t('Remaining')}</TableHead>
                   <TableHead>{t('Status')}</TableHead>
                   {canViewCreatedBy && <TableHead>{t('created_by') || 'Created By'}</TableHead>}
-                  <TableHead>{t('salesman') || 'Salesman'}</TableHead>
+                  {showSalesman && <TableHead>{t('salesman') || 'Salesman'}</TableHead>}
                   <TableHead>{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -930,36 +805,21 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                         <CreatedByCell createdBy={invoice.createdBy} />
                       </TableCell>
                     )}
-                    <TableCell className="text-sm text-muted-foreground">
-                      {salesmanName(invoice.salesmanId)}
-                    </TableCell>
+                    {showSalesman && (
+                      <TableCell className="text-sm text-muted-foreground">
+                        {salesmanName(invoice.salesmanId)}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setSelectedInvoice(invoice)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                            <DialogHeader className="sticky top-0 bg-white z-10">
-                              <DialogTitle>{t('invoice_details')} - {invoice.invoiceNumber}</DialogTitle>
-                            </DialogHeader>
-                            <div className="overflow-y-auto pr-4">
-                              {selectedInvoice && (
-                                <InvoiceDetails
-                                  invoice={selectedInvoice}
-                                  getCustomerName={getCustomerName}
-                                  getCustomerUrdu={getCustomerUrdu}
-                                />
-                              )}
-                            </div>
-                          </DialogContent>
-                        </Dialog>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setViewingInvoice(invoice)}
+                          title={t('View') || 'View'}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
 
                         {canEdit && invoice.type === 'quotation' && (
                           <Button
@@ -1032,6 +892,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                             allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
                             disabled={printingInvoiceId === id}
                             onPrint={(paperSize) => handlePrintInvoice(invoice, paperSize)}
+                            invoiceHeaderStyles
                             label=""
                           />
                         )}
@@ -1089,6 +950,20 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         </CardContent>
       </Card>
 
+      <InvoiceDetailDialog
+        invoiceId={viewingInvoice ? String(viewingInvoice.id || viewingInvoice._id) : undefined}
+        fallbackInvoice={viewingInvoice}
+        open={Boolean(viewingInvoice)}
+        onOpenChange={(open) => {
+          if (!open) setViewingInvoice(null)
+        }}
+        onEdit={() => {
+          const row = viewingInvoice
+          setViewingInvoice(null)
+          if (row) onEdit?.(row)
+        }}
+      />
+
       {/* Delete Dialog */}
       {invoiceToDelete && (
         <InvoiceDeleteDialog
@@ -1115,202 +990,3 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   )
 }
 
-function InvoiceDetails({
-  invoice,
-  getCustomerName,
-  getCustomerUrdu,
-}: {
-  invoice: any
-  getCustomerName: (invoice: any) => string
-  getCustomerUrdu: (invoice: any) => string
-}) {
-  const { t } = useLanguage()
-  const formatMoney = useFormatMoney()
-  const settlement = resolveInvoiceSettlement(invoice)
-  const statusMeta = SETTLEMENT_STATUS_META[settlement.settlementStatus]
-
-  return (
-    <div className="space-y-4 pb-4">
-      {/* Invoice Info */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label>{t('invoice_number')}</Label>
-          <p className="font-medium">{invoice.invoiceNumber}</p>
-        </div>
-        <div>
-          <Label>{t('date')}</Label>
-          <p className="font-medium">
-            {formatAppDateTime(new Date(invoice.invoiceDate || invoice.createdAt))}
-          </p>
-        </div>
-        <div>
-          <Label>{t('customer')}</Label>
-          <div className='mt-1'>
-            <BilingualName primary={getCustomerName(invoice)} secondary={getCustomerUrdu(invoice)} />
-          </div>
-        </div>
-        <div>
-          <Label>{t('Status')}</Label>
-          <div className='mt-1'>
-            <Badge variant='outline' className={cn('font-normal', statusMeta.className)}>
-              {t(statusMeta.label)}
-            </Badge>
-          </div>
-        </div>
-      </div>
-
-      {/* Invoice Items - Scrollable */}
-      <div>
-        <Label>{t('invoice_items')}</Label>
-        <div className="overflow-x-auto max-h-64 border rounded-lg">
-          <Table className="text-sm">
-            <TableHeader className="sticky top-0 bg-muted z-10">
-              <TableRow>
-                <TableHead className="whitespace-nowrap">{t('product_name')}</TableHead>
-                <TableHead className="whitespace-nowrap">{t('qty')}</TableHead>
-                <TableHead className="whitespace-nowrap">{t('unit_price')}</TableHead>
-                <TableHead className="whitespace-nowrap text-right">{t('total')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {invoice.items?.map((item: any, index: number) => {
-                const productUrdu =
-                  item.nameUrdu ||
-                  (typeof item.productId === 'object' && item.productId?.nameUrdu) ||
-                  ''
-                return (
-                <TableRow key={index} className="hover:bg-muted/50">
-                  <TableCell className="whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      {item.image && (
-                        <img
-                          src={item.image.url}
-                          alt={item.name}
-                          className="w-8 h-8 rounded object-cover"
-                        />
-                      )}
-                      <div>
-                        <BilingualName primary={item.name} secondary={productUrdu} primaryClassName='text-sm' secondaryClassName='text-xs' />
-                        {item.imeis && item.imeis.length > 0 && (
-                          <p className='text-xs text-muted-foreground'>IMEI/Serial: {formatImeiEntries(item.imeis)}</p>
-                        )}
-                        {item.batchAllocations && item.batchAllocations.length > 1 ? (
-                          <p className='text-xs text-muted-foreground'>
-                            Batch: {item.batchAllocations.map((a: any) => `${a.batchNumber}×${a.quantity}`).join(', ')}
-                          </p>
-                        ) : item.batchNumber ? (
-                          <p className='text-xs text-muted-foreground'>Batch: {item.batchNumber}</p>
-                        ) : null}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {item.quantity} {item.unit || 'pcs'}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">{formatMoney(item.unitPrice || 0)}</TableCell>
-                  <TableCell className="whitespace-nowrap text-right">
-                    {(() => {
-                      const gross = (item.quantity || 0) * (item.unitPrice || 0)
-                      const discountAmount = Number(item.discountAmount || 0)
-                      const net = item.subtotal ?? (gross - discountAmount)
-                      return (
-                        <>
-                          {discountAmount > 0 && (
-                            <div className="text-xs text-muted-foreground line-through">{formatMoney(gross)}</div>
-                          )}
-                          {formatMoney(Number(net))}
-                          {discountAmount > 0 && (
-                            <div className="text-xs text-green-600">-{formatMoney(discountAmount)}</div>
-                          )}
-                        </>
-                      )
-                    })()}
-                  </TableCell>
-                </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-
-      {/* Invoice Summary */}
-      <div className="grid grid-cols-2 gap-4 p-3 bg-muted rounded-lg text-sm">
-        <div>
-          <Label className="text-xs">{t('subtotal')}</Label>
-          <p className="font-bold">{formatMoney(invoice.subtotal || 0)}</p>
-        </div>
-        <div>
-          <Label className="text-xs">{t('tax')}</Label>
-          <p className="font-bold">{formatMoney(invoice.tax || 0)}</p>
-        </div>
-        {(() => {
-          // Only worth an extra breakdown row for a genuinely multi-component tax (e.g. US
-          // state+county+city stacking) — a single flat VAT/GST rate is already fully
-          // represented by the tile above, so don't repeat it.
-          if (!invoice.taxSystem || invoice.taxSystem === 'NONE') return null
-          const taxLines: TaxLine[] = invoice.taxLines || []
-          const totalComponents = taxLines.reduce((sum, line) => sum + (line.components?.length || 0), 0)
-          if (taxLines.length <= 1 && totalComponents <= 1) return null
-          return (
-            <div className="col-span-2">
-              <Label className="text-xs">{t('Tax Breakdown')}</Label>
-              <TaxBreakdownSummary taxLines={taxLines} totalTax={invoice.tax || 0} compact />
-            </div>
-          )
-        })()}
-        {(() => {
-          const itemDiscountTotal = (invoice.items || []).reduce((sum: number, item: any) => sum + Number(item.discountAmount || 0), 0)
-          return itemDiscountTotal > 0 ? (
-            <div>
-              <Label className="text-xs">{t('Item Discounts')}</Label>
-              <p className="font-bold text-green-600">-{formatMoney(itemDiscountTotal)}</p>
-            </div>
-          ) : null
-        })()}
-        <div>
-          <Label className="text-xs">{t('discount')}</Label>
-          <p className="font-bold text-red-600">-{formatMoney(invoice.discount || 0)}</p>
-        </div>
-        <div>
-          <Label className="text-xs">{t('total')} {t('amount')}</Label>
-          <p className="font-bold text-green-600">{formatMoney(invoice.total || 0)}</p>
-        </div>
-        <div>
-          <Label className="text-xs">{t('payment_method') || 'Payment Method'}</Label>
-          <p className="font-medium capitalize">
-            {invoice.paymentMethod === 'wallet' && invoice.walletType
-              ? invoice.walletType
-              : invoice.paymentMethod || 'Cash'}
-          </p>
-        </div>
-        {settlement.settledAmount > 0 && (
-          <div>
-            <Label className="text-xs">{t('paid_amount')}</Label>
-            <p className="font-bold text-blue-600">{formatMoney(settlement.settledAmount)}</p>
-          </div>
-        )}
-        {settlement.remainingAmount > 0 && (
-          <div>
-            <Label className="text-xs">{t('balance')}</Label>
-            <p className="font-bold text-red-600">{formatMoney(settlement.remainingAmount)}</p>
-          </div>
-        )}
-      </div>
-
-      {/* Notes, then Terms & Conditions */}
-      {([
-        ['notes', invoice.notes],
-        ['terms_and_conditions', invoice.termsAndConditions],
-      ] as const).map(([labelKey, html]) => html?.trim() ? (
-        <div key={labelKey}>
-          <Label className="text-sm">{t(labelKey)}</Label>
-          <div
-            className="text-sm bg-muted p-2 rounded [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline"
-            dangerouslySetInnerHTML={{ __html: invoiceTermsToSafeHtml(html) }}
-          />
-        </div>
-      ) : null)}
-    </div>
-  )
-}

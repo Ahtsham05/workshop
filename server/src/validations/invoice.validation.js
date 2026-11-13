@@ -183,6 +183,38 @@ const exportInvoices = { query: invoiceListQuery };
 
 const getInvoiceHistory = { query: invoiceListQuery };
 
+// A customer's past rates for one product (New Invoice rate-history panel).
+const getCustomerProductHistory = {
+  params: Joi.object().keys({
+    customerId: Joi.string().custom(objectId).required(),
+    productId: Joi.string().custom(objectId).required(),
+  }),
+  query: Joi.object().keys({
+    variantId: Joi.string().custom(objectId),
+    excludeInvoiceId: Joi.string().custom(objectId),
+    limit: Joi.number().integer().min(1).max(500),
+  }),
+};
+
+// Many products' rate history for one customer (New Invoice prefetch, one request).
+const getCustomerRateHistoryBatch = {
+  body: Joi.object().keys({
+    customerId: Joi.string().custom(objectId).required(),
+    items: Joi.array()
+      .items(
+        Joi.object().keys({
+          productId: Joi.string().custom(objectId).required(),
+          variantId: Joi.string().custom(objectId).allow(null, ''),
+        })
+      )
+      .min(1)
+      .max(100)
+      .required(),
+    excludeInvoiceId: Joi.string().custom(objectId),
+    limit: Joi.number().integer().min(1).max(500),
+  }),
+};
+
 // Previous/next full-record stepping on New Invoice — the list filters plus a position.
 const getInvoiceNavigation = {
   query: invoiceListQuery.keys({
@@ -389,6 +421,8 @@ module.exports = {
   getInvoicesSummary,
   exportInvoices,
   getInvoiceHistory,
+  getCustomerProductHistory,
+  getCustomerRateHistoryBatch,
   getInvoice,
   updateInvoice,
   deleteInvoice,

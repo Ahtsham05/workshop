@@ -17,7 +17,7 @@ import { deriveSchoolRole } from '@/lib/school-permissions'
 import { restoreSessionFromCache } from '@/lib/auth-cache'
 import { looksLikeJwt } from '@/lib/auth-token'
 import { LocalDatabaseSetupBanner } from '@/features/settings/local-database/local-database-setup-banner'
-import { setActiveOrganizationBusinessType } from '@/lib/organization-context'
+import { setActiveOrganizationBusinessType, setActiveOrganizationMenuVisibility } from '@/lib/organization-context'
 import { setAppDateFormat } from '@/lib/date-format'
 import { PushNotificationPrompt } from '@/components/push-notification-prompt'
 import { RolePermissionsSync } from '@/components/role-permissions-sync'
@@ -60,6 +60,11 @@ function AuthenticatedLayout() {
       setActiveOrganizationBusinessType(orgData.businessType)
     }
   }, [orgData?.businessType])
+
+  // Settings → Menu & Pages, cached for the synchronous route guard.
+  useEffect(() => {
+    if (orgData) setActiveOrganizationMenuVisibility(orgData.menuVisibility)
+  }, [orgData])
 
   // Settings → Localization date format drives every date label/field (see lib/date-format).
   useLayoutEffect(() => {

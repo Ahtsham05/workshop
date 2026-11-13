@@ -100,6 +100,7 @@ const updateUiPreferences = {
         sidebar: Joi.string().pattern(/^#[0-9a-fA-F]{6}$/).allow(null),
         accent: Joi.string().pattern(/^#[0-9a-fA-F]{6}$/).allow(null),
       }),
+      zoom: Joi.number().integer().min(75).max(150),
     })
     .min(1),
 };

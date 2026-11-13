@@ -273,6 +273,7 @@ export function LeadQuotationDialog({ invoiceId, onOpenChange, leadName, leadPho
           <PrintFormatButton
             onPrint={handlePrint}
             defaultPaperSize={defaultPaperSize}
+            invoiceHeaderStyles
             disabled={!invoice || printing}
             mainButtonContent={printing ? t('Printing...') : undefined}
             label={t('Print')}

@@ -131,6 +131,8 @@ const userSchema = mongoose.Schema(
         sidebar: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
         accent: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
       },
+      /** Whole-app size in percent (Settings → Appearance → Zoom); 100 = standard. */
+      zoom: { type: Number, min: 75, max: 150, default: 100 },
     },
     // School portal links
     linkedTeacherId: {

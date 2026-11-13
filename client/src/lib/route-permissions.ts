@@ -14,7 +14,8 @@ import {
 } from '@/lib/school-permissions';
 import type { AppUser } from '@/lib/rbac';
 import { getDefaultHomeRoute } from '@/lib/default-home-route';
-import { resolveActiveBusinessType } from '@/lib/organization-context';
+import { getActiveOrganizationMenuVisibility, resolveActiveBusinessType } from '@/lib/organization-context';
+import { isPathHiddenForBusiness } from '@/lib/business-types';
 
 export interface RouteRule {
   prefix: string;
@@ -135,6 +136,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/settings/language', allowAllAuthenticated: true },
   { prefix: '/settings/whatsapp', anyPermission: ['viewSettings', 'editSettings'] },
   { prefix: '/settings/business-profile', anyPermission: ['viewBusinessProfile'] },
+  { prefix: '/settings/menu', anyPermission: ['viewBusinessProfile'] },
   { prefix: '/settings/localization', anyPermission: ['viewLocalizationSettings'] },
   { prefix: '/settings/currency', anyPermission: ['viewLocalizationSettings'] },
   { prefix: '/settings/document-numbering', anyPermission: ['viewLocalizationSettings'] },
@@ -314,6 +316,13 @@ export function resolveRouteAccess(
         return { allowed: false, redirectTo: getSchoolRoleHome(schoolRole) };
       }
     }
+  }
+
+  // A page switched off for this org (business-type default or Settings → Menu & Pages)
+  // is closed even by direct URL — except the home page itself, so this can never loop.
+  if (isPathHiddenForBusiness(businessType, path, getActiveOrganizationMenuVisibility())) {
+    const home = getDefaultHomeRoute(user);
+    if (path !== home) return { allowed: false, redirectTo: home };
   }
 
   const rule = findRouteRule(path);

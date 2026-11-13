@@ -9,7 +9,11 @@ const { NATIVE_LANGUAGE_SETTINGS } = require('../config/nativeLanguages');
 // assertNumberingConsistency, which this mirrors server-side.
 const GRANULARITY = { none: 0, yearly: 1, monthly: 2 };
 const numberingSection = Joi.object({
-  prefix: Joi.string().trim().max(12).pattern(/^[A-Za-z0-9]*$/).allow(''),
+  prefix: Joi.string()
+    .trim()
+    .max(12)
+    .pattern(/^[A-Za-z0-9]*$/)
+    .allow(''),
   separator: Joi.string()
     .trim()
     .max(3)
@@ -22,11 +26,7 @@ const numberingSection = Joi.object({
   startingNumber: Joi.number().integer().min(1),
   scope: Joi.string().valid('organization', 'branch'),
 }).custom((value) => {
-  if (
-    value.dateSegment &&
-    value.resetPeriod &&
-    GRANULARITY[value.resetPeriod] > GRANULARITY[value.dateSegment]
-  ) {
+  if (value.dateSegment && value.resetPeriod && GRANULARITY[value.resetPeriod] > GRANULARITY[value.dateSegment]) {
     throw new Error('Reset period cannot be more frequent than the date segment');
   }
   return value;
@@ -122,7 +122,60 @@ const setDocumentNumberingNextNumber = {
   }),
 };
 
+// PATCH /v1/organizations/:orgId/menu-visibility — Settings → Menu & Pages (whole map).
+// Keys are app page URLs; no '.'/'$' so they are safe as MongoDB field names.
+const updateMenuVisibility = {
+  params: Joi.object().keys({
+    orgId: Joi.string().custom(objectId).required(),
+  }),
+  body: Joi.object().keys({
+    menuVisibility: Joi.object()
+      .pattern(
+        Joi.string()
+          .max(300)
+          .pattern(/^\/[^.$]*$/),
+        Joi.boolean()
+      )
+      .max(1000)
+      .required(),
+    // Custom names / order / sub-menu moves / hidden-in-menu pages — see
+    // client/src/lib/menu-layout.ts. Group ids: slugs; containers 'g:<id>' | 's:<id>';
+    // entries 'p:<url>' | 's:<id>'.
+    menuLayout: Joi.object().keys({
+      labels: Joi.object()
+        .pattern(
+          Joi.string()
+            .max(400)
+            .pattern(/^[gsp]:[^.$]*$/),
+          Joi.string().trim().max(60).allow('')
+        )
+        .max(1500),
+      groupOrder: Joi.array().items(Joi.string().max(200)).max(100),
+      placement: Joi.object()
+        .pattern(
+          Joi.string()
+            .max(300)
+            .pattern(/^\/[^.$]*$/),
+          Joi.string()
+            .max(400)
+            .pattern(/^[gs]:/)
+        )
+        .max(1000),
+      order: Joi.object()
+        .pattern(
+          Joi.string()
+            .max(400)
+            .pattern(/^[gs]:[^.$]*$/),
+          Joi.array().items(Joi.string().max(400)).max(500)
+        )
+        .max(500),
+      menuHidden: Joi.array().items(Joi.string().max(300).pattern(/^\//)).max(1000),
+    }),
+  }),
+};
+
 module.exports = {
+  updateMenuVisibility,
   updateOrganization,
   previewDocumentNumbering,
   setDocumentNumberingNextNumber,

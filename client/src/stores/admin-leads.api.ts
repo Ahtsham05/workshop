@@ -1,3 +1,4 @@
+import { organizationApi } from './organization.api'
 import { subscriptionApi } from './subscription.api'
 
 /**
@@ -329,6 +330,27 @@ const api = subscriptionApi.enhanceEndpoints({ addTagTypes: ['AdminLead'] }).inj
       query: ({ orgId, ...body }) => ({ url: `/admin/organizations/${orgId}/activation`, method: 'POST', body }),
       invalidatesTags: ['AdminOrganization', 'AdminPayment', 'AdminLead'],
     }),
+    /** One-click business type switch (org + all its users). Logged on the lead history. */
+    adminSetBusinessType: builder.mutation<
+      { id: string; businessType: string; previousBusinessType: string },
+      { orgId: string; businessType: string }
+    >({
+      query: ({ orgId, businessType }) => ({
+        url: `/admin/organizations/${orgId}/business-type`,
+        method: 'PATCH',
+        body: { businessType },
+      }),
+      invalidatesTags: ['AdminOrganization', 'AdminLead'],
+      // If the admin switched their own org, their own menus must follow right away.
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled
+          dispatch(organizationApi.util.invalidateTags(['Organization']))
+        } catch {
+          // The caller shows the error.
+        }
+      },
+    }),
     adminAcknowledgeLeads: builder.mutation<{ acknowledged: number }, { organizationIds?: string[] }>({
       query: (body) => ({ url: '/admin/leads/acknowledge', method: 'POST', body }),
       invalidatesTags: ['AdminLead'],
@@ -351,6 +373,7 @@ export const {
   useAdminGetActivationOptionsQuery,
   useAdminPreviewActivationQuery,
   useAdminActivatePlanMutation,
+  useAdminSetBusinessTypeMutation,
 } = api
 
 export const adminLeadsApi = api

@@ -138,8 +138,8 @@ export function PermissionsDialog({ open, onOpenChange, role, onSuccess }: Permi
 
   // Only the modules this business uses; everything else keeps its stored value on save.
   const categories = useMemo(
-    () => getPermissionCategories(showAllModules ? null : businessType, manufacturingOn ? ['manufacturing'] : []),
-    [showAllModules, businessType, manufacturingOn],
+    () => getPermissionCategories(showAllModules ? null : businessType, manufacturingOn ? ['manufacturing'] : [], org?.menuVisibility),
+    [showAllModules, businessType, manufacturingOn, org?.menuVisibility],
   );
 
   const visibleKeys = useMemo(

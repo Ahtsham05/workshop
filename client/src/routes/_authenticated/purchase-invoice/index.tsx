@@ -4,6 +4,8 @@ import PurchaseInvoicePage from '@/features/purchase-invoice'
 
 const purchaseInvoiceSearchSchema = z.object({
   supplierId: z.string().optional(),
+  // Opens that purchase straight in the edit form — the purchase view's Edit from other screens.
+  editId: z.string().optional(),
   prefillItems: z
     .array(z.object({ productId: z.string(), variantId: z.string().optional(), quantity: z.number() }))
     .optional(),

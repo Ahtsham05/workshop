@@ -13,6 +13,9 @@ import { Command, CommandList, CommandItem, CommandEmpty } from '@/components/ui
 import { NavGroup } from '@/components/layout/nav-group'
 import { NavUser } from '@/components/layout/nav-user'
 import { TeamSwitcher } from '@/components/layout/team-switcher'
+import { BusinessBrand } from '@/components/layout/business-brand'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { normalizeBusinessType } from '@/lib/business-types'
 import { BranchSwitcher } from '@/components/branch-switcher'
 import { sidebarData } from './data/sidebar-data'
 import type { NavGroup as NavGroupType } from './types'
@@ -62,6 +65,13 @@ function buildSearchIndex(groups: NavGroupType[], t: (key: string) => string): S
   return entries
 }
 
+/** Business types whose sidebar header shows the business's own name + logo, with this tagline under it. */
+const BRANDED_BUSINESS_TAGLINES: Record<string, string> = {
+  distributor: 'Wholesale & Distribution',
+  wholesale: 'Wholesale',
+  wholesale_retail: 'Wholesale & Retail',
+}
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { hasExplicitPermission } = usePermissions()
   const { t } = useLanguage()
@@ -69,10 +79,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const activeBranchName = useSelector((state: RootState) => state.auth.activeBranchName)
   const orderedNavGroups = useFilteredNavGroups()
+  // The menu search also finds pages hidden from the sidebar but still working.
+  const searchableNavGroups = useFilteredNavGroups({ includeMenuHidden: true })
   const [searchQuery, setSearchQuery] = useState('')
   const isSearching = searchQuery.trim().length > 0
 
-  const searchIndex = useMemo(() => buildSearchIndex(orderedNavGroups, t), [orderedNavGroups, t])
+  const searchIndex = useMemo(() => buildSearchIndex(searchableNavGroups, t), [searchableNavGroups, t])
   const matches = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     if (!q) return []
@@ -106,6 +118,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       ? t('dashboard') || 'Dashboard'
       : t('employee_portal') || 'Employee Portal'
 
+  // Wholesalers / distributors see their own business name + logo in the sidebar header.
+  const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const businessType = normalizeBusinessType(org?.businessType || user?.businessType)
+  const brandTagline = BRANDED_BUSINESS_TAGLINES[businessType]
+  const showBusinessBrand = !!brandTagline && !!org?.name
+
   const teams = sidebarData.teams.map((team, index) =>
     index === 0 ? { ...team, plan: sidebarPlan } : team,
   )
@@ -121,7 +139,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           otherwise leaking down and darkening every nav item's text. */}
       <Command shouldFilter={false} className="contents text-sidebar-foreground">
         <SidebarHeader>
-          <TeamSwitcher teams={teams} />
+          {showBusinessBrand ? (
+            <BusinessBrand name={org!.name} logoUrl={org!.logo?.url} tagline={brandTagline} />
+          ) : (
+            <TeamSwitcher teams={teams} />
+          )}
           {!schoolRole ? (
             <div className="px-2 pb-1">
               <BranchSwitcher />

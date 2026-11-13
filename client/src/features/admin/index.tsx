@@ -86,6 +86,7 @@ import {
   type Payment,
 } from '@/stores/subscription.api'
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
+import { BusinessTypeSwitcher } from './organizations/business-type-switcher'
 
 const PLAN_LABELS: Record<string, string> = {
   trial: 'Free Trial',
@@ -222,7 +223,7 @@ function OrgDetailPanel({ orgId, onBack, onOpenLead }: { orgId: string; onBack: 
           </Button>
           <div>
             <h2 className='text-xl font-bold'>{org.name}</h2>
-            <p className='text-sm text-muted-foreground capitalize'>{org.businessType}</p>
+            <BusinessTypeSwitcher orgId={orgId} orgName={org.name} businessType={org.businessType} className='text-sm' />
           </div>
         </div>
         <div className='flex flex-wrap items-center gap-2'>

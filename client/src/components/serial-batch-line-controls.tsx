@@ -11,6 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NumericInput } from '@/components/ui/numeric-input'
 import { useGetAvailableImeisQuery, type ImeiEntryInput, type ImeiRecord } from '@/stores/imei.api'
 import type { PurchaseCatalogBatch } from '@/stores/purchaseCatalog.api'
 import type { BatchAllocation } from '@/lib/batch-allocation'
@@ -316,12 +317,11 @@ export function BatchAllocationEditor({
             )}
           >
             <span className='font-medium'>{alloc.batchNumber}</span>
-            <Input
-              type='number'
+            <NumericInput
+              decimals={false}
               min={0}
               value={alloc.quantity}
-              onChange={(e) => onUpdateQuantity(alloc.batchId, Math.max(0, parseInt(e.target.value) || 0))}
-              onFocus={(e) => e.target.select()}
+              onValueChange={(qty) => onUpdateQuantity(alloc.batchId, qty)}
               className='h-4 w-9 border-0 bg-transparent p-0 text-center text-[11px] font-semibold shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
             />
             <button

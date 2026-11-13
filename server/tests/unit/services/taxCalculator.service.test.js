@@ -44,6 +44,26 @@ describe('taxCalculatorService.calculateTax', () => {
     });
     expect(result.totalTax).toBe(0);
     expect(result.lines[0].taxAmount).toBe(0);
+    // No rate anywhere: the line is untaxed at ANY amount, so a live preview may stop asking.
+    expect(result.lines[0].taxable).toBe(false);
+  });
+
+  test('taxable flag — rated lines are taxable, exempt / rate-less categories are not', async () => {
+    const org = await insertOrganization({ taxSystem: 'VAT' });
+    const rated = await insertTaxCategory(org._id, { name: 'Standard' });
+    const unrated = await insertTaxCategory(org._id, { name: 'Zero' });
+    await insertTaxRate(org._id, rated._id, { rate: 20 });
+
+    const result = await taxCalculatorService.calculateTax({
+      organizationId: org._id,
+      lines: [
+        { lineId: '0', amount: 0.01, taxCategoryId: rated._id }, // rounds to 0 tax, but IS taxable
+        { lineId: '1', amount: 1000, taxCategoryId: unrated._id },
+      ],
+    });
+    expect(result.lines[0].taxAmount).toBe(0);
+    expect(result.lines[0].taxable).toBe(true);
+    expect(result.lines[1].taxable).toBe(false);
   });
 
   test('default tax category — a line with no taxCategoryId falls back to the org default', async () => {

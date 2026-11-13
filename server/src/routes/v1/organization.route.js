@@ -59,6 +59,14 @@ router.patch(
   organizationController.updateOrganization
 );
 
+// Settings → Menu & Pages — which pages the org shows (whole map per save).
+router.patch(
+  '/:orgId/menu-visibility',
+  auth('manageBusinessProfile'),
+  validate(organizationValidation.updateMenuVisibility),
+  organizationController.updateMenuVisibility
+);
+
 // Demo data — same permission as the profile PATCH above. GET: remaining sample records +
 // running job. reset: wipe + reseed (trial accounts only, checked in the controller).
 // remove: wipe without reseeding (any plan).

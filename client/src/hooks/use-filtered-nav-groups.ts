@@ -6,7 +6,9 @@ import { usePermissions } from '@/context/permission-context'
 import { useFeatureAccess } from '@/hooks/use-feature-access'
 import { useManufacturingAccess } from '@/hooks/use-manufacturing-access'
 import { useWarehouseSettings } from '@/hooks/use-warehouse-settings'
-import { normalizeBusinessType } from '@/lib/business-types'
+import { isPathHiddenForBusiness, normalizeBusinessType } from '@/lib/business-types'
+import { applyMenuLabels, applyMenuLayout, sortGroupsByLayout } from '@/lib/menu-layout'
+import { getGroupOrder } from '@/lib/nav-group-order'
 import { WHATSAPP_UI_ENABLED } from '@/config/whatsapp-ui'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { RootState } from '@/stores/store'
@@ -27,45 +29,15 @@ function resolveSchoolRole(user: any): string | undefined {
   return undefined
 }
 
-function getGroupOrder(userBusinessType: string, schoolRole?: string): string[] {
-  if (userBusinessType === 'school') {
-    return schoolRole === 'teacher'
-      ? ['My Classroom', 'Administration', 'Subscription', 'Reports', 'System Admin']
-      : [
-          'School Management',
-          'Teachers',
-          'Academics',
-          'Fees & Accounts',
-          'Portals',
-          'Administration',
-          'Subscription',
-          'Reports',
-          'System Admin',
-        ]
-  }
-  if (userBusinessType === 'restaurant') {
-    return [
-      'Restaurant',
-      'Human Resources',
-      'Administration',
-      'Subscription',
-      'Reports',
-      'System Admin',
-    ]
-  }
-  return [
-    'General',
-    'Mobile Shop',
-    'School Management',
-    'Human Resources',
-    'Reports',
-    'Administration',
-    'Subscription',
-    'System Admin',
-  ]
-}
+export { getGroupOrder } from '@/lib/nav-group-order'
 
-export function useFilteredNavGroups(): NavGroup[] {
+/**
+ * The sidebar for this login: the built-in menu, rearranged/renamed by the org's
+ * Settings → Menu & Pages layout, then filtered by business type, plan and role.
+ * `includeMenuHidden` keeps pages the org hid from the sidebar but left working
+ * ("Hidden in menu") — for search (Ctrl+K, sidebar search), which should still find them.
+ */
+export function useFilteredNavGroups({ includeMenuHidden = false }: { includeMenuHidden?: boolean } = {}): NavGroup[] {
   const { hasPermission, hasExplicitPermission } = usePermissions()
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
@@ -77,6 +49,8 @@ export function useFilteredNavGroups(): NavGroup[] {
   const schoolRole = resolveSchoolRole(user)
 
   return useMemo(() => {
+    const layout = org?.menuLayout
+    const menuHidden = new Set(layout?.menuHidden ?? [])
     const checkItemPermission = (permission: string) => {
       if (permission === 'viewDashboard') {
         return hasExplicitPermission('viewDashboard')
@@ -86,6 +60,16 @@ export function useFilteredNavGroups(): NavGroup[] {
 
     const canAccessItem = (item: any) => {
       if (!WHATSAPP_UI_ENABLED && (item.url === '/school/whatsapp' || item.url?.startsWith('/whatsapp'))) {
+        return false
+      }
+
+      // Pages switched off for this org (business-type defaults + Settings → Menu & Pages).
+      if (isPathHiddenForBusiness(userBusinessType, item.url, org?.menuVisibility)) {
+        return false
+      }
+
+      // "Hidden in menu": still works, just not listed in the sidebar itself.
+      if (!includeMenuHidden && item.url && menuHidden.has(String(item.url))) {
         return false
       }
 
@@ -175,7 +159,7 @@ export function useFilteredNavGroups(): NavGroup[] {
       return item
     }
 
-    const filteredNavGroups = sidebarData.navGroups
+    const filteredNavGroups = applyMenuLayout(sidebarData.navGroups, layout)
       .map((group) => ({
         ...group,
         items: group.items
@@ -201,12 +185,16 @@ export function useFilteredNavGroups(): NavGroup[] {
 
     const groupOrder = getGroupOrder(userBusinessType, schoolRole)
 
-    return [...filteredNavGroups].sort((a, b) => {
+    const typeSorted = [...filteredNavGroups].sort((a, b) => {
       const ai = groupOrder.indexOf(a.title)
       const bi = groupOrder.indexOf(b.title)
       return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
     })
+    // The org's own group order and names (Settings → Menu & Pages) come last.
+    return applyMenuLabels(sortGroupsByLayout(typeSorted, layout), layout)
   }, [
+    includeMenuHidden,
+    org?.menuLayout,
     user,
     userBusinessType,
     schoolRole,
@@ -215,6 +203,7 @@ export function useFilteredNavGroups(): NavGroup[] {
     hasExplicitPermission,
     canAccess,
     org?.businessType,
+    org?.menuVisibility,
     manufacturingOn,
     warehousesOn,
   ])

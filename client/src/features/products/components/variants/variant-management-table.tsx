@@ -8,6 +8,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
+import { NumericInput } from '@/components/ui/numeric-input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Trash2 } from 'lucide-react'
@@ -128,27 +129,23 @@ export function VariantManagementTable({ rows, onChange }: Props) {
                 />
               </TableCell>
               <TableCell>
-                <Input
+                <NumericInput
                   ref={setInputRef(row.key, 'cost')}
-                  type='number'
                   min={0}
-                  showVoiceInput={false}
                   className='h-8 w-full'
                   value={row.cost}
-                  onChange={(e) => updateRow(row.key, { cost: Number(e.target.value) || 0 })}
+                  onValueChange={(cost) => updateRow(row.key, { cost })}
                   onKeyDown={(e) => onEnterAdvance(e, () => advanceFrom(rowIndex, 'cost'))}
                 />
               </TableCell>
               <TableCell>
                 <div className='flex items-center gap-1.5'>
-                  <Input
+                  <NumericInput
                     ref={setInputRef(row.key, 'price')}
-                    type='number'
                     min={0}
-                    showVoiceInput={false}
                     className='h-8 min-w-0 flex-1'
                     value={row.price}
-                    onChange={(e) => updateRow(row.key, { price: Number(e.target.value) || 0 })}
+                    onValueChange={(price) => updateRow(row.key, { price })}
                     onKeyDown={(e) => onEnterAdvance(e, () => advanceFrom(rowIndex, 'price'))}
                   />
                   <MarkupPercentInput
@@ -163,17 +160,15 @@ export function VariantManagementTable({ rows, onChange }: Props) {
                 </div>
               </TableCell>
               <TableCell>
-                <Input
+                <NumericInput
                   ref={setInputRef(row.key, 'quantity')}
-                  type='number'
                   min={0}
-                  showVoiceInput={false}
                   className={cn(
                     'h-8 w-full font-medium',
                     row.quantity > 0 && 'text-emerald-600 dark:text-emerald-400'
                   )}
                   value={row.quantity}
-                  onChange={(e) => updateRow(row.key, { quantity: Number(e.target.value) || 0 })}
+                  onValueChange={(quantity) => updateRow(row.key, { quantity })}
                   onKeyDown={(e) => onEnterAdvance(e, () => advanceFrom(rowIndex, 'quantity'))}
                 />
               </TableCell>

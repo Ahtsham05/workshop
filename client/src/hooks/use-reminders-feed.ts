@@ -1,7 +1,7 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { usePermissions } from '@/context/permission-context'
 import { useGetRemindersQuery, type Reminder } from '@/stores/reminder.api'
-import { REMINDER_POLL_OPTIONS } from '@/stores/reminder-query-options'
+import { REMINDER_FOCUS_STALE_MS, REMINDER_POLL_OPTIONS } from '@/stores/reminder-query-options'
 
 /**
  * Single shared background subscription for active (pending/snoozed) reminders.
@@ -10,29 +10,31 @@ import { REMINDER_POLL_OPTIONS } from '@/stores/reminder-query-options'
  * identical args + REMINDER_POLL_OPTIONS let RTK Query coalesce every consumer
  * into exactly one poll timer / one in-flight request instead of one per caller.
  *
- * Deliberately keeps polling even while the tab is hidden/backgrounded — this
- * used to pause on hidden, which meant an alarm that came due while the user
- * was away sat silently until the next 60s tick *after* they came back (or
- * longer, if the un-pause briefly served a stale cache entry instead of
- * refetching). A reminder alarm has to actually catch you when you're away,
- * so instead: keep the 60s poll running in the background regardless of
- * visibility, and additionally force an immediate refetch the moment the tab
- * regains focus, so anything that fired while you were gone is already
- * showing (or shows within a second) rather than up to a minute later.
+ * Polls every 5 minutes (REMINDER_POLL_MS), also while the tab is hidden. Alarm
+ * timing does not depend on the poll: the watchdog arms a local timer for each
+ * loaded reminder's dueAt. Coming back to the tab re-reads the list if it's over
+ * a minute old, to catch reminders added or changed on another device.
  */
 export function useRemindersFeed() {
   const { hasPermission } = usePermissions()
   const enabled = hasPermission('viewReminders')
 
-  const { data, isLoading, refetch } = useGetRemindersQuery(
+  const { data, isLoading, refetch, fulfilledTimeStamp } = useGetRemindersQuery(
     { limit: 200 },
     { skip: !enabled, ...REMINDER_POLL_OPTIONS },
   )
 
+  // Back on the tab: re-read only when the copy is over a minute old — flicking between
+  // tabs used to fire a request every time. Alarms for reminders already loaded ring on
+  // their own local timer (useReminderWatchdog), so this only catches outside changes.
+  const lastFetchRef = useRef(fulfilledTimeStamp)
+  lastFetchRef.current = fulfilledTimeStamp
   useEffect(() => {
     if (!enabled) return
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') refetch()
+      if (document.visibilityState !== 'visible') return
+      const at = lastFetchRef.current
+      if (!at || Date.now() - at >= REMINDER_FOCUS_STALE_MS) refetch()
     }
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)

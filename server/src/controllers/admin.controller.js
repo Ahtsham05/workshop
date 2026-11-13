@@ -4,7 +4,7 @@ const ApiError = require('../utils/ApiError');
 const pick = require('../utils/pick');
 const { paymentService, organizationService } = require('../services');
 const organizationPurgeService = require('../services/organizationPurge.service');
-const { DeletedOrganization } = require('../models');
+const { DeletedOrganization, SignupLead } = require('../models');
 const adminActivationService = require('../services/billing/adminActivation.service');
 
 /**
@@ -178,6 +178,37 @@ const activatePlan = catchAsync(async (req, res) => {
 });
 
 /** GET /v1/admin/organizations/deleted — audit log of permanently deleted organizations */
+/**
+ * PATCH /v1/admin/organizations/:orgId/business-type
+ * Switch an organization's business type in one step. updateOrganization also moves
+ * every user of the org to the new type, so their menus change on their next refresh.
+ * No business data is touched — switching back restores the hidden modules.
+ * The change is written to the org's sales-lead history (who + from → to).
+ */
+const setBusinessType = catchAsync(async (req, res) => {
+  const existing = await organizationService.getOrganizationById(req.params.orgId);
+  if (!existing) throw new ApiError(httpStatus.NOT_FOUND, 'Organization not found');
+  const from = existing.businessType || 'other';
+  const org = await organizationService.updateOrganization(req.params.orgId, { businessType: req.body.businessType });
+  if (from !== org.businessType) {
+    await SignupLead.updateOne(
+      { organizationId: org._id },
+      {
+        $push: {
+          activities: {
+            type: 'system',
+            text: `Business type changed: ${from} → ${org.businessType}`,
+            at: new Date(),
+            by: req.user?._id || req.user?.id || null,
+            byName: req.user?.name || '',
+          },
+        },
+      }
+    );
+  }
+  res.send({ id: org.id, businessType: org.businessType, previousBusinessType: from });
+});
+
 const getDeletedOrganizations = catchAsync(async (req, res) => {
   const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
   const results = await DeletedOrganization.find({}).sort({ deletedAt: -1 }).limit(limit).lean();
@@ -390,6 +421,7 @@ module.exports = {
   previewActivation,
   activatePlan,
   getDeletedOrganizations,
+  setBusinessType,
   clearOrganizationData,
   getAllUsers,
   deleteUser,

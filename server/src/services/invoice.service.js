@@ -898,7 +898,7 @@ const getInvoiceById = async (id) => {
 
   // Only populate customer if it's not a walk-in customer
   if (invoice.customerId && invoice.customerId !== 'walk-in') {
-    populateOptions.unshift({ path: 'customerId', select: 'name nameUrdu phone whatsapp email address' });
+    populateOptions.unshift({ path: 'customerId', select: 'name nameUrdu phone whatsapp email address billingAddress taxNumber picture linkedSupplierId' });
   }
 
   await invoice.populate(populateOptions);
@@ -1966,53 +1966,421 @@ const previewNextInvoiceNumber = async (organizationId, branchId, type) => {
 };
 
 /**
- * Get customer's product purchase history
- * @param {string} customerId
- * @param {string} productId
+ * What this customer has paid for this product before — feeds the rate-history box
+ * that opens on New Invoice when the Unit Sale Price is clicked (and the older history
+ * dialog on the catalog / fast billing).
+ *
+ * - Tenant-scoped (organization + branch from the request), like every other list here.
+ * - Real sales only: cash / credit / pending. Quotations are offers, not sales, and a
+ *   pending invoice that was converted to a bill is skipped because the bill carries the
+ *   same lines (counting both would double every row). Cancelled invoices are skipped.
+ * - One row per matching LINE (the same product can sit on an invoice twice, e.g. a free
+ *   line at 0), with the line discount and the net rate actually charged.
+ * - Rates are also reported per stock unit (`netUnitPrice / conversionFactor`) so a client
+ *   can compare a sale made in cartons with one made in pieces.
+ * - `excludeInvoiceId` keeps the invoice being edited out of its own history.
+ *
+ * The legacy top-level fields (history/totalQuantity/lastPrice/avgPrice/minPrice/maxPrice)
+ * keep their old meaning for the existing ProductHistoryDialog callers.
+ *
+ * @param {Object} filter - { organizationId, branchId } from applyBranchFilter
+ * @param {Object} params
+ * @param {string} params.customerId
+ * @param {string} params.productId
+ * @param {string} [params.variantId]
+ * @param {string} [params.excludeInvoiceId]
+ * @param {number} [params.limit]
  * @returns {Promise<Object>}
  */
-const getCustomerProductHistory = async (customerId, productId) => {
-  // Find all invoices for this customer that contain this product
-  const invoices = await Invoice.find({
-    customerId,
-    'items.productId': productId,
-    status: { $ne: 'cancelled' } // Exclude cancelled invoices
-  })
-    .select('invoiceNumber items type createdAt invoiceDate')
-    .sort({ createdAt: -1 }) // Most recent first
-    .lean();
+const RATE_HISTORY_DEFAULT_LIMIT = 100;
+const RATE_HISTORY_MAX_LIMIT = 500;
+const RATE_HISTORY_SALE_TYPES = ['cash', 'credit', 'pending'];
 
-  // Extract product-specific data from each invoice
-  const history = invoices.map(invoice => {
-    const item = invoice.items.find(i => i.productId.toString() === productId);
-    return {
-      _id: invoice._id,
-      invoiceNumber: invoice.invoiceNumber,
-      date: invoice.invoiceDate || invoice.createdAt,
-      type: invoice.type,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      subtotal: item.subtotal
-    };
-  });
-
-  // Calculate statistics
-  const stats = {
-    history,
-    totalQuantity: history.reduce((sum, item) => sum + item.quantity, 0),
-    lastPrice: history.length > 0 ? history[0].unitPrice : null,
-    avgPrice: history.length > 0 
-      ? history.reduce((sum, item) => sum + item.unitPrice, 0) / history.length 
-      : null,
-    minPrice: history.length > 0 
-      ? Math.min(...history.map(item => item.unitPrice)) 
-      : null,
-    maxPrice: history.length > 0 
-      ? Math.max(...history.map(item => item.unitPrice)) 
-      : null
+const getCustomerProductHistory = async (filter = {}, params = {}) => {
+  const { customerId, productId, variantId, excludeInvoiceId } = params;
+  const limit = Math.min(RATE_HISTORY_MAX_LIMIT, Math.max(1, parseInt(params.limit, 10) || RATE_HISTORY_DEFAULT_LIMIT));
+  const empty = {
+    lines: [],
+    truncated: false,
+    stats: null,
+    history: [],
+    totalQuantity: 0,
+    lastPrice: null,
+    avgPrice: null,
+    minPrice: null,
+    maxPrice: null,
   };
+  if (!customerId || customerId === 'walk-in' || !mongoose.Types.ObjectId.isValid(String(productId))) {
+    return empty;
+  }
 
-  return stats;
+  const productObjectId = new mongoose.Types.ObjectId(String(productId));
+  const variantObjectId =
+    variantId && mongoose.Types.ObjectId.isValid(String(variantId)) ? new mongoose.Types.ObjectId(String(variantId)) : null;
+
+  const match = {
+    customerId: { $in: toCustomerIdMatchValues(customerId) },
+    'items.productId': productObjectId,
+    type: { $in: RATE_HISTORY_SALE_TYPES },
+    isConvertedToBill: { $ne: true },
+    status: { $ne: 'cancelled' },
+  };
+  if (filter.organizationId) match.organizationId = toFilterObjectId(filter.organizationId);
+  if (filter.branchId) match.branchId = toFilterObjectId(filter.branchId);
+  if (excludeInvoiceId && mongoose.Types.ObjectId.isValid(String(excludeInvoiceId))) {
+    match._id = { $ne: new mongoose.Types.ObjectId(String(excludeInvoiceId)) };
+  }
+
+  // Only the lines for this product (and variant, when the line is for a real variant).
+  const lineCondition = variantObjectId
+    ? { $and: [{ $eq: ['$$line.productId', productObjectId] }, { $eq: ['$$line.variantId', variantObjectId] }] }
+    : { $eq: ['$$line.productId', productObjectId] };
+
+  const [result] = await Invoice.aggregate([
+    { $match: match },
+    {
+      $project: {
+        invoiceNumber: 1,
+        billNumber: 1,
+        invoiceDate: 1,
+        createdAt: 1,
+        type: 1,
+        status: 1,
+        lines: { $filter: { input: { $ifNull: ['$items', []] }, as: 'line', cond: lineCondition } },
+      },
+    },
+    { $match: { 'lines.0': { $exists: true } } },
+    { $sort: { invoiceDate: -1, createdAt: -1, _id: -1 } },
+    {
+      $facet: {
+        // One extra row tells the client whether there are older sales than it was sent.
+        rows: [{ $limit: limit + 1 }],
+        totals: [
+          { $unwind: '$lines' },
+          {
+            $addFields: {
+              // Free lines (nothing charged) are not a rate — keep them out of min/max/avg.
+              lineRate: {
+                $cond: [
+                  { $and: [{ $gt: ['$lines.quantity', 0] }, { $gt: ['$lines.subtotal', 0] }] },
+                  {
+                    $divide: [
+                      { $divide: ['$lines.subtotal', '$lines.quantity'] },
+                      {
+                        $cond: [
+                          { $gt: [{ $ifNull: ['$lines.conversionFactor', 1] }, 0] },
+                          { $ifNull: ['$lines.conversionFactor', 1] },
+                          1,
+                        ],
+                      },
+                    ],
+                  },
+                  null,
+                ],
+              },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              invoiceIds: { $addToSet: '$_id' },
+              lineCount: { $sum: 1 },
+              totalQuantity: { $sum: '$lines.quantity' },
+              totalStockQuantity: {
+                $sum: { $multiply: ['$lines.quantity', { $ifNull: ['$lines.conversionFactor', 1] }] },
+              },
+              totalAmount: { $sum: '$lines.subtotal' },
+              pricedStockQuantity: {
+                $sum: {
+                  $cond: [
+                    { $gt: ['$lines.subtotal', 0] },
+                    { $multiply: ['$lines.quantity', { $ifNull: ['$lines.conversionFactor', 1] }] },
+                    0,
+                  ],
+                },
+              },
+              firstDate: { $min: { $ifNull: ['$invoiceDate', '$createdAt'] } },
+              // Net rate per stock unit; $min/$max skip the nulls from zero-quantity lines.
+              minRate: { $min: '$lineRate' },
+              maxRate: { $max: '$lineRate' },
+            },
+          },
+        ],
+      },
+    },
+  ]).option({ allowDiskUse: true });
+
+  const invoiceRows = (result && result.rows) || [];
+  const totals = (result && result.totals && result.totals[0]) || null;
+  const truncated = invoiceRows.length > limit;
+  if (truncated) invoiceRows.length = limit;
+
+  const lines = [];
+  invoiceRows.forEach((row) => {
+    row.lines.forEach((line) => lines.push(formatRateHistoryLine(row, line)));
+  });
+  return buildRateHistoryResult(lines, totals, truncated);
+};
+
+/** One sold line, as the rate-history panel shows it. `row` carries the invoice fields. */
+const formatRateHistoryLine = (row, line) => {
+  const quantity = Number(line.quantity) || 0;
+  const conversionFactor = Number(line.conversionFactor) > 0 ? Number(line.conversionFactor) : 1;
+  const unitPrice = Number(line.unitPrice) || 0;
+  const subtotal = Number(line.subtotal) || 0;
+  // `subtotal` is already net of the line discount (see resolveInvoiceItemDiscount).
+  const netUnitPrice = quantity > 0 ? Money.roundMoney(subtotal / quantity) : unitPrice;
+  return {
+    invoiceId: String(row._id),
+    invoiceNumber: row.invoiceNumber || '',
+    billNumber: row.billNumber || '',
+    date: row.invoiceDate || row.createdAt,
+    type: row.type,
+    status: row.status || '',
+    variantId: line.variantId ? String(line.variantId) : null,
+    batchNumber: line.batchNumber || '',
+    quantity,
+    unit: line.unit || '',
+    conversionFactor,
+    unitPrice,
+    discountType: line.discountType || 'fixed',
+    discountValue: Number(line.discountValue) || 0,
+    discountAmount: Number(line.discountAmount) || 0,
+    netUnitPrice,
+    netRatePerStockUnit: Money.roundMoney(netUnitPrice / conversionFactor, 4),
+    subtotal,
+  };
+};
+
+/**
+ * Lines (newest first) + totals over ALL matching lines → the response shape shared by the
+ * single-product and batch endpoints. `totals` = { invoiceIds, lineCount, totalQuantity,
+ * totalStockQuantity, totalAmount, pricedStockQuantity, firstDate, minRate, maxRate } or null.
+ */
+const buildRateHistoryResult = (lines, totals, truncated) => {
+  const latest = lines[0] || null;
+  const stats = totals
+    ? {
+        invoiceCount: totals.invoiceIds.length,
+        lineCount: totals.lineCount,
+        totalQuantity: totals.totalQuantity,
+        totalStockQuantity: totals.totalStockQuantity,
+        totalAmount: Money.roundMoney(totals.totalAmount),
+        firstDate: totals.firstDate,
+        lastDate: latest ? latest.date : null,
+        // Quantity-weighted over charged lines: what the customer paid per stock unit on average.
+        avgRatePerStockUnit:
+          totals.pricedStockQuantity > 0 ? Money.roundMoney(totals.totalAmount / totals.pricedStockQuantity, 4) : null,
+        minRatePerStockUnit: totals.minRate === null ? null : Money.roundMoney(totals.minRate, 4),
+        maxRatePerStockUnit: totals.maxRate === null ? null : Money.roundMoney(totals.maxRate, 4),
+      }
+    : null;
+
+  return {
+    lines,
+    truncated,
+    stats,
+    // Legacy shape (ProductHistoryDialog on the catalog and fast billing).
+    history: lines.map((line) => ({
+      _id: line.invoiceId,
+      invoiceNumber: line.invoiceNumber,
+      date: line.date,
+      type: line.type,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      subtotal: line.subtotal,
+    })),
+    totalQuantity: totals ? totals.totalQuantity : 0,
+    lastPrice: latest ? latest.unitPrice : null,
+    avgPrice: lines.length ? lines.reduce((sum, line) => sum + line.unitPrice, 0) / lines.length : null,
+    minPrice: lines.length ? Math.min(...lines.map((line) => line.unitPrice)) : null,
+    maxPrice: lines.length ? Math.max(...lines.map((line) => line.unitPrice)) : null,
+  };
+};
+
+// Net rate per stock unit of one unwound line ($lines); null for free / zero-qty lines so they
+// stay out of min/max/avg.
+const RATE_HISTORY_LINE_RATE = {
+  $cond: [
+    { $and: [{ $gt: ['$lines.quantity', 0] }, { $gt: ['$lines.subtotal', 0] }] },
+    {
+      $divide: [
+        { $divide: ['$lines.subtotal', '$lines.quantity'] },
+        {
+          $cond: [{ $gt: [{ $ifNull: ['$lines.conversionFactor', 1] }, 0] }, { $ifNull: ['$lines.conversionFactor', 1] }, 1],
+        },
+      ],
+    },
+    null,
+  ],
+};
+
+const RATE_HISTORY_BATCH_MAX_KEYS = 100;
+const RATE_HISTORY_BATCH_DEFAULT_LIMIT = 50;
+
+/**
+ * Rate history for many products of one customer in ONE request and ONE aggregation — the
+ * New Invoice screen prefetches every line's history with it, so clicking a rate is instant.
+ * Same rules as getCustomerProductHistory (tenant/branch scope, real sales only). `limit`
+ * caps the lines returned per product (newest first); stats always cover every line.
+ *
+ * @param {Object} filter - { organizationId, branchId }
+ * @param {Object} params - { customerId, items: [{ productId, variantId? }], excludeInvoiceId?, limit? }
+ * @returns {Promise<{ results: Array<{ productId: string, variantId: string|null, history: Object }> }>}
+ */
+const getCustomerRateHistoryBatch = async (filter = {}, params = {}) => {
+  const { customerId, excludeInvoiceId } = params;
+  const limit = Math.min(
+    RATE_HISTORY_MAX_LIMIT,
+    Math.max(1, parseInt(params.limit, 10) || RATE_HISTORY_BATCH_DEFAULT_LIMIT)
+  );
+
+  const keys = [];
+  const seen = new Set();
+  (Array.isArray(params.items) ? params.items : []).forEach((item) => {
+    const productId = item && item.productId ? String(item.productId) : '';
+    if (!mongoose.Types.ObjectId.isValid(productId)) return;
+    const variantId =
+      item.variantId && mongoose.Types.ObjectId.isValid(String(item.variantId)) ? String(item.variantId) : null;
+    const key = `${productId}|${variantId || ''}`;
+    if (seen.has(key) || keys.length >= RATE_HISTORY_BATCH_MAX_KEYS) return;
+    seen.add(key);
+    keys.push({ productId, variantId });
+  });
+  if (!keys.length) return { results: [] };
+
+  const emptyFor = (key) => ({
+    productId: key.productId,
+    variantId: key.variantId,
+    history: buildRateHistoryResult([], null, false),
+  });
+  if (!customerId || customerId === 'walk-in') return { results: keys.map(emptyFor) };
+
+  const productObjectIds = [...new Set(keys.map((k) => k.productId))].map((id) => new mongoose.Types.ObjectId(id));
+  const match = {
+    customerId: { $in: toCustomerIdMatchValues(customerId) },
+    'items.productId': { $in: productObjectIds },
+    type: { $in: RATE_HISTORY_SALE_TYPES },
+    isConvertedToBill: { $ne: true },
+    status: { $ne: 'cancelled' },
+  };
+  if (filter.organizationId) match.organizationId = toFilterObjectId(filter.organizationId);
+  if (filter.branchId) match.branchId = toFilterObjectId(filter.branchId);
+  if (excludeInvoiceId && mongoose.Types.ObjectId.isValid(String(excludeInvoiceId))) {
+    match._id = { $ne: new mongoose.Types.ObjectId(String(excludeInvoiceId)) };
+  }
+
+  // One group per product + variant actually sold; a product-level key merges its groups below.
+  const groups = await Invoice.aggregate([
+    { $match: match },
+    {
+      $project: {
+        invoiceNumber: 1,
+        billNumber: 1,
+        invoiceDate: 1,
+        createdAt: 1,
+        type: 1,
+        status: 1,
+        lines: {
+          $filter: {
+            input: { $ifNull: ['$items', []] },
+            as: 'line',
+            cond: { $in: ['$$line.productId', productObjectIds] },
+          },
+        },
+      },
+    },
+    { $unwind: '$lines' },
+    { $sort: { invoiceDate: -1, createdAt: -1, _id: -1 } },
+    { $addFields: { lineRate: RATE_HISTORY_LINE_RATE } },
+    {
+      $group: {
+        _id: { productId: '$lines.productId', variantId: { $ifNull: ['$lines.variantId', null] } },
+        rows: {
+          $push: {
+            _id: '$_id',
+            invoiceNumber: '$invoiceNumber',
+            billNumber: '$billNumber',
+            invoiceDate: '$invoiceDate',
+            createdAt: '$createdAt',
+            type: '$type',
+            status: '$status',
+            line: '$lines',
+          },
+        },
+        invoiceIds: { $addToSet: '$_id' },
+        lineCount: { $sum: 1 },
+        totalQuantity: { $sum: '$lines.quantity' },
+        totalStockQuantity: {
+          $sum: { $multiply: ['$lines.quantity', { $ifNull: ['$lines.conversionFactor', 1] }] },
+        },
+        totalAmount: { $sum: '$lines.subtotal' },
+        pricedStockQuantity: {
+          $sum: {
+            $cond: [
+              { $gt: ['$lines.subtotal', 0] },
+              { $multiply: ['$lines.quantity', { $ifNull: ['$lines.conversionFactor', 1] }] },
+              0,
+            ],
+          },
+        },
+        firstDate: { $min: { $ifNull: ['$invoiceDate', '$createdAt'] } },
+        minRate: { $min: '$lineRate' },
+        maxRate: { $max: '$lineRate' },
+      },
+    },
+    // Newest `limit + 1` lines per group — the extra one says "there are older ones".
+    {
+      $project: {
+        rows: { $slice: ['$rows', limit + 1] },
+        invoiceIds: 1,
+        lineCount: 1,
+        totalQuantity: 1,
+        totalStockQuantity: 1,
+        totalAmount: 1,
+        pricedStockQuantity: 1,
+        firstDate: 1,
+        minRate: 1,
+        maxRate: 1,
+      },
+    },
+  ]).option({ allowDiskUse: true });
+
+  const rowTime = (row) => new Date(row.invoiceDate || row.createdAt || 0).getTime();
+  const results = keys.map((key) => {
+    const mine = groups.filter(
+      (g) =>
+        String(g._id.productId) === key.productId &&
+        (!key.variantId || (g._id.variantId && String(g._id.variantId) === key.variantId))
+    );
+    if (!mine.length) return emptyFor(key);
+
+    const rows = mine
+      .flatMap((g) => g.rows)
+      .sort((a, b) => rowTime(b) - rowTime(a) || String(b._id).localeCompare(String(a._id)));
+    const truncated = rows.length > limit;
+    const invoiceIds = new Set();
+    const nums = (field) => mine.map((g) => g[field]).filter((v) => v !== null && v !== undefined);
+    mine.forEach((g) => g.invoiceIds.forEach((id) => invoiceIds.add(String(id))));
+    const sum = (field) => mine.reduce((total, g) => total + (Number(g[field]) || 0), 0);
+    const mins = nums('minRate');
+    const maxs = nums('maxRate');
+    const firstDates = nums('firstDate').map((d) => new Date(d));
+    const totals = {
+      invoiceIds: [...invoiceIds],
+      lineCount: sum('lineCount'),
+      totalQuantity: sum('totalQuantity'),
+      totalStockQuantity: sum('totalStockQuantity'),
+      totalAmount: sum('totalAmount'),
+      pricedStockQuantity: sum('pricedStockQuantity'),
+      firstDate: firstDates.length ? new Date(Math.min(...firstDates.map((d) => d.getTime()))) : null,
+      minRate: mins.length ? Math.min(...mins) : null,
+      maxRate: maxs.length ? Math.max(...maxs) : null,
+    };
+    const lines = rows.slice(0, limit).map((row) => formatRateHistoryLine(row, row.line));
+    return { productId: key.productId, variantId: key.variantId, history: buildRateHistoryResult(lines, totals, truncated) };
+  });
+  return { results };
 };
 
 const escapeRegexLiteral = (raw) => String(raw).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -2632,5 +3000,6 @@ module.exports = {
   generateBillNumber,
   previewNextInvoiceNumber,
   getCustomerProductHistory,
+  getCustomerRateHistoryBatch,
   convertQuotationToInvoice: convertQuotationWithWarehouse,
 };

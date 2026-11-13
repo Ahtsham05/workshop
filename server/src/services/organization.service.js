@@ -31,7 +31,7 @@ const {
 const ApiError = require('../utils/ApiError');
 const planService = require('./billing/plan.service');
 const { addDays, legacyMirror } = require('./billing/subscriptionState');
-const { normalizeBusinessType } = require('../config/businessTypes');
+const { normalizeBusinessType, printDefaultsForBusinessType, FACTORY_PRINT_DEFAULTS } = require('../config/businessTypes');
 const demoDataService = require('./demoData.service');
 const logger = require('../config/logger');
 
@@ -81,6 +81,9 @@ const setupOrganization = async (userId, orgData) => {
     },
     isDefault: true,
     isActive: true,
+    ...(printDefaultsForBusinessType(organization.businessType) && {
+      printSettings: { ...printDefaultsForBusinessType(organization.businessType) },
+    }),
   });
 
   // Create the superAdmin membership for all branches
@@ -154,6 +157,28 @@ const getOrganizationForUser = async (userId) => {
 };
 
 /**
+ * Moving an organization to a type with its own print defaults (e.g. distributor → A4 +
+ * Distributor layout) switches every branch still on the factory defaults (thermal 80mm +
+ * Standard). A branch whose paper size or layout was chosen by hand is left alone.
+ * @param {ObjectId} orgId
+ * @param {string} businessType
+ * @returns {Promise<number>} branches updated
+ */
+const applyBusinessTypePrintDefaults = async (orgId, businessType) => {
+  const defaults = printDefaultsForBusinessType(businessType);
+  if (!defaults) return 0;
+  const res = await Branch.updateMany(
+    {
+      organizationId: orgId,
+      'printSettings.paperSize': { $in: [FACTORY_PRINT_DEFAULTS.paperSize, null] },
+      'printSettings.template': { $in: [FACTORY_PRINT_DEFAULTS.template, null] },
+    },
+    { $set: { 'printSettings.paperSize': defaults.paperSize, 'printSettings.template': defaults.template } },
+  );
+  return res.modifiedCount || 0;
+};
+
+/**
  * Update organization
  * @param {ObjectId} orgId
  * @param {Object} updateBody
@@ -184,11 +209,13 @@ const updateOrganization = async (orgId, updateBody) => {
     assertDocumentNumberingConfig({ ...stored, ...normalizedUpdateBody.documentNumbering });
   }
 
+  const previousType = org.businessType;
   Object.assign(org, normalizedUpdateBody);
   await org.save();
 
   if (normalizedUpdateBody.businessType) {
     await User.updateMany({ organizationId: org._id }, { businessType: org.businessType });
+    if (previousType !== org.businessType) await applyBusinessTypePrintDefaults(org._id, org.businessType);
   }
 
   return org;
@@ -323,6 +350,7 @@ module.exports = {
   getOrganizationByUserId,
   getOrganizationForUser,
   updateOrganization,
+  applyBusinessTypePrintDefaults,
   deleteOrganization,
   clearOrganizationData,
   resetDemoData,

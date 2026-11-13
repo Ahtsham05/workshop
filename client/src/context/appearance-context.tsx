@@ -8,12 +8,15 @@ import {
   useState,
 } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
+import toast from 'react-hot-toast'
 import {
   AppearancePreferences,
+  DEFAULT_APPEARANCE,
   BranchColorKey,
   applyAppearance,
   normalizeAppearance,
   readStoredAppearance,
+  stepZoom,
   readStoredBranchColor,
   writeStoredAppearance,
   writeStoredBranchColor,
@@ -46,6 +49,7 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const [savePreferences] = useUpdateUiPreferencesMutation()
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [preferences, setPreferencesState] = useState<AppearancePreferences>(() =>
     readStoredAppearance()
@@ -109,14 +113,40 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
       if (user?.id) {
         dispatch(setUiPreferences(next))
         // Fire-and-forget: a failed save only costs this device's copy, which
-        // localStorage already holds.
-        savePreferences(next)
-          .unwrap()
-          .catch(() => undefined)
+        // localStorage already holds. Briefly debounced so a burst of changes
+        // (zoom shortcut pressed a few times) is one request, carrying the last state.
+        if (saveTimer.current) clearTimeout(saveTimer.current)
+        saveTimer.current = setTimeout(() => {
+          saveTimer.current = null
+          savePreferences(next)
+            .unwrap()
+            .catch(() => undefined)
+        }, 400)
       }
     },
     [dispatch, preferences, savePreferences, user?.id]
   )
+
+  // Zoom shortcuts: Ctrl+Alt+= / Ctrl+Alt+- / Ctrl+Alt+0 (⌘⌥ on Mac). Plain Ctrl+/-
+  // is left to the browser. Matched on e.code because Alt changes e.key on some layouts.
+  const zoomRef = useRef(preferences.zoom)
+  zoomRef.current = preferences.zoom
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || !e.altKey || e.shiftKey) return
+      const current = zoomRef.current
+      let next: number
+      if (e.code === 'Equal' || e.code === 'NumpadAdd') next = stepZoom(current, 1)
+      else if (e.code === 'Minus' || e.code === 'NumpadSubtract') next = stepZoom(current, -1)
+      else if (e.code === 'Digit0' || e.code === 'Numpad0') next = DEFAULT_APPEARANCE.zoom
+      else return
+      e.preventDefault()
+      if (next !== current) setPreferences({ zoom: next })
+      toast(`Zoom ${next}%`, { id: 'app-zoom', duration: 1200 })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [setPreferences])
 
   const value = useMemo(
     () => ({ preferences, setPreferences, branchColor }),

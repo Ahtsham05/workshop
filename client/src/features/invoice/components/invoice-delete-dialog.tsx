@@ -16,9 +16,11 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   currentRow: any // Invoice object
+  /** Called once the delete has gone through — e.g. to close a view showing the record. */
+  onDeleted?: () => void
 }
 
-export function InvoiceDeleteDialog({ open, onOpenChange, currentRow }: Props) {
+export function InvoiceDeleteDialog({ open, onOpenChange, currentRow, onDeleted }: Props) {
   const [value, setValue] = useState('')
   const [deleteInvoice, { isLoading }] = useDeleteInvoiceMutation()
   const { hasExplicitPermission } = usePermissions()
@@ -43,6 +45,7 @@ export function InvoiceDeleteDialog({ open, onOpenChange, currentRow }: Props) {
       toast.success(t('invoice_deleted_successfully') || 'Invoice deleted successfully!')
       onOpenChange(false)
       setValue('')
+      onDeleted?.()
     } catch (error: any) {
       console.error('Failed to delete invoice:', error)
       toast.error(apiPermissionMessage(t, error, 'no_permission_delete_invoice'))

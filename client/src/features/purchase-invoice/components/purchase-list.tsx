@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { WarehouseTag } from '@/components/warehouse-tag'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import type { RootState } from '@/stores/store'
-import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
+import { useFormatMoney } from '@/lib/format-money'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { resolveBranchCompanyName } from '@/utils/branch-company-name'
@@ -48,19 +48,10 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { BilingualName } from '@/components/bilingual-name'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { useCanViewCreatedBy } from '@/components/created-by-cell'
-import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
-import {
-  PAPER_FORMATS,
-  resolveThermalSize,
-  resolveSheetSize,
-  withPrintOrientation,
-  type PaperSize,
-  type PrintOrientation,
-} from '@/features/invoice/utils/paper-format'
-import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { InvoiceDeleteDialog } from './invoice-delete-dialog'
 import { PurchaseFiltersToolbar } from './purchase-filters-toolbar'
 import { PurchaseViewDrawer } from './purchase-view-drawer'
+import { usePurchasePrinter } from '../hooks/use-purchase-printer'
 import { SupplierPaymentDialog } from './supplier-payment-dialog'
 import { usePurchaseFilters } from '../hooks/use-purchase-filters'
 import { exportPurchasesToCsv, exportPurchasesToPdf } from '../utils/purchase-export'
@@ -122,7 +113,6 @@ function StatCard({
 export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate }: PurchaseListProps) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
-  const currencyMeta = useCurrencyMeta()
   const canViewCreatedBy = useCanViewCreatedBy()
   const { hasExplicitPermission } = usePermissions()
   const canCreate = hasExplicitPermission('createPurchases')
@@ -130,13 +120,9 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate 
   const canDelete = hasExplicitPermission('deletePurchases')
 
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
-  const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
-  const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
-  const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
-  const printOrientation: PrintOrientation = branchData?.printSettings?.printOrientation ?? 'portrait'
 
   const {
     filters,
@@ -214,64 +200,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate 
       return next
     })
 
-  const printPurchase = useCallback(
-    async (purchase: any, paperSize: PaperSize = defaultPaperSize) => {
-      try {
-        const printModule = await import('@/utils/purchasePrintUtils')
-        const branchDetails = {
-          name: resolveBranchCompanyName(orgData?.name, branchData?.name),
-          nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
-          address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
-            .filter(Boolean)
-            .join(', '),
-          phone: branchData?.phone,
-          email: branchData?.email,
-          logo: orgData?.logo?.url,
-          isTrial: orgData?.subscription?.isTrial,
-          invoiceNote: branchData?.invoiceNote,
-          currencyMeta,
-        }
-
-        const paperFormat = PAPER_FORMATS[withPrintOrientation(paperSize, printOrientation)]
-        const html =
-          paperFormat.family === 'thermal'
-            ? printModule.generatePurchaseInvoiceHTML(
-                purchase,
-                purchase?.supplier?.name || 'N/A',
-                t,
-                branchDetails,
-                preferredLanguage,
-                getInvoicePrintInUrdu(),
-                resolveThermalSize(paperSize)
-              )
-            : printModule.generatePurchaseInvoiceA4HTML(
-                purchase,
-                purchase?.supplier?.name || 'N/A',
-                t,
-                branchDetails,
-                preferredLanguage,
-                getInvoicePrintInUrdu(),
-                withPrintOrientation(resolveSheetSize(paperSize), printOrientation),
-                invoiceTemplate
-              )
-
-        const printWindow = window.open(
-          '',
-          '_blank',
-          `width=${paperFormat.popup.width},height=${paperFormat.popup.height},scrollbars=yes,resizable=yes`
-        )
-        if (printWindow) {
-          printWindow.document.write(html)
-          printWindow.document.close()
-          printWindow.print()
-        }
-      } catch (printError) {
-        console.error('Failed to print purchase:', printError)
-        toast.error(t('Failed to print purchase'))
-      }
-    },
-    [branchData, t, preferredLanguage, orgData, defaultPaperSize, invoiceTemplate, printOrientation, currencyMeta]
-  )
+  const { printPurchase } = usePurchasePrinter()
 
   /** CSV/PDF run off the server's export endpoint so they cover the whole filtered set,
    *  not just the page on screen — and honour a selection when one is active. */
@@ -719,7 +648,11 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate 
           setViewingPurchase(null)
           onEdit?.(purchase)
         }}
-        onPrint={(purchase) => printPurchase(purchase)}
+        onPrint={(purchase, paperSize) => printPurchase(purchase, paperSize)}
+        onDuplicate={onDuplicate ? (purchase) => {
+          setViewingPurchase(null)
+          onDuplicate(purchase)
+        } : undefined}
         onRecordPayment={(purchase) => {
           setViewingPurchase(null)
           openPaymentFor(purchase)

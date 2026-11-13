@@ -111,6 +111,14 @@ const organizationSchema = mongoose.Schema(
     // Ledger Colours). Free-form here; services/ledgerAlerts.service.js normalizeSettings
     // validates it and its DEFAULT_SETTINGS is what an org that never saved it gets.
     ledgerAlerts: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    // Settings → Menu & Pages: page URL (as in the sidebar, e.g. '/hr/payroll' or
+    // '/reports?tab=sales') → shown (true) / hidden (false). Only choices that differ from
+    // the business-type defaults are stored — see config/businessTypes.js.
+    menuVisibility: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    // Settings → Menu & Pages arrangement: custom names, group/page order, pages moved
+    // between sub-menus, pages hidden from the sidebar but still working. Shape owned by
+    // client/src/lib/menu-layout.ts (validated in validations/organization.validation.js).
+    menuLayout: { type: mongoose.Schema.Types.Mixed, default: undefined },
     // Ledger discount rules (Settings → Ledger Discounts): on/off, limits, reasons, print.
     // Free-form here; services/ledgerDiscount.service.js normalizeSettings owns the shape.
     ledgerDiscounts: { type: mongoose.Schema.Types.Mixed, default: undefined },

@@ -13,6 +13,7 @@ import { formatAppDate } from '@/lib/date-format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NumericInput } from '@/components/ui/numeric-input'
 import {
   Popover,
   PopoverContent,
@@ -520,17 +521,11 @@ export function BatchCell({ row, column, error, label, disabled }: CellProps) {
                     className='flex shrink-0 items-center gap-1'
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Input
-                      type='number'
+                    <NumericInput
                       min={0}
-                      step='any'
-                      showVoiceInput={false}
                       aria-label={`${t('Quantity from')} ${b.batchNumber}`}
                       value={part.quantity}
-                      onChange={(e) =>
-                        setPart(b.id, Number(e.target.value) || 0)
-                      }
-                      onFocus={(e) => e.target.select()}
+                      onValueChange={(qty) => setPart(b.id, qty)}
                       className={cn(
                         'h-6 w-20 px-1.5 text-right text-xs tabular-nums',
                         part.quantity > b.quantity + EPS &&

@@ -5,6 +5,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AppDispatch, RootState } from '@/stores/store';
 import { fetchAllProducts } from '@/stores/product.slice';
 import { CATALOG_REVALIDATE_ON_MOUNT, useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api';
+import { useGetPurchaseByIdQuery } from '@/stores/purchase.api';
 import type { ImeiEntryInput } from '@/stores/imei.api';
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
@@ -211,6 +212,7 @@ const PurchaseInvoicePage = () => {
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as {
     supplierId?: string;
+    editId?: string;
     prefillItems?: { productId: string; variantId?: string; quantity: number }[];
   };
   const prefillAppliedRef = useRef(false);
@@ -1037,6 +1039,19 @@ const PurchaseInvoicePage = () => {
     (purchaseToCopy: any) => handleEdit(purchaseToCopy, { duplicate: true }),
     [handleEdit]
   );
+
+  // ?editId=… (the purchase view's Edit, used from the navigator / history panel) → load
+  // that purchase into the form once it and the catalog (variant lines need it) are in,
+  // then drop the param.
+  const { data: purchaseToEditById } = useGetPurchaseByIdQuery(search.editId, { skip: !search.editId });
+  const editByIdAppliedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!search.editId || !purchaseToEditById || catalogLoading) return;
+    if (editByIdAppliedRef.current === search.editId) return;
+    editByIdAppliedRef.current = search.editId;
+    handleEdit(purchaseToEditById);
+    navigate({ to: '/purchase-invoice', search: {}, replace: true });
+  }, [search.editId, purchaseToEditById, catalogLoading, handleEdit, navigate]);
 
   const refreshProductsAfterPurchase = useCallback(() => {
     setProducts(prevProducts => {

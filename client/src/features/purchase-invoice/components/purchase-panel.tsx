@@ -8,6 +8,7 @@ import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NumericInput } from '@/components/ui/numeric-input'
 import { DatePicker } from '@/components/ui/date-picker'
 import { getBusinessToday, toBusinessCalendarDate } from '@/lib/business-timezone'
 import { Label } from '@/components/ui/label'
@@ -1907,14 +1908,14 @@ export default function PurchasePanel({
         >
           <Minus className='h-3 w-3' />
         </Button>
-        <Input
+        <NumericInput
           ref={setItemFieldRef(index, 'quantity')}
-          type='number'
-          min='1'
+          decimals={false}
+          min={1}
+          emptyValue={null}
           value={item.quantity}
-          onChange={(e) => updateQuantity(productId, parseInt(e.target.value) || 1, item.variantId)}
+          onValueChange={(qty) => updateQuantity(productId, qty, item.variantId)}
           onKeyDown={(e) => handlePurchaseQuantityKeyDown(e, index)}
-          onFocus={(e) => e.target.select()}
           className='h-7 w-12 border-0 rounded-none text-center text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
         />
         <Button

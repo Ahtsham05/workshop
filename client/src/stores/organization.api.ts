@@ -1,3 +1,4 @@
+import type { MenuLayout } from '@/lib/menu-layout';
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { baseQuery } from './base-query';
 import type { NativeLanguageSetting } from '@/lib/native-language';
@@ -87,6 +88,10 @@ export interface Organization {
   documentNumbering?: DocumentNumberingConfig;
   /** 'auto' (follow countryCode), 'none', or a language code — see lib/native-language.ts. */
   nativeLanguage?: NativeLanguageSetting;
+  /** Settings → Menu & Pages: page URL → shown/hidden (overrides the business-type defaults). */
+  menuVisibility?: Record<string, boolean>;
+  /** Settings → Menu & Pages: custom names, order, sub-menu moves, hidden-in-menu pages. */
+  menuLayout?: MenuLayout;
 }
 
 export interface UpdateOrganizationSettingsRequest {
@@ -249,6 +254,18 @@ export const organizationApi = createApi({
       }),
       invalidatesTags: ['Organization'],
     }),
+    // Settings → Menu & Pages — replaces the whole page on/off map in one save.
+    updateMenuVisibility: builder.mutation<
+      Organization,
+      { orgId: string; menuVisibility: Record<string, boolean>; menuLayout?: MenuLayout }
+    >({
+      query: ({ orgId, menuVisibility, menuLayout }) => ({
+        url: `/organizations/${orgId}/menu-visibility`,
+        method: 'PATCH',
+        body: { menuVisibility, ...(menuLayout && { menuLayout }) },
+      }),
+      invalidatesTags: ['Organization'],
+    }),
     getSubscriptionUsage: builder.query<SubscriptionUsage, void>({
       query: () => '/payments/subscription/usage',
       providesTags: ['Organization'],
@@ -286,6 +303,7 @@ export const {
   useGetMyOrganizationQuery,
   useLazyGetMyOrganizationQuery,
   useUpdateOrganizationMutation,
+  useUpdateMenuVisibilityMutation,
   useUpdateOrganizationSettingsMutation,
   usePreviewDocumentNumberingMutation,
   useSetDocumentNumberingNextNumberMutation,

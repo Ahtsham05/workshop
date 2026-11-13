@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NumericInput } from '@/components/ui/numeric-input'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
@@ -227,42 +228,28 @@ function ProductReviewRow({
         </Popover>
       </TableCell>
       <TableCell>
-        <Input
-          type="number"
+        <NumericInput
           min={1}
+          emptyValue={null}
           className="h-8"
           value={line.quantity}
-          onChange={(e) =>
-            onUpdate(line.id, { quantity: Math.max(1, Number(e.target.value) || 1) })
-          }
+          onValueChange={(quantity) => onUpdate(line.id, { quantity })}
         />
       </TableCell>
       <TableCell>
-        <Input
-          type="number"
+        <NumericInput
           min={0}
-          step="0.01"
           className="h-8"
           value={line.purchasePrice}
-          onChange={(e) =>
-            onUpdate(line.id, {
-              purchasePrice: Math.max(0, Number(e.target.value) || 0),
-            })
-          }
+          onValueChange={(purchasePrice) => onUpdate(line.id, { purchasePrice })}
         />
       </TableCell>
       <TableCell>
-        <Input
-          type="number"
+        <NumericInput
           min={0}
-          step="0.01"
           className="h-8"
           value={line.sellingPrice}
-          onChange={(e) =>
-            onUpdate(line.id, {
-              sellingPrice: Math.max(0, Number(e.target.value) || 0),
-            })
-          }
+          onValueChange={(sellingPrice) => onUpdate(line.id, { sellingPrice })}
         />
       </TableCell>
       <TableCell>

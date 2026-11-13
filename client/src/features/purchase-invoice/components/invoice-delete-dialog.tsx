@@ -14,9 +14,11 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   currentRow: any // Invoice object
+  /** Called once the delete has gone through — e.g. to close a view showing the record. */
+  onDeleted?: () => void
 }
 
-export function InvoiceDeleteDialog({ open, onOpenChange, currentRow }: Props) {
+export function InvoiceDeleteDialog({ open, onOpenChange, currentRow, onDeleted }: Props) {
   const [value, setValue] = useState('')
   const [deletePurchase, { isLoading }] = useDeletePurchaseMutation()
   // const { t } = useLanguage()
@@ -35,6 +37,7 @@ export function InvoiceDeleteDialog({ open, onOpenChange, currentRow }: Props) {
       toast.success('Purchase deleted successfully!')
       onOpenChange(false)
       setValue('')
+      onDeleted?.()
     } catch (error: any) {
       console.error('Failed to delete purchase:', error)
       toast.error(error?.data?.message || 'Failed to delete purchase')

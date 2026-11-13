@@ -39,6 +39,7 @@ import { useLanguage } from '@/context/language-context'
 import { Can } from '@/context/permission-context'
 import { toast } from 'sonner'
 import { CommunicationLogPanel } from '@/features/accounting/components/communication-log-panel'
+import { useIsModuleHidden } from '@/hooks/use-hidden-modules'
 import {
   useGetLeadTimelineQuery,
   useDeleteLeadMutation,
@@ -83,6 +84,7 @@ export function LeadDetailSheet({ lead, onOpenChange }: LeadDetailSheetProps) {
   const { data: timeline, isLoading: timelineLoading } = useGetLeadTimelineQuery(id, { skip: !id })
   const [deleteLead, { isLoading: isDeleting }] = useDeleteLeadMutation()
 
+  const hideCommunications = useIsModuleHidden('communications')
   const [editOpen, setEditOpen] = useState(false)
   const [convertOpen, setConvertOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -223,9 +225,9 @@ export function LeadDetailSheet({ lead, onOpenChange }: LeadDetailSheetProps) {
             )}
 
             <Tabs defaultValue="timeline">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className={`grid w-full ${hideCommunications ? 'grid-cols-2' : 'grid-cols-3'}`}>
                 <TabsTrigger value="timeline">{t('Timeline')}</TabsTrigger>
-                <TabsTrigger value="communications">{t('Communications')}</TabsTrigger>
+                {!hideCommunications && <TabsTrigger value="communications">{t('Communications')}</TabsTrigger>}
                 <TabsTrigger value="quotations">{t('Quotations')}</TabsTrigger>
               </TabsList>
 

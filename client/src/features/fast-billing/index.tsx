@@ -83,8 +83,15 @@ export default function FastBillingPage() {
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
 
   const [cart, setCart] = useState<CartLine[]>([])
+  // Latest cart for stable callbacks (addToCart) that must not re-create on every change.
+  const cartRef = useRef(cart)
+  cartRef.current = cart
   const [customer, setCustomer] = useState<FastBillCustomer>(null)
   const [walkInCustomerName, setWalkInCustomerName] = useState('')
+  // Every new sale starts by asking who it's for (like New Invoice): the customer picker
+  // opens on a fresh page and again after each charge / hold / clear. Picking a customer
+  // (Enter keeps Walk-in) or Esc hands focus to the scan box.
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false)
   const [saleType, setSaleType] = useState<SaleType>('cash')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [walletType, setWalletType] = useState('')
@@ -122,6 +129,8 @@ export default function FastBillingPage() {
       setDiscountValue(ws.discountValue || 0)
       setPaidAmount(ws.paidAmount || 0)
     }
+    // Resuming a cart that already has items — carry on scanning; otherwise ask for the customer first.
+    if (!ws?.cart?.length) setCustomerPickerOpen(true)
     setHeld(listFastBillHeld())
   }, [])
 
@@ -212,12 +221,19 @@ export default function FastBillingPage() {
   const [serialDialogKey, setSerialDialogKey] = useState<string>('')
 
   const addToCart = useCallback((item: PurchaseCatalogItem, quantity = 1, unitPrice?: number) => {
-    if (item.stockQuantity <= 0) {
-      toast.error(`${item.name} is out of stock`)
+    // Overselling into negative stock is allowed (same policy as the Invoice screen
+    // and the server) — a purchase entry brings the balance back up. Only IMEI/serial
+    // tracked items still need a real unit in stock, since one must be picked.
+    if (item.stockQuantity <= 0 && (item.trackImei || item.trackSerial)) {
+      toast.error(`${item.name} is out of stock — no IMEI/serial available to sell`)
       playBeep('error')
       return
     }
     const key = cartLineKey(item)
+    const alreadyInCart = cartRef.current.find((l) => l.key === key)?.quantity ?? 0
+    if (alreadyInCart + quantity > item.stockQuantity) {
+      toast.warning(`${item.name} - selling into negative stock (Available: ${item.stockQuantity})`)
+    }
     setCart((prev) => {
       const existing = prev.find((l) => l.key === key)
       if (existing) {
@@ -317,20 +333,24 @@ export default function FastBillingPage() {
           const orderedBatches = primaryBatch ? [primaryBatch, ...batches.filter((b) => b.id !== primaryBatch.id)] : batches
           const { allocations, remaining } = autoAllocateBatches(orderedBatches, quantity)
           if (remaining > 0) {
-            toast.error(`${currentItem.name} - Only ${quantity - remaining} unit(s) available across all batches`)
-            return
-          }
-          nextBatchAllocations = allocations.length > 1 ? allocations : undefined
-          if (allocations.length > 0) {
-            nextBatchId = allocations[0].batchId
-            nextBatchNumber = allocations[0].batchNumber
+            // Batches can't cover it — overselling is allowed, so keep a single line on
+            // the primary (or first) batch instead of blocking. Mirrors invoice/index.tsx.
+            toast.warning(`${currentItem.name} - selling into negative stock (Available across all batches: ${quantity - remaining})`)
+            nextBatchId = primaryBatch?.id ?? orderedBatches[0]?.id ?? nextBatchId
+            nextBatchNumber = primaryBatch?.batchNumber ?? orderedBatches[0]?.batchNumber ?? nextBatchNumber
+            nextBatchAllocations = undefined
+          } else {
+            nextBatchAllocations = allocations.length > 1 ? allocations : undefined
+            if (allocations.length > 0) {
+              nextBatchId = allocations[0].batchId
+              nextBatchNumber = allocations[0].batchNumber
+            }
           }
         }
       } else {
         const available = catalogEntry?.stockQuantity ?? 0
-        if (quantity > available) {
-          toast.error(`${currentItem.name} - Only ${available} unit(s) available`)
-          return
+        if (quantity > available && quantity > currentItem.quantity) {
+          toast.warning(`${currentItem.name} - selling into negative stock (Available: ${available})`)
         }
       }
 
@@ -552,7 +572,7 @@ export default function FastBillingPage() {
     setDiscountValue(0)
     setPaidAmount(0)
     clearFastBillWorkspace()
-    scanInputRef.current?.focus()
+    setCustomerPickerOpen(true)
   }, [])
 
   const holdCurrentCart = useCallback(() => {
@@ -958,6 +978,9 @@ export default function FastBillingPage() {
               itemCount={cart.length}
               onCharge={handleCharge}
               charging={charging}
+              customerPickerOpen={customerPickerOpen}
+              onCustomerPickerOpenChange={setCustomerPickerOpen}
+              onCustomerPickerDone={focusScanInput}
             />
           </div>
         </div>

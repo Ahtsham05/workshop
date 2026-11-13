@@ -151,7 +151,6 @@ export const BarcodeScanInput = forwardRef<BarcodeScanInputHandle, Props>(functi
           <ul className='max-h-[min(28rem,60vh)] overflow-y-auto p-1'>
             {suggestions.map((item, idx) => {
               const active = hasNavigated && idx === highlighted
-              const disabled = item.stockQuantity <= 0
               return (
                 <li
                   key={item.id}
@@ -159,11 +158,10 @@ export const BarcodeScanInput = forwardRef<BarcodeScanInputHandle, Props>(functi
                     itemRefs.current[idx] = el
                   }}
                   onMouseEnter={() => setHighlighted(idx)}
-                  onClick={() => !disabled && selectSuggestion(item)}
+                  onClick={() => selectSuggestion(item)}
                   className={cn(
                     'flex cursor-pointer items-center gap-3 rounded-lg p-2.5 transition-colors',
                     active && 'bg-accent',
-                    disabled && 'cursor-not-allowed opacity-50',
                   )}
                 >
                   <div className='flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted'>

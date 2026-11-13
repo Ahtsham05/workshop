@@ -40,7 +40,8 @@ export function CommandMenu() {
   const { setTheme } = useTheme()
   const { open, setOpen } = useSearch()
   const { t } = useLanguage()
-  const filteredNavGroups = useFilteredNavGroups()
+  // Pages hidden from the sidebar (but not switched off) are still findable here.
+  const filteredNavGroups = useFilteredNavGroups({ includeMenuHidden: true })
   const quickTransfer = useQuickTransfer()
 
   // Navigation translations mapping

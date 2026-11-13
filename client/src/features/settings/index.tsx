@@ -26,6 +26,7 @@ import {
   IconTextSize,
   IconCreditCard,
   IconLayoutColumns,
+  IconLayoutSidebar,
 } from '@tabler/icons-react'
 import { Separator } from '@/components/ui/separator'
 import SidebarNav, { type SettingsNavGroup } from './components/sidebar-nav'
@@ -125,6 +126,12 @@ const sidebarNavGroups: { label: string; items: SettingsNavItem[] }[] = [
         title: 'Business Profile',
         icon: <IconBuilding size={18} />,
         href: '/settings/business-profile',
+        anyPermission: ['viewBusinessProfile'],
+      },
+      {
+        title: 'Menu & Pages',
+        icon: <IconLayoutSidebar size={18} />,
+        href: '/settings/menu',
         anyPermission: ['viewBusinessProfile'],
       },
       {

@@ -443,6 +443,22 @@ html[data-voice-recording] [data-assistant-launcher] {
     background-color: var(--row-head);
   }
 
+  /* Settings → Appearance → Zoom. Tailwind's screen breakpoints are compiled into
+   * `@container app (…rem)` queries (vite.config.ts → appZoomCss), measured against
+   * <body> with the root font size — so zooming out gives the wide-screen layout, the
+   * way browser zoom does. Every portal lives in <body>, so dialogs follow as well. */
+  body {
+    container: app / inline-size;
+  }
+
+  /* The zoom is written as the root font size inline on <html>; a printed page always
+   * uses the standard size. */
+  @media print {
+    html {
+      font-size: 100% !important;
+    }
+  }
+
   /* Prevent focus zoom on mobile devices */
   @media screen and (max-width: 767px) {
     input,

@@ -1,6 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useIsModuleHidden } from '@/hooks/use-hidden-modules'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NumericInput } from '@/components/ui/numeric-input'
 import { DatePicker } from '@/components/ui/date-picker'
 import { getBusinessToday } from '@/lib/business-timezone'
 import { InvoiceDueDateField } from '@/features/ledger-alerts/components/due-date-field'
@@ -163,7 +165,14 @@ import {
   type QuickCreateState,
 } from '@/components/entity-create-shortcut'
 import { QuotationConvertDialog } from './quotation-convert-dialog'
-import { ProductHistoryDialog } from './product-history-dialog'
+import { CustomerRateHistoryPanel } from './customer-rate-history-panel'
+import {
+  RATE_HISTORY_ANCHOR_ATTR,
+  RATE_HISTORY_AUTO_OPEN_MIN_WIDTH,
+  readRateHistoryAutoOpen,
+  writeRateHistoryAutoOpen,
+} from './customer-rate-history-prefs'
+import { useRateHistoryPrefetch } from './customer-rate-history-cache'
 import { ColorDot } from '@/components/color-swatch-picker'
 import { FlagBadge, FlagPickerPopover } from '@/components/flag-badge'
 import { useUpdateInvoiceFlagMutation } from '@/stores/invoice.api'
@@ -293,7 +302,9 @@ export function InvoicePanel({
   // The split leg is an independent amount that adds to Paid Amount, not carved out of it —
   // see split-payment-fields.tsx. This is what's actually been paid so far.
   const totalPaidNow = (invoice.paidAmount || 0) + (invoice.splitPaymentMethod ? (invoice.splitPaidAmount || 0) : 0)
-  const { data: salesmen } = useGetAllSalesmanProfilesQuery({ status: 'active' })
+  // Business types that hide the salesman module (e.g. distributors) never load or show the picker.
+  const hideSalesmen = useIsModuleHidden('salesmen')
+  const { data: salesmen } = useGetAllSalesmanProfilesQuery({ status: 'active' }, { skip: hideSalesmen })
   const salesmanOptions = useMemo(
     () => (salesmen || []).map((s) => ({ value: s.id, label: s.name, sublabel: s.salesmanCode })),
     [salesmen],
@@ -390,17 +401,22 @@ export function InvoicePanel({
       return
     }
     const first = invoice.items[0]
-    // Fresh invoice (every row still an untouched empty manual entry) — auto-open the
-    // first row's product picker so a cashier can start typing immediately instead of
-    // clicking into it. Matches on "all rows empty" rather than a single row so this
-    // still fires now that a new invoice starts pre-populated with several empty rows.
+    // Fresh invoice (every row still an untouched empty manual entry) — start with the
+    // customer: auto-open the customer picker so the cashier picks who the bill is for
+    // first. Choosing a customer (Enter keeps Walk-in) then hands off to the product
+    // search (see goToProducts). Matches on "all rows empty" rather than a single row so
+    // this still fires now that a new invoice starts pre-populated with several empty
+    // rows, and re-fires after each save because the reset form gets fresh row ids.
     if (
       invoice.items.every((item) => item.isManualEntry && !item.productId) &&
       first?.id &&
       autoOpenedInvoiceItemIdRef.current !== first.id
     ) {
       autoOpenedInvoiceItemIdRef.current = first.id
-      queueMicrotask(() => setProductSelectOpen(first.id))
+      queueMicrotask(() => {
+        setProductSelectOpen('')
+        setCustomerSelectOpen(true)
+      })
     }
   }, [invoice.items, isEditing])
 
@@ -496,12 +512,32 @@ export function InvoicePanel({
 
   const [printReceiptInUrdu, setPrintReceiptInUrdu] = useState(() => getInvoicePrintInUrdu())
   const [showConvertDialog, setShowConvertDialog] = useState(false)
-  const [historyDialog, setHistoryDialog] = useState<{
-    open: boolean
-    productId: string
-    productName: string
-    currentPrice: number
-  }>({ open: false, productId: '', productName: '', currentPrice: 0 })
+  // Rate-history box (customer-rate-history-panel.tsx): which line's rate field it hangs from.
+  const [rateHistory, setRateHistory] = useState<{ itemId: string } | null>(null)
+  const [rateHistoryAutoOpen, setRateHistoryAutoOpen] = useState(readRateHistoryAutoOpen)
+  const rateHistoryCustomerReady = Boolean(invoice.customerId) && invoice.customerId !== 'walk-in'
+  const openRateHistory = useCallback(
+    (itemId: string, { auto }: { auto: boolean }) => {
+      if (!rateHistoryCustomerReady) return
+      if (auto && (!rateHistoryAutoOpen || window.innerWidth < RATE_HISTORY_AUTO_OPEN_MIN_WIDTH)) return
+      setRateHistory((prev) => (prev && prev.itemId === itemId ? prev : { itemId }))
+    },
+    [rateHistoryCustomerReady, rateHistoryAutoOpen],
+  )
+  // Every line's history is fetched up front in one batch, so clicking a rate needs no request.
+  useRateHistoryPrefetch({
+    customerId: rateHistoryCustomerReady ? String(invoice.customerId) : null,
+    lines: invoice.items,
+    excludeInvoiceId: isEditing ? editingInvoiceId : undefined,
+    enabled: rateHistoryCustomerReady,
+  })
+  // Line deleted, customer switched to walk-in, or the form reset after a save → close, so it
+  // can't pop back open later for a stale row.
+  useEffect(() => {
+    if (!rateHistory) return
+    const line = invoice.items.find((i) => i.id === rateHistory.itemId)
+    if (!rateHistoryCustomerReady || !line?.productId) setRateHistory(null)
+  }, [rateHistory, invoice.items, rateHistoryCustomerReady])
   // Print functionality using utility
   const printInvoice = useCallback(async (invoiceData: any, thermalSize: 'thermal80' | 'thermal58' = 'thermal80') => {
     try {
@@ -812,26 +848,36 @@ export function InvoicePanel({
     return response.data.balance || 0
   }
 
+  // Which ledger the balance comes from — the customer's own, or (supplier-as-customer)
+  // the linked supplier's. Keyed on this string, not on the whole `customers` array:
+  // that array gets a new identity whenever any customer is added/patched (quick-create,
+  // list reload), and each of those used to re-download the same balance.
+  const balanceSourceKey = useMemo(() => {
+    const cid = invoice.customerId
+    if (!cid || cid === 'walk-in') return ''
+    const linked = customers.find((c) => (c._id || c.id) === cid)
+    return linked?.isSupplierAccount && linked?.linkedSupplierId ? `s:${linked.linkedSupplierId}` : `c:${cid}`
+  }, [invoice.customerId, customers])
+
   // Fetch customer balance when customer is selected
   useEffect(() => {
-    const fetchCustomerBalance = async () => {
-      if (invoice.customerId && invoice.customerId !== 'walk-in') {
-        setLoadingBalance(true)
-        try {
-          setCustomerBalance(await fetchBalanceForCustomerId(invoice.customerId))
-        } catch (error) {
-          console.error('Failed to fetch customer balance:', error)
-          setCustomerBalance(0)
-        } finally {
-          setLoadingBalance(false)
-        }
-      } else {
-        setCustomerBalance(0)
-      }
+    if (!balanceSourceKey) {
+      setCustomerBalance(0)
+      return
     }
-
-    fetchCustomerBalance()
-  }, [invoice.customerId, customers])
+    let cancelled = false
+    setLoadingBalance(true)
+    fetchBalanceForCustomerId(invoice.customerId as string)
+      .then((balance) => { if (!cancelled) setCustomerBalance(balance) })
+      .catch((error) => {
+        console.error('Failed to fetch customer balance:', error)
+        if (!cancelled) setCustomerBalance(0)
+      })
+      .finally(() => { if (!cancelled) setLoadingBalance(false) })
+    // A quick customer switch drops the slower, now-stale answer instead of showing it.
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [balanceSourceKey])
 
   // Filter customers by name, Urdu name, or phone. Memoized — this component
   // re-renders on nearly every keystroke anywhere in the form (qty, discount, etc.),
@@ -1364,6 +1410,11 @@ export function InvoicePanel({
     addNewRowAndOpenProduct()
   }, [invoice.items, addNewRowAndOpenProduct])
 
+  // After a customer is chosen, go straight to the product search. Waits two frames so
+  // the customer popover's focus-restore to its trigger lands first and can't pull focus
+  // back out of the product search box (same reason focusField waits).
+  const goToProducts = useCallback(() => afterPaint(openProductSelectorForEntry), [openProductSelectorForEntry])
+
   const handleQuantityKeyDown = useCallback((e: React.KeyboardEvent, currentItemId: string) => {
     onEnterAdvance(e, () => focusField(priceInputRefs.current[currentItemId]))
   }, [])
@@ -1422,7 +1473,7 @@ export function InvoicePanel({
           balance: prev.total,
         }))
         setCustomerSearchQuery('')
-        focusInvoiceType()
+        goToProducts()
         return
       }
 
@@ -1483,7 +1534,7 @@ export function InvoicePanel({
     },
     [
       dispatch,
-      focusInvoiceType,
+      goToProducts,
       handleProductSelect,
       invoice.items,
       quickCreateProductItemId,
@@ -1492,10 +1543,6 @@ export function InvoicePanel({
       setProducts,
     ],
   )
-
-  const handleDiscountChange = useCallback((value: string) => {
-    updateDiscount({ value: Math.max(0, parseFloat(value) || 0) })
-  }, [updateDiscount])
 
   // Flip both the overall discount and every line item's discount to the other unit in
   // one click — re-deriving each raw value so the actual Rs discounted stays the same,
@@ -2111,6 +2158,76 @@ export function InvoicePanel({
   //   }
   // }
 
+  // One home for a line's price-update math — used by both price inputs (table + card) and
+  // the rate-history panel's "Use" button.
+  const applyUnitPrice = (itemId: string, newPrice: number) => {
+    const newItems = invoice.items.map(i =>
+      i.id === itemId
+        ? (() => {
+            const selectedProduct = products.find((p) => (p._id || p.id) === i.productId) || { unit: i.unit }
+            const lineValues = calculateInvoiceLineValues({
+              product: selectedProduct,
+              quantity: i.quantity,
+              unit: i.unit,
+              unitPrice: newPrice,
+              cost: i.cost,
+              conversionFactor: i.conversionFactor,
+            })
+
+            if (!lineValues) {
+              return i
+            }
+
+            const net = applyLineDiscount(lineValues, i.discountType, i.discountValue)
+            return {
+              ...i,
+              unitPrice: newPrice,
+              subtotal: net.subtotal,
+              profit: net.profit,
+              discountAmount: net.discountAmount,
+              stockQuantity: lineValues.stockQuantity,
+              conversionFactor: lineValues.conversionFactor,
+            }
+          })()
+        : i
+    )
+
+    if (calculateTotals) {
+      const totals = calculateTotals(newItems, invoice.discountType, invoice.discountValue, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+      setInvoice(prev => ({
+        ...prev,
+        items: newItems,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        discount: totals.discount,
+        total: totals.total,
+        totalProfit: totals.totalProfit,
+        totalCost: totals.totalCost,
+        paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+        balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount,
+      }))
+    } else {
+      const subtotal = newItems.reduce((sum, item) => sum + item.subtotal, 0)
+      const totalCost = newItems.reduce((sum, item) => sum + (item.cost * item.quantity), 0)
+      const totalProfit = newItems.reduce((sum, item) => sum + item.profit, 0)
+      const discountAmount = invoice.discount || 0
+      const taxAmount = ((subtotal - discountAmount) * taxRate) / 100
+      const total = subtotal - discountAmount + taxAmount
+      const balance = total - invoice.paidAmount
+
+      setInvoice(prev => ({
+        ...prev,
+        items: newItems,
+        subtotal,
+        totalCost,
+        totalProfit,
+        tax: taxAmount,
+        total,
+        balance
+      }))
+    }
+  }
+
   // Shared per-line-item content — computed once, then assembled into either a
   // <TableRow> (catalog hidden) or a stacked card (catalog shown, see the
   // showProductCatalog branch below). Product info (name/batches/branch/stock) is
@@ -2164,12 +2281,7 @@ export function InvoicePanel({
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => setHistoryDialog({
-                      open: true,
-                      productId: item.productId,
-                      productName: item.name,
-                      currentPrice: item.unitPrice,
-                    })}
+                    onClick={() => openRateHistory(item.id, { auto: false })}
                     title={t('view_history')}
                     className='h-7 w-7 p-0 flex-shrink-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30'
                   >
@@ -2702,17 +2814,14 @@ export function InvoicePanel({
                             >
                               <Minus className='h-3.5 w-3.5' />
                             </Button>
-                            <Input
+                            <NumericInput
                               ref={(el) => { qtyInputRefs.current[item.id] = el }}
-                              type="number"
-                              min="1"
+                              decimals={false}
+                              min={1}
+                              emptyValue={null}
                               value={item.quantity}
-                              onChange={(e) => {
-                                const qty = parseInt(e.target.value) || 1
-                                updateQuantity(item.id, qty)
-                              }}
+                              onValueChange={(qty) => updateQuantity(item.id, qty)}
                               onKeyDown={(e) => handleQuantityKeyDown(e, item.id)}
-                              onFocus={(e) => e.target.select()}
                               className='h-8 w-10 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] xl:h-9 xl:w-14'
                             />
                             <Button
@@ -2750,72 +2859,12 @@ export function InvoicePanel({
     // Shared by priceControl (table) and priceControlCard (catalog-shown card) below —
     // extracted so this line's price-update math has one home instead of drifting apart
     // as two separate onChange bodies.
-    const updateUnitPrice = (newPrice: number) => {
-      const newItems = invoice.items.map(i =>
-        i.id === item.id
-          ? (() => {
-              const selectedProduct = products.find((p) => (p._id || p.id) === i.productId) || { unit: i.unit }
-              const lineValues = calculateInvoiceLineValues({
-                product: selectedProduct,
-                quantity: i.quantity,
-                unit: i.unit,
-                unitPrice: newPrice,
-                cost: i.cost,
-                conversionFactor: i.conversionFactor,
-              })
-
-              if (!lineValues) {
-                return i
-              }
-
-              const net = applyLineDiscount(lineValues, i.discountType, i.discountValue)
-              return {
-                ...i,
-                unitPrice: newPrice,
-                subtotal: net.subtotal,
-                profit: net.profit,
-                discountAmount: net.discountAmount,
-                stockQuantity: lineValues.stockQuantity,
-                conversionFactor: lineValues.conversionFactor,
-              }
-            })()
-          : i
-      )
-
-      if (calculateTotals) {
-        const totals = calculateTotals(newItems, invoice.discountType, invoice.discountValue, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
-        setInvoice(prev => ({
-          ...prev,
-          items: newItems,
-          subtotal: totals.subtotal,
-          tax: totals.tax,
-          discount: totals.discount,
-          total: totals.total,
-          totalProfit: totals.totalProfit,
-          totalCost: totals.totalCost,
-          paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
-          balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount,
-        }))
-      } else {
-        const subtotal = newItems.reduce((sum, item) => sum + item.subtotal, 0)
-        const totalCost = newItems.reduce((sum, item) => sum + (item.cost * item.quantity), 0)
-        const totalProfit = newItems.reduce((sum, item) => sum + item.profit, 0)
-        const discountAmount = invoice.discount || 0
-        const taxAmount = ((subtotal - discountAmount) * taxRate) / 100
-        const total = subtotal - discountAmount + taxAmount
-        const balance = total - invoice.paidAmount
-
-        setInvoice(prev => ({
-          ...prev,
-          items: newItems,
-          subtotal,
-          totalCost,
-          totalProfit,
-          tax: taxAmount,
-          total,
-          balance
-        }))
-      }
+    const updateUnitPrice = (newPrice: number) => applyUnitPrice(item.id, newPrice)
+    // Opens the rate-history panel as the rate field is clicked/focused (see openRateHistory).
+    const rateHistoryAnchorProps = {
+      [RATE_HISTORY_ANCHOR_ATTR]: '',
+      onFocus: () => openRateHistory(item.id, { auto: true }),
+      onClick: () => openRateHistory(item.id, { auto: true }),
     }
     const priceControl = (
                       !hasProduct ? (
@@ -2823,15 +2872,14 @@ export function InvoicePanel({
                       ) : (
                         <div className='flex w-full items-center rounded-lg border bg-background overflow-hidden'>
                           <span className='px-1.5 h-8 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none xl:px-2 xl:h-9'>{currencySymbol}</span>
-                          <Input
+                          <NumericInput
                             ref={(el) => { priceInputRefs.current[item.id] = el }}
-                            type="text"
-                            inputMode="decimal"
-                            showVoiceInput={false}
-                            value={item.unitPrice > 0 ? item.unitPrice : ''}
+                            min={0}
+                            blankWhenZero
+                            value={item.unitPrice}
                             onKeyDown={(e) => handlePriceKeyDown(e, item.id)}
-                            onChange={(e) => updateUnitPrice(parseFloat(e.target.value) || 0)}
-                            onFocus={(e) => e.target.select()}
+                            onValueChange={updateUnitPrice}
+                            {...rateHistoryAnchorProps}
                             className='h-8 min-w-0 flex-1 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] xl:h-9'
                           />
                         </div>
@@ -2842,13 +2890,11 @@ export function InvoicePanel({
                         <span className='text-xs text-muted-foreground'>—</span>
                       ) : (
                         <div className='inline-flex items-center rounded-lg border bg-background overflow-hidden'>
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            showVoiceInput={false}
-                            value={item.discountValue || ''}
-                            onChange={(e) => updateItemDiscount(item.id, { value: Math.max(0, parseFloat(e.target.value) || 0) })}
-                            onFocus={(e) => e.target.select()}
+                          <NumericInput
+                            min={0}
+                            blankWhenZero
+                            value={item.discountValue || 0}
+                            onValueChange={(value) => updateItemDiscount(item.id, { value })}
                             placeholder='0'
                             className='h-8 w-10 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] xl:h-9 xl:w-14'
                           />
@@ -2895,14 +2941,14 @@ export function InvoicePanel({
           >
             <Minus className='h-3.5 w-3.5' />
           </Button>
-          <Input
+          <NumericInput
             ref={(el) => { qtyInputRefs.current[item.id] = el }}
-            type="number"
-            min="1"
+            decimals={false}
+            min={1}
+            emptyValue={null}
             value={item.quantity}
-            onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 1)}
+            onValueChange={(qty) => updateQuantity(item.id, qty)}
             onKeyDown={(e) => handleQuantityKeyDown(e, item.id)}
-            onFocus={(e) => e.target.select()}
             className='h-7 w-14 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
           />
           <Button
@@ -2936,15 +2982,14 @@ export function InvoicePanel({
         <span className='text-[10px] text-muted-foreground leading-none'>Unit Price</span>
         <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
           <span className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>{currencySymbol}</span>
-          <Input
+          <NumericInput
             ref={(el) => { priceInputRefs.current[item.id] = el }}
-            type="text"
-            inputMode="decimal"
-            showVoiceInput={false}
-            value={item.unitPrice > 0 ? item.unitPrice : ''}
+            min={0}
+            blankWhenZero
+            value={item.unitPrice}
             onKeyDown={(e) => handlePriceKeyDown(e, item.id)}
-            onChange={(e) => updateUnitPrice(parseFloat(e.target.value) || 0)}
-            onFocus={(e) => e.target.select()}
+            onValueChange={updateUnitPrice}
+            {...rateHistoryAnchorProps}
             placeholder='0'
             className='h-7 w-20 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
           />
@@ -2955,13 +3000,11 @@ export function InvoicePanel({
       <div className='flex flex-col gap-0.5'>
         <span className='text-[10px] text-muted-foreground leading-none'>Discount</span>
         <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
-          <Input
-            type="text"
-            inputMode="decimal"
-            showVoiceInput={false}
-            value={item.discountValue || ''}
-            onChange={(e) => updateItemDiscount(item.id, { value: Math.max(0, parseFloat(e.target.value) || 0) })}
-            onFocus={(e) => e.target.select()}
+          <NumericInput
+            min={0}
+            blankWhenZero
+            value={item.discountValue || 0}
+            onValueChange={(value) => updateItemDiscount(item.id, { value })}
             placeholder='0'
             className='h-7 w-14 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
           />
@@ -3069,6 +3112,7 @@ export function InvoicePanel({
         {canPrint && (
           <PrintFormatButton
             onPrint={(paperSize) => handleSaveInvoice(paperSize)}
+            invoiceHeaderStyles
             defaultPaperSize={defaultPaperSize}
             allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
             size='lg'
@@ -3277,14 +3321,6 @@ export function InvoicePanel({
                           ) : (
                             (() => {
                               const selectedCustomer = customers.find(c => (c._id || c.id) === invoice.customerId)
-                              console.log('Customer search:', { 
-                                customerId: invoice.customerId, 
-                                customerName: invoice.customerName,
-                                walkInCustomerName: invoice.walkInCustomerName,
-                                selectedCustomer,
-                                customersLength: customers.length 
-                              })
-                              
                               if (selectedCustomer) {
                                 const urdu = showUrdu ? selectedCustomer.nameUrdu?.trim() : undefined
                                 return (
@@ -3398,7 +3434,7 @@ export function InvoicePanel({
                             setInvoice(prev => ({ ...prev, customerId: 'walk-in' }))
                             setCustomerSelectOpen(false)
                             setCustomerSearchQuery('')
-                            focusInvoiceType()
+                            goToProducts()
                           }}
                           className="flex items-center gap-2 cursor-pointer"
                         >
@@ -3433,7 +3469,7 @@ export function InvoicePanel({
                                 }))
                                 setCustomerSelectOpen(false)
                                 setCustomerSearchQuery('')
-                                focusInvoiceType()
+                                goToProducts()
                               }}
                               className="flex items-center gap-3 cursor-pointer p-3"
                             >
@@ -3971,10 +4007,12 @@ export function InvoicePanel({
             ref={itemsScrollRef}
             className={cn(
               'overflow-y-auto',
-              itemsListMaxHeight === undefined && 'max-h-[460px]',
+              itemsListMaxHeight === undefined ? 'max-h-[460px]' : 'shrink-0',
               (showProductCatalog || isPhone || isItemsAreaNarrow) ? 'space-y-2 p-3' : 'overflow-x-auto',
             )}
-            style={itemsListMaxHeight !== undefined ? { maxHeight: itemsListMaxHeight } : undefined}
+            // Desktop table: a fixed height, not just a cap — the box stays the same size with 1
+            // item or 50 (Apply Discount no longer jumps up and down) and rows scroll inside it.
+            style={itemsListMaxHeight !== undefined ? { height: itemsListMaxHeight } : undefined}
           >
             {invoice.items.length === 0 ? (
               <div className='text-center text-muted-foreground py-8'>
@@ -4087,13 +4125,11 @@ export function InvoicePanel({
               <PopoverContent className='w-64 p-3' align='start'>
                 <Label className='mb-2 block text-xs'>{t('discount') || 'Discount'}</Label>
                 <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
-                  <Input
-                    type='text'
-                    inputMode='decimal'
-                    showVoiceInput={false}
-                    value={invoice.discountValue || ''}
-                    onChange={(e) => handleDiscountChange(e.target.value)}
-                    onFocus={(e) => e.target.select()}
+                  <NumericInput
+                    min={0}
+                    blankWhenZero
+                    value={invoice.discountValue || 0}
+                    onValueChange={(value) => updateDiscount({ value })}
                     placeholder='0'
                     className='h-9 flex-1 border-0 text-right text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
                   />
@@ -4482,6 +4518,7 @@ export function InvoicePanel({
                 {canPrint && (
                   <PrintFormatButton
                     onPrint={(paperSize) => handleSaveInvoice(paperSize)}
+                    invoiceHeaderStyles
                     defaultPaperSize={defaultPaperSize}
                     allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
                     size="lg"
@@ -4639,6 +4676,7 @@ export function InvoicePanel({
             {canPrint && (
               <PrintFormatButton
                 onPrint={(paperSize) => handleSaveInvoice(paperSize)}
+                invoiceHeaderStyles
                 defaultPaperSize={defaultPaperSize}
                 allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
                 size='sm'
@@ -4696,17 +4734,44 @@ export function InvoicePanel({
         }}
       />
 
-      {invoice.customerId && invoice.customerId !== 'walk-in' && (
-        <ProductHistoryDialog
-          open={historyDialog.open}
-          onOpenChange={(open) => setHistoryDialog((prev) => ({ ...prev, open }))}
-          customerId={invoice.customerId}
-          productId={historyDialog.productId}
-          productName={historyDialog.productName}
-          customerName={invoice.customerName || ''}
-          currentPrice={historyDialog.currentPrice}
-        />
-      )}
+      {(() => {
+        const rateLine = rateHistory ? invoice.items.find((i) => i.id === rateHistory.itemId) : undefined
+        if (!rateHistory || !rateLine?.productId || !rateHistoryCustomerReady) return null
+        const rateCustomer = customers.find((c) => String(c._id || c.id) === String(invoice.customerId))
+        const rateCatalogEntry = rateLine.variantId
+          ? sellableCatalog.find((c) => c.variantId === rateLine.variantId)
+          : sellableCatalog.find((c) => c.type === 'product' && c.productId === rateLine.productId)
+        return (
+          <CustomerRateHistoryPanel
+            open
+            onOpenChange={(next) => !next && setRateHistory(null)}
+            anchor={priceInputRefs.current[rateLine.id] ?? null}
+            customer={{
+              id: String(invoice.customerId),
+              name: rateCustomer?.name || invoice.customerName || '',
+              nameUrdu: rateCustomer?.nameUrdu,
+              phone: rateCustomer?.phone,
+              picture: rateCustomer?.picture,
+            }}
+            customerBalance={customerBalance}
+            loadingBalance={loadingBalance}
+            line={rateLine}
+            listPrice={rateCatalogEntry?.price}
+            showCost={showProfitDetails}
+            excludeInvoiceId={isEditing ? editingInvoiceId : undefined}
+            onApplyRate={(rate) => applyUnitPrice(rateLine.id, rate)}
+            autoOpen={rateHistoryAutoOpen}
+            onAutoOpenChange={(value) => {
+              setRateHistoryAutoOpen(value)
+              writeRateHistoryAutoOpen(value)
+            }}
+            onReturnFocus={() => {
+              const input = priceInputRefs.current[rateLine.id]
+              if (input) requestAnimationFrame(() => { input.focus(); input.select() })
+            }}
+          />
+        )
+      })()}
 
       {(() => {
         const dialogItem = invoice.items.find((i) => i.id === serialDialogItemId)

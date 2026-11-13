@@ -35,6 +35,8 @@ interface BaseNavItem {
   excludedSchoolRoles?: string[]
   /** If set, only users whose email is in this list can see this item */
   allowedEmails?: string[]
+  /** Settings → Menu & Pages id of a section (collapsible) — see lib/menu-layout.ts. */
+  menuId?: string
 }
 
 type NavLink = BaseNavItem & {
@@ -51,6 +53,8 @@ type NavItem = NavCollapsible | NavLink
 
 interface NavGroup {
   title: string
+  /** Settings → Menu & Pages id — stays the same when the group is renamed. */
+  id?: string
   items: NavItem[]
   /** When true, the group label becomes a collapsible toggle */
   collapsible?: boolean

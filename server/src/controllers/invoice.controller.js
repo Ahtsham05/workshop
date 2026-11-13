@@ -390,9 +390,21 @@ const convertQuotation = catchAsync(async (req, res) => {
 });
 
 const getCustomerProductHistory = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
   const { customerId, productId } = req.params;
-  const history = await invoiceService.getCustomerProductHistory(customerId, productId);
-  res.send(history);
+  const { variantId, excludeInvoiceId, limit } = req.query;
+  res.send(
+    await invoiceService.getCustomerProductHistory(filter, { customerId, productId, variantId, excludeInvoiceId, limit })
+  );
+});
+
+// Every line's rate history for one customer in one request (New Invoice prefetch).
+const getCustomerRateHistoryBatch = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const { customerId, items, excludeInvoiceId, limit } = req.body;
+  res.send(await invoiceService.getCustomerRateHistoryBatch(filter, { customerId, items, excludeInvoiceId, limit }));
 });
 
 // One row per customer who currently has unconverted pending (goods-handoff) invoices —
@@ -538,5 +550,6 @@ module.exports = {
   generateBillNumber,
   getNextInvoiceNumber,
   getCustomerProductHistory,
+  getCustomerRateHistoryBatch,
   getPendingInvoiceSummaryByCustomer,
 };

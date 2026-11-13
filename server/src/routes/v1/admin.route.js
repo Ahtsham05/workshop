@@ -42,6 +42,14 @@ router.get('/organizations/:orgId/activation', validate(adminActivationValidatio
 router.get('/organizations/:orgId/activation/preview', validate(adminActivationValidation.preview), adminController.previewActivation);
 router.post('/organizations/:orgId/activation', validate(adminActivationValidation.activate), adminController.activatePlan);
 
+// PATCH /v1/admin/organizations/:orgId/business-type — one-click business type switch
+// (org + all its users; logged on the org's sales-lead history)
+router.patch(
+  '/organizations/:orgId/business-type',
+  validate(adminActivationValidation.setBusinessType),
+  adminController.setBusinessType
+);
+
 // GET /v1/admin/organizations/:orgId — single org with billing detail
 router.get('/organizations/:orgId', adminController.getOrganization);
 

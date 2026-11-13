@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NumericInput } from '@/components/ui/numeric-input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
@@ -92,6 +93,11 @@ type Props = {
   itemCount: number
   onCharge: () => void
   charging: boolean
+  /** Controlled open state for the customer picker — lets the page open it at the start of a sale. */
+  customerPickerOpen?: boolean
+  onCustomerPickerOpenChange?: (open: boolean) => void
+  /** Called (instead of returning focus to the picker button) after a customer is chosen or the picker is dismissed with Esc. */
+  onCustomerPickerDone?: () => void
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -127,11 +133,23 @@ export function PaymentPanel({
   itemCount,
   onCharge,
   charging,
+  customerPickerOpen: customerPickerOpenProp,
+  onCustomerPickerOpenChange,
+  onCustomerPickerDone,
 }: Props) {
   const formatMoney = useFormatMoney()
   const currencyMeta = useCurrencyMeta()
   const currencySymbol = currencyMeta.symbol
-  const [customerPickerOpen, setCustomerPickerOpen] = useState(false)
+  const [customerPickerOpenLocal, setCustomerPickerOpenLocal] = useState(false)
+  const customerPickerOpen = customerPickerOpenProp ?? customerPickerOpenLocal
+  const setCustomerPickerOpen = (open: boolean) => {
+    setCustomerPickerOpenLocal(open)
+    onCustomerPickerOpenChange?.(open)
+  }
+  // Set when the picker closes by choosing a customer or Esc — then focus goes on to the
+  // next step (the scan box) rather than back to the picker button. A click elsewhere
+  // leaves focus wherever the click put it.
+  const customerPickerDoneRef = useRef(false)
   const [customerSearch, setCustomerSearch] = useState('')
   const { data: customersRaw } = useGetAllCustomersQuery(undefined)
 
@@ -180,7 +198,20 @@ export function PaymentPanel({
                 <ChevronsUpDown className='h-3.5 w-3.5 shrink-0 opacity-50' />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className='w-[--radix-popover-trigger-width] p-0' align='start'>
+            <PopoverContent
+              className='w-[--radix-popover-trigger-width] p-0'
+              align='start'
+              onEscapeKeyDown={() => {
+                customerPickerDoneRef.current = true
+              }}
+              onCloseAutoFocus={(e) => {
+                if (customerPickerDoneRef.current && onCustomerPickerDone) {
+                  e.preventDefault()
+                  onCustomerPickerDone()
+                }
+                customerPickerDoneRef.current = false
+              }}
+            >
               <Command shouldFilter={false}>
                 <CommandInput
                   placeholder='Search customer by name or phone…'
@@ -192,6 +223,7 @@ export function PaymentPanel({
                     <CommandItem
                       onSelect={() => {
                         onCustomerChange(null)
+                        customerPickerDoneRef.current = true
                         setCustomerPickerOpen(false)
                         setCustomerSearch('')
                       }}
@@ -217,6 +249,7 @@ export function PaymentPanel({
                             value={`${c.name} ${c.phone ?? ''} ${id}`}
                             onSelect={() => {
                               onCustomerChange({ id, name: c.name })
+                              customerPickerDoneRef.current = true
                               setCustomerPickerOpen(false)
                               setCustomerSearch('')
                             }}
@@ -330,11 +363,10 @@ export function PaymentPanel({
           </p>
         )}
         <div className='flex flex-wrap items-center gap-1.5'>
-          <Input
-            type='number'
+          <NumericInput
+            min={0}
             value={paidAmount}
-            onChange={(e) => onPaidAmountChange(Math.max(0, Number(e.target.value) || 0))}
-            onFocus={selectOnFocus}
+            onValueChange={onPaidAmountChange}
             className='h-8 w-24 text-xs font-medium shadow-sm'
           />
           <Button
@@ -383,12 +415,12 @@ export function PaymentPanel({
           <div className='flex items-center gap-1.5 text-xs'>
             <span className='text-muted-foreground'>Discount</span>
             <div className='flex items-center overflow-hidden rounded-lg border bg-background shadow-sm'>
-              <Input
-                type='number'
-                value={discountValue || ''}
+              <NumericInput
+                min={0}
+                blankWhenZero
+                value={discountValue || 0}
                 placeholder='0'
-                onChange={(e) => onDiscountChange({ value: Math.max(0, Number(e.target.value) || 0) })}
-                onFocus={selectOnFocus}
+                onValueChange={(value) => onDiscountChange({ value })}
                 className='h-7 w-16 rounded-none border-0 px-1 text-right text-xs shadow-none focus-visible:ring-0 focus-visible:ring-offset-0'
               />
               <button

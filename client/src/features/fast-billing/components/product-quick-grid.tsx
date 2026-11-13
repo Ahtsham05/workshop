@@ -161,7 +161,8 @@ export function ProductQuickGrid({ products, searchTerm, onSearchTermChange, onR
           ) : viewMode === 'grid' ? (
             <div className='grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4'>
               {filtered.map((product) => {
-                const disabled = product.stockQuantity <= 0
+                const disabled = product.stockQuantity <= 0 && (product.trackImei || product.trackSerial)
+                const outOfStock = product.stockQuantity <= 0
                 const priceStr = formatCurrency(product.price)
                 return (
                   <button
@@ -188,12 +189,12 @@ export function ProductQuickGrid({ products, searchTerm, onSearchTermChange, onR
                           <Package className='h-7 w-7 text-muted-foreground/45' />
                         </div>
                       )}
-                      {!disabled && product.stockQuantity <= 5 && (
+                      {!outOfStock && product.stockQuantity <= 5 && (
                         <Badge variant='destructive' className='absolute right-1.5 top-1.5 z-10 px-1.5 py-0 text-[10px] shadow-sm'>
                           Low stock
                         </Badge>
                       )}
-                      {disabled && (
+                      {outOfStock && (
                         <Badge variant='secondary' className='absolute right-1.5 top-1.5 z-10 px-1.5 py-0 text-[10px] shadow-sm'>
                           Out
                         </Badge>
@@ -217,8 +218,8 @@ export function ProductQuickGrid({ products, searchTerm, onSearchTermChange, onR
               </div>
               <ul className='divide-y divide-border/60'>
                 {filtered.map((product, idx) => {
-                  const disabled = product.stockQuantity <= 0
-                  const lowStock = !disabled && product.stockQuantity <= 5
+                  const disabled = product.stockQuantity <= 0 && (product.trackImei || product.trackSerial)
+                  const lowStock = product.stockQuantity > 0 && product.stockQuantity <= 5
                   return (
                     <li
                       key={product.id}
@@ -247,10 +248,10 @@ export function ProductQuickGrid({ products, searchTerm, onSearchTermChange, onR
                       <span
                         className={cn(
                           'w-16 text-right text-xs font-medium tabular-nums',
-                          disabled ? 'text-destructive' : lowStock ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground',
+                          product.stockQuantity <= 0 ? 'text-destructive' : lowStock ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground',
                         )}
                       >
-                        {disabled ? 'Out' : product.stockQuantity}
+                        {product.stockQuantity <= 0 ? 'Out' : product.stockQuantity}
                       </span>
                       <span className='w-20 text-right font-semibold tabular-nums'>{formatCurrency(product.price)}</span>
                       <Button

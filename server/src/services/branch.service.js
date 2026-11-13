@@ -1,5 +1,6 @@
 const httpStatus = require('http-status');
-const { Branch, Membership, User } = require('../models');
+const { Branch, Membership, User, Organization } = require('../models');
+const { printDefaultsForBusinessType } = require('../config/businessTypes');
 const ApiError = require('../utils/ApiError');
 const entitlementService = require('./entitlement.service');
 
@@ -12,7 +13,12 @@ const entitlementService = require('./entitlement.service');
 const createBranch = async (organizationId, branchData) => {
   // Plan branch limit + read-only check — see entitlement.service#canAddBranch.
   await entitlementService.assertCanAddBranch(organizationId);
-  return Branch.create({ ...branchData, organizationId });
+  // A new branch starts with its business type's print defaults (distributor → A4 +
+  // Distributor layout); anything the caller sent explicitly still wins.
+  const org = await Organization.findById(organizationId).select('businessType').lean();
+  const defaults = printDefaultsForBusinessType(org && org.businessType);
+  const printSettings = defaults ? { ...defaults, ...(branchData.printSettings || {}) } : branchData.printSettings;
+  return Branch.create({ ...branchData, ...(printSettings && { printSettings }), organizationId });
 };
 
 /**

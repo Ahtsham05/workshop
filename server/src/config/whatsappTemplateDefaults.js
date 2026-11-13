@@ -13,7 +13,7 @@ const TEMPLATE_GROUPS = {
 // mobile_shop gets its own group (below) instead of the generic POS/ERP one, so its
 // receipt templates (bill payment, sim sale, repair, etc.) only ever get suggested to
 // mobile shop orgs — not to every retail/pharmacy/factory org on the generic preset.
-const POS_ERP_BUSINESS_TYPES = ['retail', 'wholesale', 'wholesale_retail', 'pharmacy', 'factory'];
+const POS_ERP_BUSINESS_TYPES = ['retail', 'wholesale', 'wholesale_retail', 'pharmacy', 'factory', 'distributor'];
 
 function getTemplateGroup(businessType) {
   if (businessType === 'school' || businessType === 'education') return TEMPLATE_GROUPS.SCHOOL;

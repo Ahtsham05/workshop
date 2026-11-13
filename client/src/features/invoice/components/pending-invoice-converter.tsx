@@ -1056,6 +1056,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                 defaultPaperSize={defaultPaperSize}
                                 allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
                                 onPrint={(paperSize) => printBillGroup(billGroup, paperSize)}
+                                invoiceHeaderStyles
                                 label="Print"
                               />
                             </div>
@@ -1192,6 +1193,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                   <div className="space-y-3">
                     <PrintFormatButton
                       onPrint={(paperSize) => handleCreateCreditInvoice(paperSize)}
+                      invoiceHeaderStyles
                       defaultPaperSize={defaultPaperSize}
                       allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
                       disabled={isCreating}

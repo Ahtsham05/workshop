@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useIsModuleHidden } from '@/hooks/use-hidden-modules'
 import { formatDistanceToNow } from 'date-fns'
 import {
   Phone,
@@ -112,7 +113,14 @@ interface CommunicationLogPanelProps {
   relatedName?: string
 }
 
-export function CommunicationLogPanel({ relatedType, relatedId, relatedName }: CommunicationLogPanelProps) {
+/** Renders nothing for business types that hide the communications module (e.g. distributors). */
+export function CommunicationLogPanel(props: CommunicationLogPanelProps) {
+  const hidden = useIsModuleHidden('communications')
+  if (hidden) return null
+  return <CommunicationLogPanelBody {...props} />
+}
+
+function CommunicationLogPanelBody({ relatedType, relatedId, relatedName }: CommunicationLogPanelProps) {
   const { t } = useLanguage()
   const { data, isLoading } = useGetCommunicationLogsQuery(
     relatedId ? { relatedType, relatedId, limit: 100 } : undefined,

@@ -1,6 +1,7 @@
 const Joi = require('joi');
 const { objectId } = require('./custom.validation');
 const { ADMIN_PAYMENT_METHODS, MANUAL_BILLING_MONTHS } = require('../config/billing');
+const { BUSINESS_TYPES } = require('../config/businessTypes');
 
 const params = Joi.object().keys({ orgId: Joi.string().custom(objectId).required() });
 const planKey = Joi.string().trim().lowercase().max(40).required();
@@ -40,4 +41,12 @@ const activate = {
     .xor('months', 'until'),
 };
 
-module.exports = { getOptions, preview, activate };
+/** One-click business type switch from the admin Organizations list. */
+const setBusinessType = {
+  params,
+  body: Joi.object().keys({
+    businessType: Joi.string().trim().valid(...BUSINESS_TYPES).required(),
+  }),
+};
+
+module.exports = { getOptions, preview, activate, setBusinessType };

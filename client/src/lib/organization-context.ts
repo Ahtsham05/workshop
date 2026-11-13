@@ -1,4 +1,4 @@
-import { normalizeBusinessType } from '@/lib/business-types'
+import { type MenuVisibility, normalizeBusinessType } from '@/lib/business-types'
 
 const ORG_BUSINESS_TYPE_KEY = 'activeOrganizationBusinessType'
 
@@ -23,4 +23,25 @@ export function getActiveOrganizationBusinessType(): string | null {
 export function resolveActiveBusinessType(userBusinessType?: string | null): string {
   const orgType = getActiveOrganizationBusinessType()
   return normalizeBusinessType(orgType || userBusinessType)
+}
+
+const ORG_MENU_VISIBILITY_KEY = 'activeOrganizationMenuVisibility'
+
+/** Cached copy of the org's Settings → Menu & Pages choices, for the synchronous route guard. */
+export function setActiveOrganizationMenuVisibility(value: MenuVisibility | null | undefined) {
+  try {
+    localStorage.setItem(ORG_MENU_VISIBILITY_KEY, JSON.stringify(value ?? {}))
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+export function getActiveOrganizationMenuVisibility(): MenuVisibility {
+  try {
+    const raw = localStorage.getItem(ORG_MENU_VISIBILITY_KEY)
+    const parsed = raw ? JSON.parse(raw) : {}
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
 }

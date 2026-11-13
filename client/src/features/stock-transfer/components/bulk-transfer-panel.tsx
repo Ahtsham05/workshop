@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NumericInput } from '@/components/ui/numeric-input'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
@@ -400,14 +401,12 @@ function QuantityControl({
   return (
     <div className={cn('flex w-full min-w-0 flex-col gap-1', isStart ? 'items-start' : 'items-center')}>
       <div className={cn('flex w-full flex-nowrap items-center gap-1.5', isStart ? 'justify-start' : 'justify-center')}>
-        <Input
+        <NumericInput
           ref={qtyInputRef}
-          type='number'
-          min={1}
-          max={available || undefined}
+          decimals={false}
+          min={0}
           value={line.quantity}
-          onChange={(e) => onQuantityChange(parseInt(e.target.value, 10) || 0)}
-          onFocus={(e) => e.target.select()}
+          onValueChange={onQuantityChange}
           onKeyDown={(e) =>
             onEnterAdvance(e, () => {
               if (needsSerials) {

@@ -30,6 +30,8 @@
  *   besides the label itself.
  */
 
+const { isRouteHiddenForBusinessType } = require('./businessTypes');
+
 const QUICK_LINK_ACTIONS = [
   // ---- General ----
   {
@@ -2273,14 +2275,33 @@ const resolveExcludeBusinessTypes = (action) => {
  *  pick, which needs the exact same gating re-applied on every read, not just at
  *  first-seed time, or a stale pick (business type changed, permission revoked, a
  *  registry gate added after the fact) keeps silently showing forever. */
+/** The action's page as a URL with its query (e.g. /warehouses?tab=reports), for Menu & Pages matching. */
+const actionUrl = (action) => {
+  if (!action.route) return null;
+  const search = action.routeSearch ? new URLSearchParams(action.routeSearch).toString() : '';
+  return search ? `${action.route}?${search}` : action.route;
+};
+
 const matchesScope = (
   action,
-  { permissions, businessType, systemRole, schoolRole, email, bypassPermissions = false, manufacturingEnabled = false, warehousesEnabled = false } = {}
+  {
+    permissions,
+    businessType,
+    systemRole,
+    schoolRole,
+    email,
+    bypassPermissions = false,
+    manufacturingEnabled = false,
+    warehousesEnabled = false,
+    menuVisibility = null,
+  } = {}
 ) => {
   const hasPermission = (key) => bypassPermissions || (!!permissions && permissions[key] === true);
   const hasAny = (keys) => bypassPermissions || keys.some(hasPermission);
 
   if (action.businessTypes && !action.businessTypes.includes(businessType)) return false;
+  // Pages switched off for this org (business-type defaults + Settings → Menu & Pages).
+  if (isRouteHiddenForBusinessType(businessType, actionUrl(action), menuVisibility)) return false;
   const excludeBusinessTypes = resolveExcludeBusinessTypes(action);
   if (excludeBusinessTypes && excludeBusinessTypes.includes(businessType)) return false;
   if (action.systemRole && !action.systemRole.includes(systemRole)) return false;

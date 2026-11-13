@@ -332,10 +332,31 @@ export const invoiceApi = createApi({
     }),
 
     // Get customer product history
-    getCustomerProductHistory: builder.query({
-      query: ({ customerId, productId }) => ({
+    // A customer's previous rates for one product. Keyed ONLY by customer/product/variant
+    // (never qty or price), so editing a line never refetches; each product's history is
+    // kept for 5 minutes, so hopping between rows reuses it. A saved invoice invalidates
+    // 'Invoice', which refreshes whichever history is on screen.
+    getCustomerProductHistory: builder.query<CustomerProductHistory, CustomerProductHistoryArgs>({
+      query: ({ customerId, productId, variantId, excludeInvoiceId, limit }) => ({
         url: `/customer/${customerId}/product/${productId}/history`,
+        params: {
+          ...(variantId ? { variantId } : {}),
+          ...(excludeInvoiceId ? { excludeInvoiceId } : {}),
+          ...(limit ? { limit } : {}),
+        },
       }),
+      providesTags: ['Invoice'],
+      keepUnusedDataFor: 900,
+    }),
+
+    // Every line's rate history for one customer in ONE request. New Invoice prefetches with
+    // it (customer-rate-history-cache.ts) and writes each result into the per-product
+    // getCustomerProductHistory cache, so clicking a rate shows it without a request.
+    // POST to one fixed URL: the browser caches its CORS preflight instead of repeating it
+    // for every product URL.
+    getCustomerRateHistoryBatch: builder.query<CustomerRateHistoryBatchResult, CustomerRateHistoryBatchArgs>({
+      query: (body) => ({ url: '/rate-history', method: 'POST', body }),
+      keepUnusedDataFor: 0,
     }),
 
     // Per-customer pending (goods-handoff) invoice summary — count, total, and
@@ -346,6 +367,73 @@ export const invoiceApi = createApi({
     }),
   }),
 })
+
+export interface CustomerProductHistoryArgs {
+  customerId: string
+  productId: string
+  variantId?: string
+  excludeInvoiceId?: string
+  limit?: number
+}
+
+export interface CustomerRateHistoryBatchArgs {
+  customerId: string
+  items: Array<{ productId: string; variantId?: string }>
+  excludeInvoiceId?: string
+  limit?: number
+}
+
+export interface CustomerRateHistoryBatchResult {
+  results: Array<{ productId: string; variantId: string | null; history: CustomerProductHistory }>
+}
+
+/** One sold line of the product (see invoice.service.js getCustomerProductHistory). */
+export interface CustomerProductRateLine {
+  invoiceId: string
+  invoiceNumber: string
+  billNumber: string
+  date: string
+  type: 'cash' | 'credit' | 'pending'
+  status: string
+  variantId: string | null
+  batchNumber: string
+  quantity: number
+  unit: string
+  /** How many stock units one `unit` is. */
+  conversionFactor: number
+  unitPrice: number
+  discountType: 'fixed' | 'percentage'
+  discountValue: number
+  discountAmount: number
+  /** Rate actually charged per `unit` after the line discount. */
+  netUnitPrice: number
+  netRatePerStockUnit: number
+  subtotal: number
+}
+
+export interface CustomerProductHistory {
+  lines: CustomerProductRateLine[]
+  truncated: boolean
+  stats: {
+    invoiceCount: number
+    lineCount: number
+    totalQuantity: number
+    totalStockQuantity: number
+    totalAmount: number
+    firstDate: string
+    lastDate: string | null
+    avgRatePerStockUnit: number | null
+    minRatePerStockUnit: number | null
+    maxRatePerStockUnit: number | null
+  } | null
+  // Legacy fields (ProductHistoryDialog).
+  history: Array<{ _id: string; invoiceNumber: string; date: string; type: string; quantity: number; unitPrice: number; subtotal: number }>
+  totalQuantity: number
+  lastPrice: number | null
+  avgPrice: number | null
+  minPrice: number | null
+  maxPrice: number | null
+}
 
 /** Stat-card totals for the current invoice-list filter — see getInvoiceListSummary. */
 export interface InvoiceListSummary {

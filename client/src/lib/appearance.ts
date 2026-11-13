@@ -405,6 +405,8 @@ export interface AppearancePreferences {
   branchTint: BranchTintLevel
   themeColor: ThemeColorKey
   customColors: CustomColors
+  /** Whole-app size in percent (100 = standard). See `ZOOM_*` below. */
+  zoom: number
 }
 
 // Matches the 'midnight' preset below on purpose: brand-new accounts (nothing saved
@@ -418,6 +420,50 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
   branchTint: 'subtle',
   themeColor: 'indigo',
   customColors: {},
+  zoom: 100,
+}
+
+/* ── Zoom (app size) ─────────────────────────────────────────────────────────
+ *
+ * Scales the whole interface — text, spacing, buttons, icons, sidebar — like the
+ * browser's own zoom, but saved on the account so it follows the person to every
+ * device, and independent of whatever the browser zoom happens to be.
+ *
+ * Implemented by scaling the root font size, NOT the CSS `zoom` property: every
+ * Tailwind size is rem-based, so one number on <html> resizes it all, while CSS
+ * `zoom` (measured in Chromium) both misplaces every Radix popover/dropdown by the
+ * zoom factor and makes 100svh panels taller than the screen. Fixed `text-[11px]`
+ * sizes are turned into rem at build time (vite.config.ts → pxFontSizeToRem), so
+ * they scale along with everything else. */
+
+export const ZOOM_MIN = 75
+export const ZOOM_MAX = 150
+export const ZOOM_STEP = 5
+
+/** Named stops for the quick-pick buttons and the keyboard shortcuts. */
+export const ZOOM_PRESETS: { value: number; label: string }[] = [
+  { value: 80, label: 'Compact' },
+  { value: 90, label: 'Small' },
+  { value: 100, label: 'Default' },
+  { value: 110, label: 'Comfortable' },
+  { value: 125, label: 'Large' },
+  { value: 140, label: 'Extra large' },
+]
+
+/** Steps that Ctrl+Alt+Plus / Minus walk through (browser-style stops). */
+const ZOOM_STOPS = [75, 80, 90, 100, 110, 125, 140, 150]
+
+export function clampZoom(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return DEFAULT_APPEARANCE.zoom
+  const stepped = Math.round(n / ZOOM_STEP) * ZOOM_STEP
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, stepped))
+}
+
+/** Next stop up/down from `current` (works from any in-between value too). */
+export function stepZoom(current: number, direction: 1 | -1): number {
+  if (direction > 0) return ZOOM_STOPS.find((z) => z > current) ?? ZOOM_MAX
+  return [...ZOOM_STOPS].reverse().find((z) => z < current) ?? ZOOM_MIN
 }
 
 /* ── Themes (presets) ────────────────────────────────────────────────────────
@@ -538,8 +584,10 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
 ]
 
-/** The settings a preset writes, as a patch for `setPreferences`. */
-export function themePresetPreferences(preset: ThemePreset): AppearancePreferences {
+/** The settings a preset writes, as a patch for `setPreferences` (zoom is left alone). */
+export function themePresetPreferences(
+  preset: ThemePreset
+): Omit<AppearancePreferences, 'zoom'> {
   return {
     themeColor: preset.themeColor,
     rowScheme: preset.rowScheme,
@@ -605,6 +653,7 @@ export function normalizeAppearance(
       ? (value!.themeColor as ThemeColorKey)
       : DEFAULT_APPEARANCE.themeColor,
     customColors: normalizeCustomColors(value?.customColors),
+    zoom: value?.zoom == null ? DEFAULT_APPEARANCE.zoom : clampZoom(value.zoom),
   }
 }
 
@@ -757,6 +806,29 @@ export function applyAppearance(
   }
 
   applyCustomSurfaces(root, custom)
+
+  // Percent of the browser's own default size (not px), so someone who enlarged text
+  // in their browser/OS settings keeps that on top. index.css resets it for print.
+  const zoom = clampZoom(prefs.zoom)
+  const changed = root.dataset.appZoom !== String(zoom)
+  root.style.fontSize = zoom === 100 ? '' : `${zoom}%`
+  root.dataset.appZoom = String(zoom)
+  // JS breakpoint hooks (hooks/use-mobile) re-measure on this, like on a resize.
+  if (changed) window.dispatchEvent(new Event(APP_ZOOM_EVENT))
+}
+
+export const APP_ZOOM_EVENT = 'app-zoom-change'
+
+/**
+ * The app zoom as a factor (1 = 100%), read from the live root font size so it also
+ * includes a larger default text size set in the browser. JS that compares the window
+ * width with a breakpoint multiplies the breakpoint by this, the same way the CSS
+ * container queries do.
+ */
+export function appZoomFactor(): number {
+  if (typeof document === 'undefined') return 1
+  const px = parseFloat(getComputedStyle(document.documentElement).fontSize)
+  return Number.isFinite(px) && px > 0 ? px / 16 : 1
 }
 
 /**

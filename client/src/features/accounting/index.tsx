@@ -22,6 +22,8 @@ import { customerApi } from '@/stores/customer.api';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
 import { usePermissions } from '@/context/permission-context';
+import { useMenuVisibility } from '@/hooks/use-hidden-modules';
+import { isPathHiddenForBusiness } from '@/lib/business-types';
 
 export default function AccountingPage() {
   const { t } = useLanguage();
@@ -35,20 +37,31 @@ export default function AccountingPage() {
   // Customer/Supplier Ledger are reachable with just viewCustomers/viewSuppliers, not
   // the full viewAccounting — everything else on this page (Dashboard, Expenses,
   // Recurring, My Account) stays viewAccounting-only.
-  const canDashboard = hasPermission('viewAccounting');
-  const canExpenses = hasPermission('viewAccounting') || hasPermission('manageExpenses');
-  const canCustomers = hasPermission('viewAccounting') || hasPermission('viewCustomers');
-  const canSuppliers = hasPermission('viewAccounting') || hasPermission('viewSuppliers');
-  const canRecurring = hasPermission('viewAccounting') || hasPermission('manageExpenses');
-  const canWallet = hasPermission('viewAccounting') || hasPermission('managePersonalWallet');
-  const defaultTab = canDashboard ? 'dashboard' : canCustomers ? 'customers' : canSuppliers ? 'suppliers' : 'dashboard';
+  // A tab switched off in Settings → Menu & Pages is hidden here too.
+  const { businessType, overrides } = useMenuVisibility();
+  const tabOn = (tab: string) => !isPathHiddenForBusiness(businessType, `/accounting?tab=${tab}`, overrides);
+  const canDashboard = hasPermission('viewAccounting') && tabOn('dashboard');
+  const canExpenses = (hasPermission('viewAccounting') || hasPermission('manageExpenses')) && tabOn('expenses');
+  const canCustomers = (hasPermission('viewAccounting') || hasPermission('viewCustomers')) && tabOn('customers');
+  const canSuppliers = (hasPermission('viewAccounting') || hasPermission('viewSuppliers')) && tabOn('suppliers');
+  const canRecurring = (hasPermission('viewAccounting') || hasPermission('manageExpenses')) && tabOn('recurring');
+  const canWallet = (hasPermission('viewAccounting') || hasPermission('managePersonalWallet')) && tabOn('wallet');
+  const tabAllowed: Record<string, boolean> = {
+    dashboard: canDashboard,
+    expenses: canExpenses,
+    customers: canCustomers,
+    suppliers: canSuppliers,
+    recurring: canRecurring,
+    wallet: canWallet,
+  };
+  const defaultTab = ['dashboard', 'customers', 'suppliers', 'expenses', 'recurring', 'wallet'].find((tab) => tabAllowed[tab]) ?? 'dashboard';
 
   // Determine active tab from search params or default to the first tab this role can see
   const activeTab = searchParams?.tab === 'customer-ledger' && searchParams?.customerId
     ? 'customers'
     : searchParams?.tab === 'supplier-ledger' && searchParams?.supplierId
     ? 'suppliers'
-    : searchParams?.tab && ['dashboard', 'expenses', 'recurring', 'customers', 'suppliers', 'wallet'].includes(searchParams.tab)
+    : searchParams?.tab && tabAllowed[searchParams.tab]
     ? searchParams.tab
     : defaultTab;
 

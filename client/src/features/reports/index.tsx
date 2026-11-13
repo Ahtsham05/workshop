@@ -16,7 +16,7 @@ import { getPlanLabel } from '@/lib/feature-access'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
-import { normalizeBusinessType } from '@/lib/business-types'
+import { isPathHiddenForBusiness, normalizeBusinessType } from '@/lib/business-types'
 import { usePermissions } from '@/context/permission-context'
 import type { PermissionKey } from '@/lib/permission-registry'
 import { SalesReport } from './components/sales-report'
@@ -127,12 +127,14 @@ export default function ReportsPage() {
   const { hasPermission } = usePermissions()
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
-  const isMobileShop = normalizeBusinessType(org?.businessType || user?.businessType) === 'mobile_shop'
+  const businessType = normalizeBusinessType(org?.businessType || user?.businessType)
+  const isMobileShop = businessType === 'mobile_shop'
   const now = new Date()
 
   // RBAC gate — independent of the subscription-plan gate (`canAccess`) applied per-tab below.
   const isTabVisible = (tab: string): boolean => {
     if (MOBILE_SHOP_ONLY_TABS.has(tab) && !isMobileShop) return false
+    if (isPathHiddenForBusiness(businessType, `/reports?tab=${tab}`, org?.menuVisibility)) return false
     if (tab === 'agent-bills' && user?.email !== AGENT_BILL_EMAIL) return false
     const keys = REPORT_TAB_PERMISSIONS[tab] ?? 'viewReports'
     return (Array.isArray(keys) ? keys : [keys]).some((key) => hasPermission(key))

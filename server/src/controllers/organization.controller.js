@@ -130,6 +130,31 @@ const updateOrganization = catchAsync(async (req, res) => {
 });
 
 /**
+ * PATCH /v1/organizations/:orgId/menu-visibility
+ * Settings → Menu & Pages: replaces the org's page on/off map and, when sent, its menu
+ * arrangement (names, order, sub-menu moves, hidden-in-menu pages). Audited.
+ */
+const updateMenuVisibility = catchAsync(async (req, res) => {
+  assertOwnOrganization(req);
+  const before = await organizationService.getOrganizationById(req.params.orgId);
+  if (!before) throw new ApiError(httpStatus.NOT_FOUND, 'Organization not found');
+  const update = { menuVisibility: req.body.menuVisibility };
+  if (req.body.menuLayout) update.menuLayout = req.body.menuLayout;
+  const org = await organizationService.updateOrganization(req.params.orgId, update);
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'update',
+    module: 'Organization',
+    entityId: org._id,
+    entityName: org.name,
+    before: { menuVisibility: before.menuVisibility || {}, menuLayout: before.menuLayout || {} },
+    after: { menuVisibility: org.menuVisibility || {}, menuLayout: org.menuLayout || {} },
+    fields: ['menuVisibility', 'menuLayout'],
+  });
+  res.send(org);
+});
+
+/**
  * GET /v1/organizations/:orgId/demo-data
  * Remaining isDemo records and whether a remove/reset is running right now.
  */
@@ -217,6 +242,7 @@ module.exports = {
   getMyOrganization,
   getOrganization,
   updateOrganization,
+  updateMenuVisibility,
   getDemoDataStatus,
   resetDemoData,
   removeDemoData,

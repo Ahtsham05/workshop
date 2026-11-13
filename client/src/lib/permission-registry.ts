@@ -1,3 +1,4 @@
+import { type MenuVisibility, isPermissionGroupHiddenForBusiness } from '@/lib/business-types';
 export type PermissionKey =
   | 'viewProducts' | 'createProducts' | 'editProducts' | 'deleteProducts' | 'viewCostPrices'
   | 'viewStockTransfers' | 'manageStockTransfers'
@@ -327,6 +328,7 @@ function availableFor(rule: { businessTypes?: string[]; excludeBusinessTypes?: s
 export function getPermissionCategories(
   businessType: string | null,
   extraGroups: string[] = [],
+  menuVisibility?: MenuVisibility | null,
 ): (PermissionCategoryDef & { groupDefs: PermissionGroupDef[] })[] {
   const byId = new Map(PERMISSION_GROUPS.map((g) => [g.id, g]));
   return PERMISSION_CATEGORIES.map((category) => ({
@@ -334,7 +336,10 @@ export function getPermissionCategories(
     groupDefs: category.groups
       .map((id) => byId.get(id))
       .filter((g): g is PermissionGroupDef => !!g)
-      .filter((g) => businessType === null || extraGroups.includes(g.id) || availableFor(PERMISSION_GROUP_AVAILABILITY[g.id], businessType))
+      .filter((g) => businessType === null || extraGroups.includes(g.id) || (
+        availableFor(PERMISSION_GROUP_AVAILABILITY[g.id], businessType)
+        && !isPermissionGroupHiddenForBusiness(businessType, g.id, menuVisibility)
+      ))
       .map((g) => ({
         ...g,
         permissions: businessType === null

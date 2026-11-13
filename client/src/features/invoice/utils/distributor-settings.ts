@@ -5,7 +5,24 @@
  * generator by components/print-colors-sync.tsx (same pattern as print colours).
  */
 
+/**
+ * How the top of a Distributor invoice is branded:
+ *  - logo: business details + centred logo (when one is uploaded)
+ *  - no-logo: nothing about the business — no logo, name, address, contact, licence numbers,
+ *    business policies or Terms · Status · Invoiced By · Tax ID band (an invoice's own Terms &
+ *    Conditions still print). For letterhead paper or invoices sent on someone else's behalf.
+ */
+export type DistributorHeaderStyle = 'logo' | 'no-logo'
+
+export const DISTRIBUTOR_HEADER_STYLES: Array<{ value: DistributorHeaderStyle; label: string; description: string }> = [
+  { value: 'logo', label: 'With logo', description: 'Business name, address and your logo in the centre' },
+  { value: 'no-logo', label: 'Without logo', description: 'No logo, business details, terms band or policies — plain invoice' },
+]
+
+const HEADER_STYLE_VALUES = DISTRIBUTOR_HEADER_STYLES.map((s) => s.value)
+
 export interface DistributorSettings {
+  headerStyle: DistributorHeaderStyle
   stateTaxId: string
   tobaccoLicenseId: string
   resaleCertificateId: string
@@ -19,7 +36,7 @@ export interface DistributorSettings {
 }
 
 /** Licence lines, in the order and with the exact labels they print with. */
-export const DISTRIBUTOR_LICENSE_FIELDS: Array<{ key: keyof DistributorSettings; label: string }> = [
+export const DISTRIBUTOR_LICENSE_FIELDS: Array<{ key: TextKey; label: string }> = [
   { key: 'stateTaxId', label: 'State Tax Id' },
   { key: 'tobaccoLicenseId', label: 'Tobacco License Id' },
   { key: 'resaleCertificateId', label: 'Resale Certificate Id' },
@@ -29,7 +46,7 @@ export const DISTRIBUTOR_LICENSE_FIELDS: Array<{ key: keyof DistributorSettings;
   { key: 'foodDrugLicense', label: 'Food Drug License' },
 ]
 
-export const DISTRIBUTOR_POLICY_FIELDS: Array<{ key: keyof DistributorSettings; label: string }> = [
+export const DISTRIBUTOR_POLICY_FIELDS: Array<{ key: TextKey; label: string }> = [
   { key: 'generalPolicy', label: 'General Policy' },
   { key: 'returnPolicy', label: 'Return Policy' },
   { key: 'buyersGuarantee', label: 'Buyers Guarantee' },
@@ -43,7 +60,9 @@ export const DEFAULT_RETURN_POLICY =
   'be charged a 10% restocking fee. Please also note that any products with manufacturing defects are non-returnable. You may contact the ' +
   'manufacture directly if there is a warranty on the defective product for replacement.'
 
-const LIMITS: Record<keyof DistributorSettings, number> = {
+export type TextKey = Exclude<keyof DistributorSettings, 'headerStyle'>
+
+const LIMITS: Record<TextKey, number> = {
   stateTaxId: 60,
   tobaccoLicenseId: 60,
   resaleCertificateId: 60,
@@ -57,6 +76,7 @@ const LIMITS: Record<keyof DistributorSettings, number> = {
 }
 
 export const EMPTY_DISTRIBUTOR_SETTINGS: DistributorSettings = {
+  headerStyle: 'logo',
   stateTaxId: '',
   tobaccoLicenseId: '',
   resaleCertificateId: '',
@@ -76,10 +96,14 @@ export const EMPTY_DISTRIBUTOR_SETTINGS: DistributorSettings = {
 export function normalizeDistributorSettings(value: Partial<DistributorSettings> | null | undefined): DistributorSettings {
   const out = { ...EMPTY_DISTRIBUTOR_SETTINGS }
   if (!value || typeof value !== 'object') return out
-  for (const key of Object.keys(LIMITS) as Array<keyof DistributorSettings>) {
+  for (const key of Object.keys(LIMITS) as TextKey[]) {
     const raw = value[key]
     if (typeof raw === 'string') out[key] = raw.trim().slice(0, LIMITS[key])
   }
+  // Earlier option names: 'unbranded' became "Without logo"; 'simple' (removed) kept the business details.
+  const raw = value.headerStyle as string
+  const style = raw === 'unbranded' ? 'no-logo' : raw === 'simple' ? 'logo' : raw
+  if (HEADER_STYLE_VALUES.includes(style as DistributorHeaderStyle)) out.headerStyle = style as DistributorHeaderStyle
   return out
 }
 
@@ -87,6 +111,24 @@ let active: DistributorSettings = EMPTY_DISTRIBUTOR_SETTINGS
 
 export function setActiveDistributorSettings(value: Partial<DistributorSettings> | null | undefined) {
   active = normalizeDistributorSettings(value)
+}
+
+/**
+ * A one-off header style for the print just requested from the Print button's dropdown
+ * ("Without logo" etc.). It stays in force for a short window so every document that print
+ * builds (the print window and, on Save & Print, the WhatsApp PDF) uses it; the button's main
+ * click or the next pick replaces it, and it lapses on its own after 45 seconds.
+ */
+let pickedHeaderStyle: { style: DistributorHeaderStyle; until: number } | null = null
+
+export function setNextPrintHeaderStyle(style: DistributorHeaderStyle | null) {
+  pickedHeaderStyle = style ? { style, until: Date.now() + 45_000 } : null
+}
+
+/** The header style picked for the current print, if it is still in force. */
+export function pickedPrintHeaderStyle(): DistributorHeaderStyle | null {
+  if (pickedHeaderStyle && pickedHeaderStyle.until <= Date.now()) pickedHeaderStyle = null
+  return pickedHeaderStyle?.style ?? null
 }
 
 export const getActiveDistributorSettings = () => active

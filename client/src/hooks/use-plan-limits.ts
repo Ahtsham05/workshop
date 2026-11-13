@@ -33,9 +33,11 @@ export interface PlanLimits {
 const cap = (n: number | undefined) => (n == null || n === -1 ? Infinity : n)
 
 export function usePlanLimits(): PlanLimits {
+  // Reuses the shell's billing summary (TrialExpirationBoundary keeps it fresh) unless
+  // it's over a minute old — `true` re-downloaded it on every mount of every consumer.
+  // The server enforces plan limits on create anyway; this only drives UI hints.
   const { data, isLoading, refetch } = useGetBillingSummaryQuery(undefined, {
-    refetchOnMountOrArgChange: true,
-    refetchOnFocus: true,
+    refetchOnMountOrArgChange: 60,
     refetchOnReconnect: true,
   })
 

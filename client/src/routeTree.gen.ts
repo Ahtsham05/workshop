@@ -108,6 +108,7 @@ import { Route as AuthenticatedSettingsSmsGatewayImport } from './routes/_authen
 import { Route as AuthenticatedSettingsPrintingImport } from './routes/_authenticated/settings/printing'
 import { Route as AuthenticatedSettingsOfflineImport } from './routes/_authenticated/settings/offline'
 import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_authenticated/settings/notifications'
+import { Route as AuthenticatedSettingsMenuImport } from './routes/_authenticated/settings/menu'
 import { Route as AuthenticatedSettingsLocalizationImport } from './routes/_authenticated/settings/localization'
 import { Route as AuthenticatedSettingsLocalDatabaseImport } from './routes/_authenticated/settings/local-database'
 import { Route as AuthenticatedSettingsLedgerDiscountsImport } from './routes/_authenticated/settings/ledger-discounts'
@@ -873,6 +874,12 @@ const AuthenticatedSettingsNotificationsRoute =
     path: '/notifications',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+
+const AuthenticatedSettingsMenuRoute = AuthenticatedSettingsMenuImport.update({
+  id: '/menu',
+  path: '/menu',
+  getParentRoute: () => AuthenticatedSettingsRouteRoute,
+} as any)
 
 const AuthenticatedSettingsLocalizationRoute =
   AuthenticatedSettingsLocalizationImport.update({
@@ -2309,6 +2316,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsLocalizationImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/menu': {
+      id: '/_authenticated/settings/menu'
+      path: '/menu'
+      fullPath: '/settings/menu'
+      preLoaderRoute: typeof AuthenticatedSettingsMenuImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/notifications': {
       id: '/_authenticated/settings/notifications'
       path: '/notifications'
@@ -3326,6 +3340,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsLedgerDiscountsRoute: typeof AuthenticatedSettingsLedgerDiscountsRoute
   AuthenticatedSettingsLocalDatabaseRoute: typeof AuthenticatedSettingsLocalDatabaseRoute
   AuthenticatedSettingsLocalizationRoute: typeof AuthenticatedSettingsLocalizationRoute
+  AuthenticatedSettingsMenuRoute: typeof AuthenticatedSettingsMenuRoute
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
   AuthenticatedSettingsOfflineRoute: typeof AuthenticatedSettingsOfflineRoute
   AuthenticatedSettingsPrintingRoute: typeof AuthenticatedSettingsPrintingRoute
@@ -3369,6 +3384,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
       AuthenticatedSettingsLocalDatabaseRoute,
     AuthenticatedSettingsLocalizationRoute:
       AuthenticatedSettingsLocalizationRoute,
+    AuthenticatedSettingsMenuRoute: AuthenticatedSettingsMenuRoute,
     AuthenticatedSettingsNotificationsRoute:
       AuthenticatedSettingsNotificationsRoute,
     AuthenticatedSettingsOfflineRoute: AuthenticatedSettingsOfflineRoute,
@@ -3868,6 +3884,7 @@ export interface FileRoutesByFullPath {
   '/settings/ledger-discounts': typeof AuthenticatedSettingsLedgerDiscountsRoute
   '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/settings/localization': typeof AuthenticatedSettingsLocalizationRoute
+  '/settings/menu': typeof AuthenticatedSettingsMenuRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/offline': typeof AuthenticatedSettingsOfflineRoute
   '/settings/printing': typeof AuthenticatedSettingsPrintingRoute
@@ -4081,6 +4098,7 @@ export interface FileRoutesByTo {
   '/settings/ledger-discounts': typeof AuthenticatedSettingsLedgerDiscountsRoute
   '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/settings/localization': typeof AuthenticatedSettingsLocalizationRoute
+  '/settings/menu': typeof AuthenticatedSettingsMenuRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/offline': typeof AuthenticatedSettingsOfflineRoute
   '/settings/printing': typeof AuthenticatedSettingsPrintingRoute
@@ -4299,6 +4317,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/ledger-discounts': typeof AuthenticatedSettingsLedgerDiscountsRoute
   '/_authenticated/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/_authenticated/settings/localization': typeof AuthenticatedSettingsLocalizationRoute
+  '/_authenticated/settings/menu': typeof AuthenticatedSettingsMenuRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/settings/offline': typeof AuthenticatedSettingsOfflineRoute
   '/_authenticated/settings/printing': typeof AuthenticatedSettingsPrintingRoute
@@ -4519,6 +4538,7 @@ export interface FileRouteTypes {
     | '/settings/ledger-discounts'
     | '/settings/local-database'
     | '/settings/localization'
+    | '/settings/menu'
     | '/settings/notifications'
     | '/settings/offline'
     | '/settings/printing'
@@ -4731,6 +4751,7 @@ export interface FileRouteTypes {
     | '/settings/ledger-discounts'
     | '/settings/local-database'
     | '/settings/localization'
+    | '/settings/menu'
     | '/settings/notifications'
     | '/settings/offline'
     | '/settings/printing'
@@ -4947,6 +4968,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/ledger-discounts'
     | '/_authenticated/settings/local-database'
     | '/_authenticated/settings/localization'
+    | '/_authenticated/settings/menu'
     | '/_authenticated/settings/notifications'
     | '/_authenticated/settings/offline'
     | '/_authenticated/settings/printing'
@@ -5291,6 +5313,7 @@ export const routeTree = rootRoute
         "/_authenticated/settings/ledger-discounts",
         "/_authenticated/settings/local-database",
         "/_authenticated/settings/localization",
+        "/_authenticated/settings/menu",
         "/_authenticated/settings/notifications",
         "/_authenticated/settings/offline",
         "/_authenticated/settings/printing",
@@ -5675,6 +5698,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/settings/localization": {
       "filePath": "_authenticated/settings/localization.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/menu": {
+      "filePath": "_authenticated/settings/menu.tsx",
       "parent": "/_authenticated/settings"
     },
     "/_authenticated/settings/notifications": {

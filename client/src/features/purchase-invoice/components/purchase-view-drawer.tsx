@@ -15,25 +15,38 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { PrintFormatButton } from '@/components/print-format-button'
+import { resolveBranchCompanyName } from '@/utils/branch-company-name'
+import type { PaperSize } from '@/features/invoice/utils/paper-format'
+import { TaxBreakdownSummary } from '@/features/invoice/components/tax-breakdown-summary'
+import { usePurchasePrinter } from '../hooks/use-purchase-printer'
+import { InvoiceDeleteDialog } from './invoice-delete-dialog'
+import { SupplierPaymentDialog } from './supplier-payment-dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { BilingualName } from '@/components/bilingual-name'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import {
   ArrowUpRight,
   Ban,
-  Building2,
+  BookOpen,
   CalendarClock,
+  Copy,
   Edit,
+  FileDown,
   FileText,
   HandCoins,
   Loader2,
   MessageSquare,
+  MoreHorizontal,
   Paperclip,
   Phone,
-  Printer,
-  Receipt,
   Send,
   Trash2,
   User,
@@ -56,9 +69,13 @@ interface PurchaseViewDrawerProps {
   fallbackPurchase?: any
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Defaults to opening /purchase-invoice?editId=…, which works from any screen. */
   onEdit?: (purchase: any) => void
-  onPrint?: (purchase: any) => void
+  /** Defaults to the shared purchase printer (usePurchasePrinter). */
+  onPrint?: (purchase: any, paperSize?: PaperSize) => void
+  /** Defaults to the drawer's own Supplier Payment dialog. */
   onRecordPayment?: (purchase: any) => void
+  onDuplicate?: (purchase: any) => void
   /** Where focus goes when the drawer closes — e.g. back to the list that opened it, since a
    *  drawer opened without a Trigger otherwise drops focus on <body>. */
   onCloseAutoFocus?: (event: Event) => void
@@ -69,9 +86,9 @@ interface PurchaseViewDrawerProps {
 /** Label + value, the drawer's smallest building block. */
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className='space-y-0.5'>
-      <p className='text-[11px] uppercase tracking-wide text-muted-foreground'>{label}</p>
-      <div className='text-sm font-medium'>{children}</div>
+    <div className='min-w-0'>
+      <p className='text-[10px] uppercase tracking-wide text-muted-foreground'>{label}</p>
+      <div className='text-xs font-medium'>{children}</div>
     </div>
   )
 }
@@ -98,6 +115,7 @@ export function PurchaseViewDrawer({
   onEdit,
   onPrint,
   onRecordPayment,
+  onDuplicate,
   onCloseAutoFocus,
   navigation,
 }: PurchaseViewDrawerProps) {
@@ -106,6 +124,10 @@ export function PurchaseViewDrawer({
   const navigate = useNavigate()
   const { hasPermission, hasExplicitPermission } = usePermissions()
   const [comment, setComment] = useState('')
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [paymentOpen, setPaymentOpen] = useState(false)
+  const printer = usePurchasePrinter()
+  const { branchData, orgData } = printer
 
   const { data: fetched, isFetching } = useGetPurchaseByIdQuery(purchaseId, { skip: !purchaseId || !open })
   const purchase = fetched || fallbackPurchase
@@ -165,6 +187,53 @@ export function PurchaseViewDrawer({
     }
   }
 
+  const canEdit = hasExplicitPermission('editPurchases')
+  const canCreate = hasExplicitPermission('createPurchases')
+  const canDelete = hasExplicitPermission('deletePurchases')
+
+  const doPrint = (paperSize?: PaperSize) => {
+    if (!purchase) return
+    if (onPrint) onPrint(purchase, paperSize)
+    else printer.printPurchase(purchase, paperSize)
+  }
+  const doEdit = () => {
+    if (!purchase) return
+    if (onEdit) {
+      onEdit(purchase)
+      return
+    }
+    onOpenChange(false)
+    navigate({ to: '/purchase-invoice', search: { editId: String(purchase.id || purchase._id) } as never })
+  }
+  const doRecordPayment = () => {
+    if (!purchase) return
+    if (onRecordPayment) onRecordPayment(purchase)
+    else setPaymentOpen(true)
+  }
+  const openSupplierLedger = () => {
+    if (!supplierId) return
+    onOpenChange(false)
+    navigate({ to: '/accounting', search: { tab: 'supplier-ledger', supplierId, supplierName: purchase?.supplier?.name } as never })
+  }
+
+  const totalLineDiscount = useMemo(
+    () => (purchase?.items || []).reduce((sum: number, item: any) => sum + Number(item.discountAmount || 0), 0),
+    [purchase]
+  )
+  const totalLineTax = useMemo(
+    () => (purchase?.items || []).reduce((sum: number, item: any) => sum + Number(item.taxAmount || 0), 0),
+    [purchase]
+  )
+  const companyName = resolveBranchCompanyName(orgData?.name, branchData?.name)
+  const companyNameUrdu = branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim()
+  const companyAddress = [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
+    .filter(Boolean)
+    .join(', ')
+  const multiComponentTax =
+    purchase?.taxSystem &&
+    purchase.taxSystem !== 'NONE' &&
+    (taxLines.length > 1 || taxLines.reduce((sum: number, line: any) => sum + (line.components?.length || 0), 0) > 1)
+
   const handleVoidPayment = async (paymentId: string) => {
     try {
       await voidPayment({ id: paymentId, reason: 'Voided from purchase invoice' }).unwrap()
@@ -192,15 +261,16 @@ export function PurchaseViewDrawer({
   }
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side='right' className='flex w-full flex-col gap-0 p-0 sm:max-w-3xl lg:max-w-4xl' onCloseAutoFocus={onCloseAutoFocus}>
+      <SheetContent side='right' className='flex w-full flex-col gap-0 p-0 sm:max-w-3xl lg:max-w-5xl' onCloseAutoFocus={onCloseAutoFocus}>
         {navigation}
         {/* pr-12 keeps the action buttons clear of SheetContent's own close button, which is
             absolutely positioned at top-4 right-4 and would otherwise sit on top of them. */}
-        <SheetHeader className='space-y-3 border-b px-6 py-4 pr-12'>
+        <SheetHeader className='space-y-2 border-b px-4 py-2.5 pr-12'>
           <div className='flex flex-wrap items-start justify-between gap-3'>
             <div className='min-w-0'>
-              <SheetTitle className='flex flex-wrap items-center gap-x-2 gap-y-1 text-xl'>
+              <SheetTitle className='flex flex-wrap items-center gap-x-2 gap-y-1 text-base'>
                 {purchase.invoiceNumber}
                 {purchase.supplier?.name && (
                   <span className='text-sm font-normal text-muted-foreground'>· {purchase.supplier.name}</span>
@@ -208,7 +278,7 @@ export function PurchaseViewDrawer({
                 <WarehouseTag warehouseId={purchase.warehouseId} showDefault />
                 {isFetching && <Loader2 className='h-4 w-4 animate-spin text-muted-foreground' />}
               </SheetTitle>
-              <SheetDescription className='flex flex-wrap items-center gap-2 pt-1'>
+              <SheetDescription className='flex flex-wrap items-center gap-1.5'>
                 <Badge variant='outline' className={statusMeta.className}>
                   {t(statusMeta.label)}
                 </Badge>
@@ -229,38 +299,74 @@ export function PurchaseViewDrawer({
             </div>
 
             <div className='flex flex-wrap items-center gap-2'>
-              {settlement.remainingAmount > 0.001 && onRecordPayment && hasExplicitPermission('createPurchases') && (
-                <Button size='sm' onClick={() => onRecordPayment(purchase)}>
+              {settlement.remainingAmount > 0.001 && canCreate && (
+                <Button size='sm' variant='outline' onClick={doRecordPayment}>
                   <HandCoins className='mr-2 h-4 w-4' />
                   {t('Record Payment')}
                 </Button>
               )}
-              {onPrint && (
-                <Button size='sm' variant='outline' onClick={() => onPrint(purchase)}>
-                  <Printer className='mr-2 h-4 w-4' />
-                  {t('Print')}
-                </Button>
-              )}
-              {onEdit && hasExplicitPermission('editPurchases') && (
-                <Button size='sm' variant='outline' onClick={() => onEdit(purchase)}>
+              {canEdit && (
+                <Button size='sm' variant='outline' onClick={doEdit}>
                   <Edit className='mr-2 h-4 w-4' />
                   {t('Edit')}
                 </Button>
               )}
+              <PrintFormatButton
+                size='sm'
+                variant='default'
+                label={t('Print') || 'Print'}
+                defaultPaperSize={printer.defaultPaperSize}
+                allowedFormats={['thermal80', 'thermal58', 'a4', 'a5']}
+                onPrint={(paperSize) => doPrint(paperSize)}
+              />
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <Button size='icon' variant='outline' className='h-8 w-8' aria-label={t('More actions') || 'More actions'}>
+                    <MoreHorizontal className='h-4 w-4' />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align='end' className='w-52'>
+                  <DropdownMenuItem onSelect={() => doPrint('a4')}>
+                    <FileDown className='mr-2 h-4 w-4' />
+                    {t('Download PDF')}
+                  </DropdownMenuItem>
+                  {canCreate && onDuplicate && (
+                    <DropdownMenuItem onSelect={() => onDuplicate(purchase)}>
+                      <Copy className='mr-2 h-4 w-4' />
+                      {t('Duplicate')}
+                    </DropdownMenuItem>
+                  )}
+                  {supplierId && (
+                    <DropdownMenuItem onSelect={openSupplierLedger}>
+                      <BookOpen className='mr-2 h-4 w-4' />
+                      {t('Supplier Ledger') || 'Supplier ledger'}
+                    </DropdownMenuItem>
+                  )}
+                  {canDelete && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className='text-destructive focus:text-destructive' onSelect={() => setDeleteOpen(true)}>
+                        <Trash2 className='mr-2 h-4 w-4' />
+                        {t('Delete')}
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
           {/* Money at a glance */}
           <div className='grid grid-cols-3 gap-2'>
-            <div className='rounded-lg border bg-muted/40 p-3'>
+            <div className='rounded-md border bg-muted/40 px-2.5 py-1.5'>
               <p className='text-[11px] uppercase tracking-wide text-muted-foreground'>{t('Invoice Total')}</p>
-              <p className='text-lg font-semibold tabular-nums'>{formatMoney(settlement.totalAmount)}</p>
+              <p className='text-base font-semibold tabular-nums'>{formatMoney(settlement.totalAmount)}</p>
             </div>
-            <div className='rounded-lg border bg-muted/40 p-3'>
+            <div className='rounded-md border bg-muted/40 px-2.5 py-1.5'>
               <p className='text-[11px] uppercase tracking-wide text-muted-foreground'>{t('Paid')}</p>
               <p
                 className={cn(
-                  'text-lg font-semibold tabular-nums',
+                  'text-base font-semibold tabular-nums',
                   // Nothing paid is not good news — only colour it once money has actually landed.
                   settlement.settledAmount > 0.001
                     ? 'text-emerald-600 dark:text-emerald-400'
@@ -270,11 +376,11 @@ export function PurchaseViewDrawer({
                 {formatMoney(settlement.settledAmount)}
               </p>
             </div>
-            <div className='rounded-lg border bg-muted/40 p-3'>
+            <div className='rounded-md border bg-muted/40 px-2.5 py-1.5'>
               <p className='text-[11px] uppercase tracking-wide text-muted-foreground'>{t('Remaining')}</p>
               <p
                 className={cn(
-                  'text-lg font-semibold tabular-nums',
+                  'text-base font-semibold tabular-nums',
                   settlement.remainingAmount > 0.001 ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground'
                 )}
               >
@@ -311,7 +417,7 @@ export function PurchaseViewDrawer({
         </SheetHeader>
 
         <Tabs defaultValue='overview' className='flex min-h-0 flex-1 flex-col'>
-          <TabsList className='mx-6 mt-3 grid w-auto grid-cols-4'>
+          <TabsList className='mx-4 mt-2 grid h-8 w-auto grid-cols-4'>
             <TabsTrigger value='overview'>{t('Overview')}</TabsTrigger>
             <TabsTrigger value='payments'>
               {t('Payments')}
@@ -328,217 +434,275 @@ export function PurchaseViewDrawer({
 
           <ScrollArea className='min-h-0 flex-1'>
             {/* ---------------------------------------------------------------- Overview */}
-            <TabsContent value='overview' className='m-0 space-y-6 p-6'>
-              <section className='space-y-3'>
-                <SectionTitle icon={Building2}>{t('Supplier Details')}</SectionTitle>
-                <div className='flex items-start gap-3 rounded-lg border p-4'>
-                  <ContactPhotoCell
-                    picture={purchase.supplier?.picture}
-                    name={purchase.supplier?.name || 'N/A'}
-                    className='h-12 w-12 shrink-0'
-                  />
-                  <div className='min-w-0 flex-1 space-y-1'>
-                    <BilingualName primary={purchase.supplier?.name || 'N/A'} secondary={purchase.supplier?.nameUrdu} />
-                    <div className='flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground'>
-                      {purchase.supplier?.phone && (
-                        <span className='flex items-center gap-1'>
-                          <Phone className='h-3 w-3' />
-                          {purchase.supplier.phone}
-                        </span>
+            <TabsContent value='overview' className='m-0 bg-muted/30 p-3'>
+              {/* The purchase laid out like its printed copy: company header, supplier,
+                  lines, totals, notes. */}
+              <article className='overflow-hidden rounded-lg border bg-card shadow-sm'>
+                <div className='h-1.5 bg-primary' />
+                <div className='space-y-3 p-3 sm:p-4'>
+                  <header className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
+                    <div className='flex min-w-0 items-start gap-3'>
+                      {orgData?.logo?.url && (
+                        <img src={orgData.logo.url} alt='' className='h-10 w-10 shrink-0 rounded-md border bg-white object-contain p-1' />
                       )}
-                      {purchase.supplier?.address && <span>{purchase.supplier.address}</span>}
-                      {purchase.supplier?.taxNumber && (
-                        <span>
-                          {t('Tax No')}: {purchase.supplier.taxNumber}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {supplierId && (
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      className='shrink-0'
-                      onClick={() =>
-                        navigate({
-                          to: '/accounting',
-                          search: { tab: 'supplier-ledger', supplierId, supplierName: purchase.supplier?.name },
-                        })
-                      }
-                    >
-                      {t('View ledger')}
-                      <ArrowUpRight className='ml-1 h-3.5 w-3.5' />
-                    </Button>
-                  )}
-                </div>
-              </section>
-
-              <section className='space-y-3'>
-                <SectionTitle icon={FileText}>{t('Invoice Information')}</SectionTitle>
-                <div className='grid grid-cols-2 gap-4 rounded-lg border p-4 sm:grid-cols-3'>
-                  <Field label={t('Invoice Number')}>{purchase.invoiceNumber}</Field>
-                  <Field label={t('Vendor Bill No')}>
-                    {purchase.vendorBillNumber || <NotSet label={t('Not set')} />}
-                  </Field>
-                  <Field label={t('Purchase Date')}>
-                    {formatAppDate(new Date(purchase.purchaseDate || purchase.createdAt))}
-                  </Field>
-                  <Field label={t('Due Date')}>
-                    {purchase.dueDate ? (
-                      <span className='flex flex-wrap items-center gap-1.5'>
-                        {formatAppDate(new Date(purchase.dueDate))}
-                        {dueContext && <span className='text-xs font-normal text-muted-foreground'>({dueContext})</span>}
-                      </span>
-                    ) : (
-                      <NotSet label={t('No due date')} />
-                    )}
-                  </Field>
-                  <Field label={t('Payment Type')}>{paymentTypeLabel}</Field>
-                  <Field label={t('Invoice Status')}>
-                    <Badge variant={purchase.status ? 'default' : 'secondary'}>
-                      {purchase.status ? t('Completed') : t('Pending')}
-                    </Badge>
-                  </Field>
-                  <Field label={t('created_by') || 'Created By'}>
-                    {(typeof purchase.createdBy === 'object' && purchase.createdBy?.name) || <NotSet label={t('Unknown')} />}
-                  </Field>
-                  <Field label={t('Last Updated')}>
-                    {purchase.updatedAt ? (
-                      formatAppDateTime(new Date(purchase.updatedAt))
-                    ) : (
-                      <NotSet label={t('Never edited')} />
-                    )}
-                  </Field>
-                  <Field label={t('Items')}>{purchase.items?.length || 0}</Field>
-                </div>
-                {purchase.notes && (
-                  <div className='rounded-lg border bg-muted/30 p-3 text-sm'>
-                    <p className='mb-1 text-[11px] uppercase tracking-wide text-muted-foreground'>{t('Notes')}</p>
-                    {purchase.notes}
-                  </div>
-                )}
-              </section>
-
-              <section className='space-y-3'>
-                <SectionTitle icon={Receipt}>{t('Purchased Items')}</SectionTitle>
-                <div className='overflow-x-auto rounded-lg border'>
-                  <Table className='min-w-[520px]'>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{t('Product')}</TableHead>
-                        <TableHead className='text-right'>{t('Quantity')}</TableHead>
-                        {/* NOT t('unit_price') — that resolves to "Unit Sale Price", which is
-                            the sales vocabulary. On a purchase this is what we paid. */}
-                        <TableHead className='text-right'>{t('Unit Cost')}</TableHead>
-                        <TableHead className='text-right'>{t('Total')}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(purchase.items || []).map((item: any, index: number) => {
-                        const price = item.priceAtPurchase || item.price || item?.product?.cost || 0
-                        const gross = (item.quantity || 0) * price
-                        const discountAmount = Number(item.discountAmount || 0)
-                        const total = item.total ?? gross - discountAmount
-                        return (
-                          <TableRow key={index}>
-                            <TableCell>
-                              <BilingualName
-                                primary={getPurchaseItemDisplayName(item)}
-                                secondary={item.product?.nameUrdu}
-                                primaryClassName='text-sm font-medium'
-                              />
-                              <div className='flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground'>
-                                {getPurchaseItemBarcode(item) && <span>{getPurchaseItemBarcode(item)}</span>}
-                                {item.batchNumber && <span className='text-blue-600 dark:text-blue-400'>Batch: {item.batchNumber}</span>}
-                                {item.imeis?.length > 0 && <span>IMEI: {formatImeiEntries(item.imeis)}</span>}
-                              </div>
-                            </TableCell>
-                            <TableCell className='text-right tabular-nums'>
-                              {item.quantity || 0} {item.unit || ''}
-                            </TableCell>
-                            <TableCell className='text-right tabular-nums'>{formatMoney(Number(price))}</TableCell>
-                            <TableCell className='text-right tabular-nums'>
-                              {discountAmount > 0 && (
-                                <span className='mr-1 text-xs text-muted-foreground line-through'>{formatMoney(gross)}</span>
-                              )}
-                              {formatMoney(Number(total))}
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                    {(purchase.items || []).length > 1 && (
-                      <TableFooter>
-                        <TableRow>
-                          <TableCell className='font-medium'>
-                            {purchase.items.length} {t('line(s)')}
-                          </TableCell>
-                          <TableCell className='text-right font-medium tabular-nums'>{totalQuantity}</TableCell>
-                          <TableCell />
-                          <TableCell className='text-right font-medium tabular-nums'>{formatMoney(subtotal)}</TableCell>
-                        </TableRow>
-                      </TableFooter>
-                    )}
-                  </Table>
-                </div>
-              </section>
-
-              <section className='space-y-3'>
-                <SectionTitle icon={Receipt}>{t('Invoice Summary')}</SectionTitle>
-                <div className='space-y-2 rounded-lg border p-4 text-sm'>
-                  <div className='flex justify-between'>
-                    <span className='text-muted-foreground'>{t('Subtotal')}</span>
-                    <span className='tabular-nums'>{formatMoney(subtotal)}</span>
-                  </div>
-                  {Number(purchase.discount || 0) > 0 && (
-                    <div className='flex justify-between'>
-                      <span className='text-muted-foreground'>{t('Discount')}</span>
-                      <span className='tabular-nums text-emerald-600 dark:text-emerald-400'>
-                        -{formatMoney(Number(purchase.discount))}
-                      </span>
-                    </div>
-                  )}
-                  {taxLines.length > 0 ? (
-                    taxLines.map((line: any, index: number) => (
-                      <div key={index} className='flex justify-between'>
-                        <span className='text-muted-foreground'>
-                          {line.name || line.taxName || t('Tax')}
-                          {line.rate != null ? ` (${line.rate}%)` : ''}
-                        </span>
-                        <span className='tabular-nums'>{formatMoney(Number(line.amount || 0))}</span>
+                      <div className='min-w-0 space-y-0.5'>
+                        <BilingualName
+                          primary={companyName || '—'}
+                          secondary={companyNameUrdu}
+                          primaryClassName='text-base font-bold leading-tight'
+                        />
+                        {companyAddress && <p className='text-xs text-muted-foreground'>{companyAddress}</p>}
+                        {(branchData?.phone || branchData?.email) && (
+                          <p className='text-xs text-muted-foreground'>
+                            {[branchData?.phone, branchData?.email].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
                       </div>
-                    ))
-                  ) : (
-                    <div className='flex justify-between'>
-                      <span className='text-muted-foreground'>{t('Input tax')}</span>
-                      <span className='tabular-nums'>{formatMoney(Number(purchase.tax || 0))}</span>
                     </div>
-                  )}
-                  <Separator />
-                  <div className='flex justify-between text-base font-semibold'>
-                    <span>{t('Total Amount')}</span>
-                    <span className='tabular-nums'>{formatMoney(Number(purchase.totalAmount || 0))}</span>
-                  </div>
-                  <div className='flex justify-between'>
-                    <span className='text-muted-foreground'>{t('Paid')}</span>
-                    <span className='tabular-nums text-emerald-600 dark:text-emerald-400'>
-                      -{formatMoney(settlement.settledAmount)}
-                    </span>
-                  </div>
-                  <Separator />
-                  <div className='flex justify-between text-base font-semibold'>
-                    <span>{t('Remaining')}</span>
-                    <span
-                      className={cn(
-                        'tabular-nums',
-                        settlement.remainingAmount > 0.001 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+                    <div className='shrink-0 sm:text-right'>
+                      <p className='text-base font-bold uppercase leading-tight tracking-wider text-primary'>{t('Purchase Invoice')}</p>
+                      <dl className='mt-1 grid grid-cols-[auto_auto] gap-x-3 text-xs sm:justify-end'>
+                        <dt className='text-muted-foreground'>{t('Invoice No') || 'Invoice No'}</dt>
+                        <dd className='font-mono font-semibold'>{purchase.invoiceNumber}</dd>
+                        {purchase.vendorBillNumber && (
+                          <>
+                            <dt className='text-muted-foreground'>{t('Vendor Bill No')}</dt>
+                            <dd className='font-mono font-medium'>{purchase.vendorBillNumber}</dd>
+                          </>
+                        )}
+                        <dt className='text-muted-foreground'>{t('Purchase Date')}</dt>
+                        <dd className='font-medium'>{formatAppDate(new Date(purchase.purchaseDate || purchase.createdAt))}</dd>
+                        {purchase.dueDate && (
+                          <>
+                            <dt className='text-muted-foreground'>{t('Due Date')}</dt>
+                            <dd
+                              className={cn(
+                                'font-medium',
+                                settlement.dueStatus === 'overdue' && 'text-rose-600 dark:text-rose-400'
+                              )}
+                            >
+                              {formatAppDate(new Date(purchase.dueDate))}
+                            </dd>
+                          </>
+                        )}
+                      </dl>
+                    </div>
+                  </header>
+
+                  <section className='grid gap-3 sm:grid-cols-2'>
+                    <div className='rounded-md border bg-muted/30 px-3 py-2'>
+                      <p className='mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground'>
+                        {t('Supplier') || 'Supplier'}
+                      </p>
+                      <div className='flex items-start gap-3'>
+                        <ContactPhotoCell
+                          picture={purchase.supplier?.picture}
+                          name={purchase.supplier?.name || 'N/A'}
+                          className='h-10 w-10 shrink-0'
+                        />
+                        <div className='min-w-0 flex-1 space-y-0.5'>
+                          <BilingualName
+                            primary={purchase.supplier?.name || 'N/A'}
+                            secondary={purchase.supplier?.nameUrdu}
+                            primaryClassName='font-semibold'
+                          />
+                          <div className='space-y-0.5 text-xs text-muted-foreground'>
+                            {purchase.supplier?.phone && (
+                              <p className='flex items-center gap-1'>
+                                <Phone className='h-3 w-3' />
+                                {purchase.supplier.phone}
+                              </p>
+                            )}
+                            {purchase.supplier?.address && <p>{purchase.supplier.address}</p>}
+                            {purchase.supplier?.taxNumber && (
+                              <p>
+                                {t('Tax No')}: {purchase.supplier.taxNumber}
+                              </p>
+                            )}
+                          </div>
+                          {supplierId && (
+                            <Button variant='link' size='sm' className='h-auto p-0 text-xs' onClick={openSupplierLedger}>
+                              {t('View ledger')}
+                              <ArrowUpRight className='ml-0.5 h-3 w-3' />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className='grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-md border px-3 py-2'>
+                      <Field label={t('Payment Type')}>{paymentTypeLabel}</Field>
+                      <Field label={t('Invoice Status')}>
+                        <Badge variant={purchase.status ? 'default' : 'secondary'}>
+                          {purchase.status ? t('Completed') : t('Pending')}
+                        </Badge>
+                      </Field>
+                      <Field label={t('created_by') || 'Created By'}>
+                        {(typeof purchase.createdBy === 'object' && purchase.createdBy?.name) || <NotSet label={t('Unknown')} />}
+                      </Field>
+                      <Field label={t('Last Updated')}>
+                        {purchase.updatedAt ? formatAppDateTime(new Date(purchase.updatedAt)) : <NotSet label={t('Never edited')} />}
+                      </Field>
+                      <Field label={t('Items')}>
+                        {purchase.items?.length || 0} · {t('Qty') || 'Qty'} {totalQuantity}
+                      </Field>
+                      {dueContext && <Field label={t('Due')}>{dueContext}</Field>}
+                    </div>
+                  </section>
+
+                  <section className='overflow-x-auto rounded-md border'>
+                    <table className='w-full min-w-[560px] text-[13px]'>
+                      <thead>
+                        <tr className='bg-muted/60 text-left text-[11px] uppercase tracking-wide text-muted-foreground'>
+                          <th className='w-10 px-3 py-1.5 font-semibold'>#</th>
+                          <th className='px-3 py-1.5 font-semibold'>{t('Product')}</th>
+                          <th className='px-3 py-1.5 text-right font-semibold'>{t('Quantity')}</th>
+                          {/* NOT t('unit_price') — that resolves to "Unit Sale Price", which is
+                              the sales vocabulary. On a purchase this is what we paid. */}
+                          <th className='px-3 py-1.5 text-right font-semibold'>{t('Unit Cost')}</th>
+                          {totalLineDiscount > 0.001 && <th className='px-3 py-1.5 text-right font-semibold'>{t('Disc.') || 'Disc.'}</th>}
+                          {totalLineTax > 0.001 && <th className='px-3 py-1.5 text-right font-semibold'>{t('Tax')}</th>}
+                          <th className='px-3 py-1.5 text-right font-semibold'>{t('Total')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className='divide-y'>
+                        {(purchase.items || []).map((item: any, index: number) => {
+                          const price = item.priceAtPurchase || item.price || item?.product?.cost || 0
+                          const gross = (item.quantity || 0) * price
+                          const discountAmount = Number(item.discountAmount || 0)
+                          const total = item.total ?? gross - discountAmount
+                          const details = [
+                            getPurchaseItemBarcode(item),
+                            item.batchNumber && `Batch: ${item.batchNumber}`,
+                            item.expiryDate && `Exp: ${formatAppDate(new Date(item.expiryDate))}`,
+                            Number(item.sellingPriceAtPurchase) > 0 && `${t('Sale price') || 'Sale price'}: ${formatMoney(Number(item.sellingPriceAtPurchase))}`,
+                          ].filter(Boolean)
+                          return (
+                            <tr key={index} className='align-top'>
+                              <td className='px-3 py-1.5 tabular-nums text-muted-foreground'>{index + 1}</td>
+                              <td className='px-3 py-1.5'>
+                                <BilingualName
+                                  primary={getPurchaseItemDisplayName(item)}
+                                  secondary={item.product?.nameUrdu}
+                                  primaryClassName='font-medium'
+                                  secondaryClassName='text-xs'
+                                />
+                                {details.length > 0 && <p className='text-xs text-muted-foreground'>{details.join(' · ')}</p>}
+                                {item.imeis?.length > 0 && (
+                                  <p className='text-xs text-muted-foreground'>IMEI: {formatImeiEntries(item.imeis)}</p>
+                                )}
+                              </td>
+                              <td className='whitespace-nowrap px-3 py-1.5 text-right tabular-nums'>
+                                {item.quantity || 0} <span className='text-xs text-muted-foreground'>{item.unit || ''}</span>
+                              </td>
+                              <td className='whitespace-nowrap px-3 py-1.5 text-right tabular-nums'>{formatMoney(Number(price))}</td>
+                              {totalLineDiscount > 0.001 && (
+                                <td className='whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400'>
+                                  {discountAmount > 0 ? `−${formatMoney(discountAmount)}` : <span className='text-muted-foreground'>—</span>}
+                                </td>
+                              )}
+                              {totalLineTax > 0.001 && (
+                                <td className='whitespace-nowrap px-3 py-1.5 text-right tabular-nums'>
+                                  {Number(item.taxAmount) > 0 ? formatMoney(Number(item.taxAmount)) : <span className='text-muted-foreground'>—</span>}
+                                </td>
+                              )}
+                              <td className='whitespace-nowrap px-3 py-1.5 text-right font-medium tabular-nums'>{formatMoney(Number(total))}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                      {(purchase.items || []).length > 0 && (
+                        <tfoot>
+                          <tr className='border-t bg-muted/40 font-medium'>
+                            <td className='px-3 py-2' />
+                            <td className='px-3 py-2 text-muted-foreground'>
+                              {purchase.items.length} {t('line(s)')}
+                            </td>
+                            <td className='px-3 py-2 text-right tabular-nums'>{totalQuantity}</td>
+                            <td className='px-3 py-2' />
+                            {totalLineDiscount > 0.001 && (
+                              <td className='px-3 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400'>
+                                −{formatMoney(totalLineDiscount)}
+                              </td>
+                            )}
+                            {totalLineTax > 0.001 && <td className='px-3 py-2 text-right tabular-nums'>{formatMoney(totalLineTax)}</td>}
+                            <td className='px-3 py-2 text-right tabular-nums'>{formatMoney(subtotal)}</td>
+                          </tr>
+                        </tfoot>
                       )}
-                    >
-                      {formatMoney(Math.max(0, settlement.remainingAmount))}
-                    </span>
-                  </div>
+                    </table>
+                  </section>
+
+                  <section className='grid gap-4 sm:grid-cols-[1fr_minmax(0,280px)]'>
+                    <div className='order-2 space-y-4 sm:order-1'>
+                      {purchase.notes && (
+                        <div>
+                          <p className='mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground'>{t('Notes')}</p>
+                          <p className='whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-sm'>{purchase.notes}</p>
+                        </div>
+                      )}
+                      <div
+                        className={cn(
+                          'inline-flex -rotate-3 select-none items-center rounded-md border-2 px-3 py-1 text-sm font-extrabold uppercase tracking-[0.2em] opacity-80',
+                          statusMeta.className
+                        )}
+                        aria-hidden
+                      >
+                        {t(statusMeta.label)}
+                      </div>
+                    </div>
+
+                    <div className='order-1 text-[13px] sm:order-2'>
+                      <div className='flex justify-between py-0.5'>
+                        <span className='text-muted-foreground'>{t('Subtotal')}</span>
+                        <span className='tabular-nums'>{formatMoney(subtotal)}</span>
+                      </div>
+                      {Number(purchase.discount || 0) > 0 && (
+                        <div className='flex justify-between py-0.5'>
+                          <span className='text-muted-foreground'>
+                            {t('Discount')}
+                            {purchase.discountType === 'percentage' && Number(purchase.discountValue) > 0 ? ` (${purchase.discountValue}%)` : ''}
+                          </span>
+                          <span className='tabular-nums text-emerald-600 dark:text-emerald-400'>−{formatMoney(Number(purchase.discount))}</span>
+                        </div>
+                      )}
+                      {Number(purchase.tax || 0) > 0 && (
+                        <div className='flex justify-between py-0.5'>
+                          <span className='text-muted-foreground'>
+                            {t('Input tax')}
+                            {purchase.taxInclusive ? ` (${t('inclusive') || 'inclusive'})` : ''}
+                          </span>
+                          <span className='tabular-nums'>{formatMoney(Number(purchase.tax))}</span>
+                        </div>
+                      )}
+                      {multiComponentTax && (
+                        <div className='py-1'>
+                          <TaxBreakdownSummary taxLines={taxLines} totalTax={purchase.tax || 0} compact />
+                        </div>
+                      )}
+                      <div className='mt-1 flex items-baseline justify-between border-y-2 border-foreground/80 py-1.5 text-[15px] font-bold'>
+                        <span>{t('Total Amount')}</span>
+                        <span className='tabular-nums'>{formatMoney(Number(purchase.totalAmount || 0))}</span>
+                      </div>
+                      <div className='flex justify-between py-0.5'>
+                        <span className='text-muted-foreground'>{t('Paid')}</span>
+                        <span className='tabular-nums text-emerald-600 dark:text-emerald-400'>{formatMoney(settlement.settledAmount)}</span>
+                      </div>
+                      <div
+                        className={cn(
+                          'mt-1 flex items-baseline justify-between rounded-md px-3 py-2 font-semibold',
+                          settlement.remainingAmount > 0.001
+                            ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400'
+                            : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                        )}
+                      >
+                        <span>{t('Remaining')}</span>
+                        <span className='tabular-nums'>{formatMoney(Math.max(0, settlement.remainingAmount))}</span>
+                      </div>
+                    </div>
+                  </section>
                 </div>
-              </section>
+              </article>
             </TabsContent>
 
             {/* ---------------------------------------------------------------- Payments */}
@@ -775,5 +939,18 @@ export function PurchaseViewDrawer({
         </Tabs>
       </SheetContent>
     </Sheet>
+
+    {canDelete && (
+      <InvoiceDeleteDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        currentRow={purchase}
+        onDeleted={() => onOpenChange(false)}
+      />
+    )}
+    {!onRecordPayment && (
+      <SupplierPaymentDialog open={paymentOpen} onOpenChange={setPaymentOpen} defaultSupplierId={supplierId || undefined} />
+    )}
+    </>
   )
 }

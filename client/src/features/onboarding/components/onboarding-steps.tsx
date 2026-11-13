@@ -11,6 +11,7 @@ import {
   Smartphone,
   Sparkles,
   Store,
+  Truck,
   Upload,
   WifiOff,
 } from 'lucide-react'
@@ -43,6 +44,7 @@ import { useNativeLanguage } from '@/lib/native-language'
 /** One card per module set, in the order most accounts want them. */
 const BUSINESS_TYPE_ICONS: Record<string, typeof Store> = {
   retail: Store,
+  distributor: Truck,
   mobile_shop: Smartphone,
   factory: Factory,
   school: GraduationCap,

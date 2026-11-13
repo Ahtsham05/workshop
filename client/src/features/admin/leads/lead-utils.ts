@@ -41,6 +41,7 @@ export const BUSINESS_TYPE_LABEL: Record<string, string> = {
   retail: 'Retail',
   wholesale: 'Wholesale',
   wholesale_retail: 'Wholesale + Retail',
+  distributor: 'Wholesaler / Distributors',
   services: 'Services',
   education: 'Education',
   other: 'Other',

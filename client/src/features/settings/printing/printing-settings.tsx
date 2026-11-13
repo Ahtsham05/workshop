@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useGetBranchQuery, useUpdateBranchMutation } from '@/stores/branch.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import type { RootState } from '@/stores/store'
 import { PAPER_SIZE_OPTIONS, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format'
 import { INVOICE_TEMPLATE_OPTIONS, type InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
@@ -20,11 +21,14 @@ import { compactPrintDesign, isDesignCustomised, normalizePrintDesign, withPrint
 import {
   DEFAULT_GENERAL_POLICY,
   DEFAULT_RETURN_POLICY,
+  DISTRIBUTOR_HEADER_STYLES,
   DISTRIBUTOR_LICENSE_FIELDS,
   DISTRIBUTOR_POLICY_FIELDS,
   normalizeDistributorSettings,
   withDistributorSettings,
+  type DistributorHeaderStyle,
   type DistributorSettings,
+  type TextKey as DistributorTextKey,
 } from '@/features/invoice/utils/distributor-settings'
 import { InvoiceDesigner, type DesignerValue } from './invoice-designer'
 
@@ -65,6 +69,13 @@ const SAMPLE_INVOICE_DATA: PrintInvoiceData = {
   previousBalance: 25,
   newBalance: 25,
 }
+
+/** Stands in for the logo in the "With logo" preview when the organisation has not uploaded one. */
+const SAMPLE_LOGO =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120" viewBox="0 0 240 120"><rect x="4" y="4" width="232" height="112" rx="14" fill="#f1f5f9" stroke="#94a3b8" stroke-width="4" stroke-dasharray="12 8"/><text x="120" y="72" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#64748b" text-anchor="middle">YOUR LOGO</text></svg>',
+  )
 
 const THUMB_WIDTH = 200
 const PAGE_WIDTH = 794
@@ -113,7 +124,9 @@ export default function PrintingSettings() {
   )
   const [distributor, setDistributor] = useState<DistributorSettings>(savedDistributor)
   useEffect(() => setDistributor(savedDistributor), [savedDistributor])
-  const setDistributorField = (key: keyof DistributorSettings, value: string) => setDistributor((d) => ({ ...d, [key]: value }))
+  const setDistributorField = (key: DistributorTextKey, value: string) => setDistributor((d) => ({ ...d, [key]: value }))
+  const { data: orgData } = useGetMyOrganizationQuery(undefined)
+  const orgLogo = orgData?.logo?.url
 
   useEffect(() => {
     if (branchData?.printSettings?.paperSize) {
@@ -138,6 +151,23 @@ export default function PrintingSettings() {
     }
     return map
   }, [currencyMeta, colors, design, distributor])
+
+  // One live thumbnail per Distributor header style (with the real logo when there is one).
+  const previewHtmlByHeaderStyle = useMemo(() => {
+    if (template !== 'distributor') return {}
+    const sampleData: PrintInvoiceData = { ...SAMPLE_INVOICE_DATA, currencyMeta, companyLogo: orgLogo || SAMPLE_LOGO }
+    const map: Partial<Record<DistributorHeaderStyle, string>> = {}
+    for (const option of DISTRIBUTOR_HEADER_STYLES) {
+      map[option.value] = toPreviewOnlyHtml(
+        withPrintColors(colors, () =>
+          withPrintDesign(design, () =>
+            withDistributorSettings({ ...distributor, headerStyle: option.value }, () => generateA4InvoiceHTML(sampleData, 'a4', 'distributor')),
+          ),
+        ),
+      )
+    }
+    return map
+  }, [template, currencyMeta, colors, design, distributor, orgLogo])
 
   /** Saves everything printSettings holds (the server replaces the object as a whole). */
   const handleSave = async (fromDesigner?: DesignerValue): Promise<boolean> => {
@@ -300,6 +330,60 @@ export default function PrintingSettings() {
 
               {template === 'distributor' && (
                 <div className="mt-8 rounded-lg border p-4">
+                  <div className="text-sm font-medium">Invoice header</div>
+                  <p className="text-xs text-muted-foreground mt-1 mb-3">
+                    Choose how the top of the Distributor invoice is branded. Everything else on the invoice stays the same.
+                  </p>
+                  <RadioGroup
+                    value={distributor.headerStyle}
+                    onValueChange={(value) => setDistributor((d) => ({ ...d, headerStyle: value as DistributorHeaderStyle }))}
+                    className="grid gap-4 mb-8"
+                    style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${THUMB_WIDTH + 24}px, 1fr))` }}
+                  >
+                    {DISTRIBUTOR_HEADER_STYLES.map((option) => (
+                      <Label
+                        key={option.value}
+                        htmlFor={`distributor-header-${option.value}`}
+                        className={`flex flex-col gap-2 rounded-lg border p-3 cursor-pointer transition-colors ${
+                          distributor.headerStyle === option.value ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                        }`}
+                      >
+                        <div className="relative overflow-hidden rounded border bg-muted/40 mx-auto" style={{ width: THUMB_WIDTH, height: 150 }}>
+                          <iframe
+                            title={`${option.label} header preview`}
+                            srcDoc={previewHtmlByHeaderStyle[option.value]}
+                            tabIndex={-1}
+                            style={{
+                              width: PAGE_WIDTH,
+                              height: PAGE_HEIGHT,
+                              border: 'none',
+                              background: '#fff',
+                              transform: `scale(${THUMB_SCALE})`,
+                              transformOrigin: 'top left',
+                              pointerEvents: 'none',
+                            }}
+                          />
+                          <div
+                            className="pointer-events-none absolute inset-x-0 bottom-0 h-6"
+                            style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.9))' }}
+                          />
+                        </div>
+                        <div className="flex items-start gap-2 min-w-0">
+                          <RadioGroupItem value={option.value} id={`distributor-header-${option.value}`} className="mt-0.5 shrink-0" />
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm">{option.label}</div>
+                            <div className="text-xs text-muted-foreground">{option.description}</div>
+                          </div>
+                        </div>
+                      </Label>
+                    ))}
+                  </RadioGroup>
+                  {distributor.headerStyle === 'logo' && !orgLogo && (
+                    <p className="-mt-6 mb-8 text-xs text-amber-700 dark:text-amber-400">
+                      No logo uploaded yet — add one in Settings → Business Profile; until then this prints your business details without a logo.
+                    </p>
+                  )}
+
                   <div className="text-sm font-medium">Distributor details</div>
                   <p className="text-xs text-muted-foreground mt-1 mb-4">
                     Printed in the top-right of every Distributor invoice. Only the numbers you fill in are printed; empty lines and empty policies are left off.

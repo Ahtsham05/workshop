@@ -120,6 +120,7 @@ const branchSchema = mongoose.Schema(
         resaleCertificateId: { type: String, trim: true, maxlength: 60 },
         msaDidId: { type: String, trim: true, maxlength: 60 },
         feinId: { type: String, trim: true, maxlength: 60 },
+        headerStyle: { type: String, enum: ['logo', 'no-logo'], default: 'logo' },
         hempLicense: { type: String, trim: true, maxlength: 60 },
         foodDrugLicense: { type: String, trim: true, maxlength: 60 },
         generalPolicy: { type: String, trim: true, maxlength: 2000 },

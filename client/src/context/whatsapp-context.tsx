@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { useRefetchOnFocusIfStale } from '@/hooks/use-refetch-on-focus-if-stale'
 import {
   useGetWhatsAppStatusQuery,
   useDisconnectWhatsAppMutation,
@@ -57,10 +58,13 @@ export function WhatsAppProvider({ children }: { children: ReactNode }) {
   const [composeOpen, setComposeOpen] = useState(false)
   const [composeTarget, setComposeTarget] = useState<ComposeTarget | null>(null)
 
-  const { data: status, refetch } = useGetWhatsAppStatusQuery(undefined, {
+  const { data: status, refetch, fulfilledTimeStamp: statusFetchedAt } = useGetWhatsAppStatusQuery(undefined, {
     skip: !WHATSAPP_UI_ENABLED,
-    refetchOnFocus: true,
   })
+  // Re-check the connection on focus only when the last check is over 5 minutes old —
+  // RTK's refetchOnFocus fired on every alt-tab / DevTools click. Sending a message with a
+  // dropped session still fails loudly and opens the connection dialog.
+  useRefetchOnFocusIfStale(refetch, statusFetchedAt, { enabled: WHATSAPP_UI_ENABLED, minAgeMs: 5 * 60 * 1000 })
 
   const [disconnect, { isLoading: disconnecting }] = useDisconnectWhatsAppMutation()
   const [sendWhatsAppMessage] = useSendWhatsAppMessageMutation()

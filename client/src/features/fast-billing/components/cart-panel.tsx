@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { NumericInput } from '@/components/ui/numeric-input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Minus, Plus, ShoppingCart, Trash2, Package, History } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { selectOnFocus } from '../utils/select-on-focus'
 import { stockBadgeClasses, stockDotClasses, stockLabel } from '../utils/stock-badge'
 import type { CartLine } from '../types'
 import type { FastBillCustomer } from '../utils/build-invoice-payload'
@@ -181,11 +180,11 @@ export function CartPanel({
                   >
                     <Minus className='h-3.5 w-3.5' />
                   </Button>
-                  <Input
-                    type='number'
+                  <NumericInput
+                    min={1}
+                    emptyValue={null}
                     value={line.quantity}
-                    onChange={(e) => onQuantityChange(line.key, Math.max(1, Number(e.target.value) || 1))}
-                    onFocus={selectOnFocus}
+                    onValueChange={(qty) => onQuantityChange(line.key, qty)}
                     className={cn(
                       'h-7 w-12 rounded-none border-0 text-center text-xs font-semibold focus-visible:ring-0 focus-visible:ring-offset-0',
                       noSpinner,
@@ -208,11 +207,10 @@ export function CartPanel({
                   <span className='flex h-7 select-none items-center border-r bg-muted px-2 text-xs font-medium text-muted-foreground'>
                     {currencySymbol}
                   </span>
-                  <Input
-                    type='number'
+                  <NumericInput
+                    min={0}
                     value={line.unitPrice}
-                    onChange={(e) => onPriceChange(line.key, Math.max(0, Number(e.target.value) || 0))}
-                    onFocus={selectOnFocus}
+                    onValueChange={(price) => onPriceChange(line.key, price)}
                     className={cn(
                       'h-7 w-16 rounded-none border-0 text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0',
                       noSpinner,
@@ -223,12 +221,12 @@ export function CartPanel({
                 <span className='select-none text-sm text-muted-foreground/60'>−</span>
 
                 <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
-                  <Input
-                    type='number'
-                    value={line.discountValue || ''}
+                  <NumericInput
+                    min={0}
+                    blankWhenZero
+                    value={line.discountValue || 0}
                     placeholder='0'
-                    onChange={(e) => onItemDiscountChange(line.key, { value: Math.max(0, Number(e.target.value) || 0) })}
-                    onFocus={selectOnFocus}
+                    onValueChange={(value) => onItemDiscountChange(line.key, { value })}
                     className={cn(
                       'h-7 w-12 rounded-none border-0 text-center text-xs font-semibold focus-visible:ring-0 focus-visible:ring-offset-0',
                       noSpinner,

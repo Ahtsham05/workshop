@@ -32,6 +32,9 @@ export interface TaxPreviewResultLine {
   taxAmount: number
   effectiveRatePercent: number
   components: TaxLineComponent[]
+  /** false = this line pays no tax at any amount (no category / no rate / exempt). Absent on
+   *  older servers. Lets the invoice preview skip asking again while only amounts change. */
+  taxable?: boolean
 }
 
 export interface TaxPreviewResponse {

@@ -16,9 +16,11 @@ const getScope = async (req) => {
   }
   const organizationId = req.organizationId || req.user.organizationId;
   let { businessType } = req.user;
+  let menuVisibility = null;
   if (organizationId) {
-    const org = await Organization.findById(organizationId).select('businessType');
+    const org = await Organization.findById(organizationId).select('businessType menuVisibility').lean();
     if (org && org.businessType) businessType = org.businessType;
+    menuVisibility = (org && org.menuVisibility) || null;
   }
 
   // Same derivation dashboard/index.tsx uses client-side: a linked-teacher account
@@ -34,6 +36,7 @@ const getScope = async (req) => {
     userId: req.user.id,
     permissions: (req.user.role && req.user.role.permissions) || {},
     businessType,
+    menuVisibility,
     systemRole: req.user.systemRole,
     schoolRole,
     email: req.user.email,

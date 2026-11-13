@@ -49,6 +49,7 @@ import {
   whatsappLink,
 } from '../leads/lead-utils'
 import { ActivatePlanDialog } from './activate-plan-dialog'
+import { BusinessTypeSwitcher } from './business-type-switcher'
 import { PurgeExpiredDialog } from './purge-expired-dialog'
 
 const BUCKETS: { key: OrgBucket; label: string }[] = [
@@ -352,9 +353,9 @@ export function OrganizationsList({
                                 )}
                                 {!row.isActive && <Badge variant='outline' className='h-4 px-1.5 text-[10px]'>Inactive</Badge>}
                               </div>
-                              <p className='text-xs text-muted-foreground'>
-                                {businessTypeLabel(row.businessType)}
-                                {row.city ? ` · ${row.city}` : ''}
+                              <p className='flex items-center text-xs text-muted-foreground'>
+                                <BusinessTypeSwitcher orgId={row.id} orgName={row.name} businessType={row.businessType} />
+                                {row.city ? <span className='ml-1'>· {row.city}</span> : null}
                               </p>
                             </div>
                           </div>
@@ -431,9 +432,10 @@ export function OrganizationsList({
                           <span className='truncate font-medium'>{row.name}</span>
                           {isFresh(row) && <Badge className='h-4 shrink-0 bg-sky-600 px-1.5 text-[10px] text-white'>NEW</Badge>}
                         </div>
-                        <p className='truncate text-xs text-muted-foreground'>
-                          {businessTypeLabel(row.businessType)} · {row.owner?.name ?? '—'} · joined {relativeTime(row.createdAt)}
-                        </p>
+                        <div className='flex min-w-0 items-center text-xs text-muted-foreground'>
+                          <BusinessTypeSwitcher orgId={row.id} orgName={row.name} businessType={row.businessType} className='shrink-0' />
+                          <span className='ml-1 truncate'>· {row.owner?.name ?? '—'} · joined {relativeTime(row.createdAt)}</span>
+                        </div>
                       </div>
                       <ContactIcons row={row} />
                     </div>

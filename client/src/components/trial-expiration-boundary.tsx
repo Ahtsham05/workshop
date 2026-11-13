@@ -3,6 +3,7 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import { AlertTriangle, Lock } from 'lucide-react'
 import { useGetBillingSummaryQuery, type BillingSummary } from '@/stores/billing.api'
 import { isElectronApp } from '@/lib/sync/electron'
+import { useRefetchOnFocusIfStale } from '@/hooks/use-refetch-on-focus-if-stale'
 import { supportWhatsAppUrl } from '@/config/support'
 
 /** Height reserved for the trial/subscription top banner (sidebar + main content offset). */
@@ -83,12 +84,13 @@ export function TrialExpirationBoundary({ children }: TrialExpirationBoundaryPro
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const offline = typeof navigator !== 'undefined' && !navigator.onLine
   const skip = offline || (isElectronApp() && localStorage.getItem('offlineMode') === 'true')
-  const { data: summary } = useGetBillingSummaryQuery(undefined, {
+  const { data: summary, refetch, fulfilledTimeStamp } = useGetBillingSummaryQuery(undefined, {
     skip,
     // Re-check now and then so a banner appears/disappears without a reload.
     pollingInterval: 15 * 60 * 1000,
-    refetchOnFocus: true,
   })
+  // ...and on focus, but only when the copy is over 5 minutes old (not every alt-tab).
+  useRefetchOnFocusIfStale(refetch, fulfilledTimeStamp, { enabled: !skip, minAgeMs: 5 * 60 * 1000 })
 
   const banner = !skip && summary ? bannerFor(summary) : null
   // The billing page shows the same information in full — no need for the banner there.

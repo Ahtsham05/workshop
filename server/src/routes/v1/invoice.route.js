@@ -36,6 +36,16 @@ router
   .route('/possible-duplicates')
   .get(auth('createInvoices', 'editInvoices'), validate(invoiceValidation.getPossibleDuplicateInvoices), invoiceController.getPossibleDuplicateInvoices);
 
+// A customer's past rates for many products at once (New Invoice prefetches every line).
+// POST to one fixed URL so the browser's CORS preflight is cached, not repeated per product.
+router
+  .route('/rate-history')
+  .post(
+    auth('viewInvoices'),
+    validate(invoiceValidation.getCustomerRateHistoryBatch),
+    invoiceController.getCustomerRateHistoryBatch
+  );
+
 // Invoice-wise + item-wise history for the New Invoice screen's side panel.
 router
   .route('/history')
@@ -71,7 +81,11 @@ router
 
 router
   .route('/customer/:customerId/product/:productId/history')
-  .get(auth('viewInvoices'), invoiceController.getCustomerProductHistory);
+  .get(
+    auth('viewInvoices'),
+    validate(invoiceValidation.getCustomerProductHistory),
+    invoiceController.getCustomerProductHistory
+  );
 
 router
   .route('/:invoiceId')

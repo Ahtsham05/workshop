@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NumericInput } from '@/components/ui/numeric-input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
@@ -814,16 +815,15 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
               <Label htmlFor='paid-amount' className='text-xs'>
                 Paid amount
               </Label>
-              <Input
+              <NumericInput
                 ref={paidAmountRef}
                 id='paid-amount'
-                type='text'
-                inputMode='decimal'
-                value={purchaseType === 'cash' && !splitPaymentMethod ? total : paidAmount || ''}
+                min={0}
+                blankWhenZero
+                value={purchaseType === 'cash' && !splitPaymentMethod ? total : paidAmount || 0}
                 disabled={purchaseType === 'cash' && !splitPaymentMethod}
-                onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
+                onValueChange={setPaidAmount}
                 onKeyDown={(e) => onEnterAdvance(e, focusFirstReceivableQty)}
-                onFocus={(e) => e.target.select()}
                 className='mt-1.5 h-9'
                 placeholder='0'
               />
@@ -894,24 +894,16 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                         >
                           <Minus className='h-3 w-3' />
                         </Button>
-                        <Input
+                        <NumericInput
                           ref={(el) => {
                             qtyInputRefs.current[idx] = el
                           }}
-                          type='number'
                           min={0}
-                          max={r.remaining}
-                          step='any'
                           value={r.receivedQuantity}
-                          onChange={(e) =>
-                            updateRow(idx, {
-                              receivedQuantity: Number(e.target.value || 0),
-                            })
-                          }
+                          onValueChange={(receivedQuantity) => updateRow(idx, { receivedQuantity })}
                           onKeyDown={(e) =>
                             onEnterAdvance(e, () => focusField(costInputRefs.current[idx]))
                           }
-                          onFocus={(e) => e.target.select()}
                           className='h-7 w-20 border-0 text-center text-sm font-semibold focus-visible:ring-0'
                         />
                         <Button
@@ -935,23 +927,17 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                         <span className='flex h-7 items-center border-r bg-muted px-1.5 text-[10px]'>
                           {currencyMeta.symbol}
                         </span>
-                        <Input
+                        <NumericInput
                           ref={(el) => {
                             costInputRefs.current[idx] = el
                           }}
-                          type='text'
-                          inputMode='decimal'
-                          showVoiceInput={false}
-                          value={r.priceAtPurchase > 0 ? r.priceAtPurchase : ''}
-                          onChange={(e) =>
-                            updateRow(idx, {
-                              priceAtPurchase: parseFloat(e.target.value) || 0,
-                            })
-                          }
+                          min={0}
+                          blankWhenZero
+                          value={r.priceAtPurchase}
+                          onValueChange={(priceAtPurchase) => updateRow(idx, { priceAtPurchase })}
                           onKeyDown={(e) =>
                             onEnterAdvance(e, () => focusField(sellInputRefs.current[idx]))
                           }
-                          onFocus={(e) => e.target.select()}
                           className='h-7 w-20 border-0 text-sm font-semibold focus-visible:ring-0'
                         />
                       </div>
@@ -959,17 +945,11 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                       <span className='text-xs text-muted-foreground'>−</span>
 
                       <div className='flex items-center overflow-hidden rounded-md border bg-background' title='Discount — defaults to the order line rate, editable'>
-                        <Input
-                          type='text'
-                          inputMode='decimal'
-                          showVoiceInput={false}
-                          value={(r.discountValue || 0) > 0 ? r.discountValue : ''}
-                          onChange={(e) =>
-                            updateRow(idx, {
-                              discountValue: Math.max(0, parseFloat(e.target.value) || 0),
-                            })
-                          }
-                          onFocus={(e) => e.target.select()}
+                        <NumericInput
+                          min={0}
+                          blankWhenZero
+                          value={r.discountValue || 0}
+                          onValueChange={(discountValue) => updateRow(idx, { discountValue })}
                           placeholder='0'
                           className='h-7 w-14 border-0 text-sm font-semibold focus-visible:ring-0'
                         />
@@ -993,24 +973,15 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                         <span className='flex h-7 items-center border-r border-blue-200 bg-blue-100/60 px-1.5 text-[10px] text-blue-600'>
                           {currencyMeta.symbol}
                         </span>
-                        <Input
+                        <NumericInput
                           ref={(el) => {
                             sellInputRefs.current[idx] = el
                           }}
-                          type='text'
-                          inputMode='decimal'
-                          showVoiceInput={false}
-                          value={(r.sellingPriceAtPurchase ?? 0) > 0 ? r.sellingPriceAtPurchase : ''}
-                          onChange={(e) =>
-                            updateRow(idx, {
-                              sellingPriceAtPurchase:
-                                e.target.value === ''
-                                  ? undefined
-                                  : parseFloat(e.target.value) || 0,
-                            })
-                          }
+                          min={0}
+                          blankWhenZero
+                          value={r.sellingPriceAtPurchase ?? 0}
+                          onValueChange={(v) => updateRow(idx, { sellingPriceAtPurchase: v || undefined })}
                           onKeyDown={(e) => onEnterAdvance(e, () => focusNextReceivableQty(idx))}
-                          onFocus={(e) => e.target.select()}
                           placeholder='0'
                           className='h-7 w-20 border-0 bg-transparent text-sm font-semibold text-blue-700 focus-visible:ring-0'
                         />
@@ -1076,13 +1047,11 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
               <div className='flex items-center justify-between gap-2 text-sm'>
                 <span className='text-muted-foreground'>Discount</span>
                 <div className='flex items-center overflow-hidden rounded-md border bg-background'>
-                  <Input
-                    type='text'
-                    inputMode='decimal'
-                    showVoiceInput={false}
-                    value={(discountValue || 0) > 0 ? discountValue : ''}
-                    onChange={(e) => setDiscountValue(Math.max(0, parseFloat(e.target.value) || 0))}
-                    onFocus={(e) => e.target.select()}
+                  <NumericInput
+                    min={0}
+                    blankWhenZero
+                    value={discountValue || 0}
+                    onValueChange={setDiscountValue}
                     placeholder='0'
                     className='h-7 w-16 border-0 text-right text-sm font-medium focus-visible:ring-0'
                   />

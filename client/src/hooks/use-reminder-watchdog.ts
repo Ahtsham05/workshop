@@ -32,6 +32,26 @@ export function useReminderWatchdog() {
   const [queueIds, setQueueIds] = useState<string[]>([])
   const [snoozeReminder] = useSnoozeReminderMutation()
   const [completeReminder] = useCompleteReminderMutation()
+  // Bumped by the local due-time timer below so the queue check re-runs on time.
+  const [dueTick, setDueTick] = useState(0)
+
+  // The list is only re-read from the server every 5 minutes, so don't wait for that to
+  // ring: arm one timer for the soonest future dueAt among the loaded reminders. When it
+  // fires, the queue effect re-checks and rings that reminder on the second it's due.
+  useEffect(() => {
+    const now = Date.now()
+    let next = Infinity
+    for (const reminder of active) {
+      if (userId && reminder.assignedTo && reminder.assignedTo !== userId) continue
+      const due = new Date(reminder.dueAt).getTime()
+      if (due > now && due < next) next = due
+    }
+    if (!Number.isFinite(next)) return
+    // setTimeout overflows past ~24.8 days; re-arm from a capped wait instead.
+    const wait = Math.min(next - now + 250, 2_000_000_000)
+    const id = window.setTimeout(() => setDueTick((n) => n + 1), wait)
+    return () => window.clearTimeout(id)
+  }, [active, userId, dueTick])
 
   // Queue newly-due reminders (and alert once per reminder as it first queues).
   useEffect(() => {
@@ -65,7 +85,7 @@ export function useReminderWatchdog() {
         }
       })
     }
-  }, [active, userId, queueIds])
+  }, [active, userId, queueIds, dueTick])
 
   // Drop anything from the queue that's no longer active (completed/cancelled/
   // deleted/edited elsewhere, e.g. from the Reminders page or another tab).

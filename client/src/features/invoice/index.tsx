@@ -5,6 +5,9 @@ import { useCollapseSidebarOnMount } from '@/hooks/use-collapse-sidebar-on-mount
 import { useTradeProductFilter } from '@/hooks/use-trade-product-filter'
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
+import { InvoiceDetailDialog } from '@/components/invoice-detail-dialog'
+import { useGetInvoiceByIdQuery } from '@/stores/invoice.api'
+import { normalizeInvoiceForEdit } from './utils/invoice-edit-normalize'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
@@ -50,7 +53,7 @@ import { calculateInvoiceLineValues, getProductUnitOptions, resolveUnitConversio
 import { applyLineDiscount, computeDiscountAmount, type DiscountType } from '@/lib/discount'
 import { useFormatMoney } from '@/lib/format-money'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
-import { usePreviewTaxMutation, type TaxLine } from '@/stores/taxCalculator.api'
+import { usePreviewTaxMutation, type TaxLine, type TaxPreviewResponse } from '@/stores/taxCalculator.api'
 import { formatAppDateTime } from '@/lib/date-format'
 import { TransactionHistoryButton } from '@/components/transaction-history-sheet'
 import { RecordNavigatorButton } from '@/components/record-navigator'
@@ -155,6 +158,9 @@ export function createEmptyManualInvoiceItem(): InvoiceItem {
  * addNewRowAndOpenProduct in invoice-panel.tsx). When the catalog is visible, clicking a
  * tile always appends its own new row (see addToInvoice below) and never reuses one of
  * these pre-seeded empty rows, so only one placeholder row is pre-added there. */
+/** How long the invoice page reuses its downloaded product list before refreshing it. */
+const PRODUCTS_REFRESH_STALE_MS = 5 * 60 * 1000
+
 const NEW_INVOICE_ROW_COUNT = 5
 const NEW_INVOICE_ROW_COUNT_WITH_CATALOG = 1
 
@@ -427,6 +433,10 @@ export default function InvoicePage() {
    * double-invoke, which otherwise fires the fetch twice and can let a stale
    * response overwrite a newer one (briefly showing an empty product catalog). */
   const didFetchInitialDataRef = useRef(false)
+  /** What was on screen when Save ran — handleSaveSuccess resets the form before it
+   *  decides whether the local stock list can be trusted (see refreshProducts). */
+  const saveContextRef = useRef({ view: currentView, type: invoice.type as string | undefined })
+  saveContextRef.current = { view: currentView, type: invoice.type }
 
   /** Always-latest snapshot for synchronous persist (tab close / route change / visibility) */
   const salePersistRef = useRef({
@@ -646,8 +656,18 @@ export default function InvoicePage() {
     [t],
   )
 
-  // Refresh products to get latest stock data
-  const refreshProducts = useCallback(async () => {
+  // Refresh products to get latest stock data. The full product list is thousands of rows,
+  // so it is NOT re-downloaded on every new/back/save: within PRODUCTS_REFRESH_STALE_MS of
+  // the last download the local copy is used (a sale already deducted its own stock from it
+  // line by line as items were added, and handleCreateNew/handleBackToList put back stock
+  // of an unsaved sale). `force` is for cases the local copy can't follow (edits,
+  // quotations/pending invoices). Concurrent calls share one request.
+  const productsFetchedAtRef = useRef(0)
+  const productsRefreshInFlightRef = useRef(false)
+  const refreshProducts = useCallback(async ({ force = false }: { force?: boolean } = {}) => {
+    if (productsRefreshInFlightRef.current) return
+    if (!force && Date.now() - productsFetchedAtRef.current < PRODUCTS_REFRESH_STALE_MS) return
+    productsRefreshInFlightRef.current = true
     try {
       const data = await dispatch(fetchAllProducts({}))
       let productsData = []
@@ -661,9 +681,11 @@ export default function InvoicePage() {
       }
       
       setProducts(productsData)
-      console.log('Products refreshed with latest stock data')
+      if (productsData.length > 0) productsFetchedAtRef.current = Date.now()
     } catch (error) {
       console.error('Error refreshing products:', error)
+    } finally {
+      productsRefreshInFlightRef.current = false
     }
   }, [dispatch])
 
@@ -698,7 +720,7 @@ export default function InvoicePage() {
         console.log('Processed products data:', productsData.length, 'products')
         console.log('First product sample:', productsData[0])
         setProducts(productsData)
-        console.log('Products state updated with fresh data')
+        if (productsData.length > 0) productsFetchedAtRef.current = Date.now()
       })
       .catch((error) => {
         console.error('Error fetching products:', error)
@@ -914,6 +936,17 @@ export default function InvoicePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentView, editingInvoice])
 
+  // What the preview already knows, so editing quantities/prices doesn't ask the server
+  // again and again:
+  //  - taxPreviewCacheRef: exact answers by tax-relevant input (line amounts + categories +
+  //    customer + currency/inclusive). Going 1 → 2 → 1 asks once per distinct state.
+  //  - untaxedRef: tax categories the server said pay NO tax at any amount (no rate, exempt,
+  //    no category — `taxable: false`) for this customer. When every line is in one of them
+  //    the tax is 0 whatever the amounts, so it's applied here with no request at all.
+  // Both live only for this page visit; save always recomputes tax on the server.
+  const taxPreviewCacheRef = useRef(new Map<string, TaxPreviewResponse>())
+  const untaxedRef = useRef<{ context: string; categories: Set<string> }>({ context: '', categories: new Set() })
+
   useEffect(() => {
     const taxSystem = orgData?.taxSystem
     if (!taxSystem || taxSystem === 'NONE') return undefined
@@ -946,35 +979,68 @@ export default function InvoicePage() {
       return { lineId: String(index), amount, taxCategoryId: item.taxCategoryId || undefined }
     })
     const customerId = invoice.customerId && invoice.customerId !== 'walk-in' ? invoice.customerId : undefined
+    const currency = orgData?.baseCurrency || 'PKR'
+    const taxInclusive = !!orgData?.taxInclusivePricingDefault
+    const context = JSON.stringify([customerId || '', currency, taxInclusive])
+    const requestKey = JSON.stringify([context, lines.map((line) => [Math.round(line.amount * 100), line.taxCategoryId || ''])])
+
+    // Writes a preview answer onto the invoice (from the current state, so totals stay right
+    // even if more edits landed meanwhile). Returns prev untouched when nothing would change,
+    // so re-applying a cached answer doesn't re-render the whole form.
+    const applyPreview = (totalTax: number, taxLines: TaxLine[]) => {
+      setInvoice(prev => {
+        const prevSubtotal = prev.items.reduce((sum, item) => sum + item.subtotal, 0)
+        const prevDiscount = computeDiscountAmount(prevSubtotal, prev.discountType || 'fixed', prev.discountValue || 0)
+        const taxableAmount = (prevSubtotal - prevDiscount) + (prev.deliveryCharge || 0) + (prev.serviceCharge || 0)
+        const total = taxableAmount + totalTax
+        const isFullCash = prev.type === 'cash' && !prev.splitPaymentMethod
+        const paidAmount = isFullCash ? total : prev.paidAmount
+        const balance = isFullCash ? 0 : total - prev.paidAmount
+        if (
+          prev.tax === totalTax &&
+          prev.total === total &&
+          prev.paidAmount === paidAmount &&
+          prev.balance === balance &&
+          prev.taxSystem === taxSystem &&
+          prev.taxInclusive === taxInclusive &&
+          JSON.stringify(prev.taxLines || []) === JSON.stringify(taxLines)
+        ) {
+          return prev
+        }
+        return { ...prev, tax: totalTax, total, taxLines, taxSystem, taxInclusive, paidAmount, balance }
+      })
+    }
+
+    const cached = taxPreviewCacheRef.current.get(requestKey)
+    if (cached) {
+      previewRequestIdRef.current += 1
+      applyPreview(cached.totalTax, cached.taxBreakdownByCategory)
+      return undefined
+    }
+    const untaxed = untaxedRef.current
+    if (untaxed.context === context && lines.every((line) => untaxed.categories.has(line.taxCategoryId || ''))) {
+      previewRequestIdRef.current += 1
+      applyPreview(0, [])
+      return undefined
+    }
 
     const requestId = ++previewRequestIdRef.current
     const timeout = setTimeout(() => {
-      previewTax({
-        currency: orgData?.baseCurrency || 'PKR',
-        taxInclusive: !!orgData?.taxInclusivePricingDefault,
-        customerId,
-        lines,
-      })
+      previewTax({ currency, taxInclusive, customerId, lines })
         .unwrap()
         .then((result) => {
+          const cache = taxPreviewCacheRef.current
+          cache.set(requestKey, result)
+          if (cache.size > 100) cache.delete(cache.keys().next().value as string)
+          if (untaxedRef.current.context !== context) untaxedRef.current = { context, categories: new Set() }
+          result.lines?.forEach((resultLine, index) => {
+            const category = lines[index]?.taxCategoryId || ''
+            if (resultLine.taxable === false) untaxedRef.current.categories.add(category)
+            else if (resultLine.taxable === true) untaxedRef.current.categories.delete(category)
+          })
           // Ignore a response for a since-superseded request (e.g. user kept typing).
           if (previewRequestIdRef.current !== requestId) return
-          setInvoice(prev => {
-            const prevSubtotal = prev.items.reduce((sum, item) => sum + item.subtotal, 0)
-            const prevDiscount = computeDiscountAmount(prevSubtotal, prev.discountType || 'fixed', prev.discountValue || 0)
-            const taxableAmount = (prevSubtotal - prevDiscount) + (prev.deliveryCharge || 0) + (prev.serviceCharge || 0)
-            const total = taxableAmount + result.totalTax
-            return {
-              ...prev,
-              tax: result.totalTax,
-              total,
-              taxLines: result.taxBreakdownByCategory,
-              taxSystem,
-              taxInclusive: !!orgData?.taxInclusivePricingDefault,
-              paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? total : prev.paidAmount,
-              balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : total - prev.paidAmount,
-            }
-          })
+          applyPreview(result.totalTax, result.taxBreakdownByCategory)
         })
         .catch(() => {
           // Preview is best-effort display only — a failed preview leaves the last-known
@@ -1588,7 +1654,7 @@ export default function InvoicePage() {
     // Reset the saved flag when starting to edit
     setInvoiceSaved(false)
     
-    // Refresh products to ensure latest stock data
+    // Refresh products (only if the local copy is stale)
     refreshProducts()
     
     setCurrentView('edit')
@@ -1682,6 +1748,18 @@ export default function InvoicePage() {
     })
   }
 
+  // ?editId=… (the invoice view's Edit, used from ledgers / the navigator) → load that
+  // invoice into the edit form once it has been fetched, then drop the param.
+  const { data: invoiceToEditById } = useGetInvoiceByIdQuery(search.editId, { skip: !search.editId })
+  const editByIdAppliedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!search.editId || !invoiceToEditById || editByIdAppliedRef.current === search.editId) return
+    editByIdAppliedRef.current = search.editId
+    handleEdit(normalizeInvoiceForEdit(invoiceToEditById))
+    navigate({ to: '/invoice', search: {}, replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search.editId, invoiceToEditById])
+
   const handleBackToList = () => {
     // Only restore stock if invoice was not saved (i.e., user canceled/navigated away)
     if (!invoiceSaved && invoice.items.length > 0) {
@@ -1731,6 +1809,8 @@ export default function InvoicePage() {
     // persists whatever's still in that ref as a recoverable draft, so skipping the reset
     // would leave the just-submitted quotation sitting there to be "recovered" later.
     const returnToLeadId = search.leadId
+    const savedWasEdit = saveContextRef.current.view === 'edit'
+    const savedType = saveContextRef.current.type
 
     // Reset to create new invoice instead of going to list
     setCurrentView('create')
@@ -1770,8 +1850,11 @@ export default function InvoicePage() {
     // Reset the saved flag for next invoice
     setInvoiceSaved(false)
 
-    // Refresh products to ensure we have the latest stock data from server
-    refreshProducts()
+    // A new cash/credit sale already took its stock off the local list as lines were
+    // added, so that list is still right — skip re-downloading every product after each
+    // save (it still refreshes once it's over PRODUCTS_REFRESH_STALE_MS old). An edit,
+    // quotation or pending invoice moves stock differently on the server, so re-read.
+    refreshProducts({ force: savedWasEdit || !(savedType === 'cash' || savedType === 'credit') })
 
     if (returnToLeadId) {
       dispatch(leadApi.util.invalidateTags([
@@ -1794,6 +1877,17 @@ export default function InvoicePage() {
             onEdit={handleEdit}
             onConvertPending={handleConvertPending}
             initialTypeFilter={search.type}
+          />
+          <InvoiceDetailDialog
+            invoiceId={search.invoiceId}
+            open={Boolean(search.invoiceId)}
+            onOpenChange={(next) => {
+              if (!next) navigate({ to: '/invoice', search: { view: 'list' }, replace: true })
+            }}
+            onEdit={(fetchedInvoice) => {
+              navigate({ to: '/invoice', search: { view: 'list' }, replace: true })
+              handleEdit(fetchedInvoice)
+            }}
           />
       </div>
     )
