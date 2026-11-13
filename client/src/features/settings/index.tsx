@@ -26,6 +26,7 @@ import {
   IconTextSize,
   IconCreditCard,
   IconLayoutColumns,
+  IconLayoutDashboard,
   IconLayoutSidebar,
 } from '@tabler/icons-react'
 import { Separator } from '@/components/ui/separator'
@@ -106,6 +107,12 @@ const sidebarNavGroups: { label: string; items: SettingsNavItem[] }[] = [
         title: 'Display',
         icon: <IconTextSize size={18} />,
         href: '/settings/display',
+      },
+      {
+        title: 'Dashboard',
+        icon: <IconLayoutDashboard size={18} />,
+        href: '/settings/dashboard',
+        anyPermission: ['viewDashboard'],
       },
       {
         title: 'Invoice & Purchase screens',

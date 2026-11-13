@@ -170,6 +170,10 @@ export interface Purchase {
   type?: 'cash' | 'credit';
   paymentMethod?: 'cash' | 'wallet';
   walletType?: string;
+  /** Tender — how the supplier was paid (payment-method cards, wholesale + distributor). */
+  paymentMode?: 'cash' | 'card' | 'ach' | 'check' | 'bank';
+  /** Check # / ACH reference / card last-4 for that tender. */
+  paymentReference?: string;
   // Optional second payment leg (e.g. paid partly cash, partly from a wallet/bank account) —
   // always the opposite bucket from `paymentMethod`.
   splitPaymentMethod?: 'cash' | 'wallet';
@@ -213,6 +217,7 @@ const PurchaseInvoicePage = () => {
   const search = useSearch({ strict: false }) as {
     supplierId?: string;
     editId?: string;
+    duplicateId?: string;
     prefillItems?: { productId: string; variantId?: string; quantity: number }[];
   };
   const prefillAppliedRef = useRef(false);
@@ -243,6 +248,8 @@ const PurchaseInvoicePage = () => {
     type: 'cash',
     paymentMethod: 'cash',
     walletType: undefined,
+    paymentMode: undefined,
+    paymentReference: undefined,
     splitPaymentMethod: undefined,
     splitWalletType: undefined,
     splitPaidAmount: 0,
@@ -356,6 +363,8 @@ const PurchaseInvoicePage = () => {
       type: 'cash',
       paymentMethod: 'cash',
       walletType: undefined,
+      paymentMode: undefined,
+      paymentReference: undefined,
       splitPaymentMethod: undefined,
       splitWalletType: undefined,
       splitPaidAmount: 0,
@@ -881,6 +890,8 @@ const PurchaseInvoicePage = () => {
       type: 'cash',
       paymentMethod: 'cash',
       walletType: undefined,
+      paymentMode: undefined,
+      paymentReference: undefined,
       splitPaymentMethod: undefined,
       splitWalletType: undefined,
       splitPaidAmount: 0,
@@ -909,6 +920,8 @@ const PurchaseInvoicePage = () => {
       type: 'cash',
       paymentMethod: 'cash',
       walletType: undefined,
+      paymentMode: undefined,
+      paymentReference: undefined,
       splitPaymentMethod: undefined,
       splitWalletType: undefined,
       splitPaidAmount: 0,
@@ -1012,6 +1025,8 @@ const PurchaseInvoicePage = () => {
       type: derivedType,
       paymentMethod: derivedPaymentMethod,
       walletType: purchaseToEdit.walletType || undefined,
+      paymentMode: purchaseToEdit.paymentMode || undefined,
+      paymentReference: purchaseToEdit.paymentReference || undefined,
       splitPaymentMethod: purchaseToEdit.splitPaymentMethod || undefined,
       splitWalletType: purchaseToEdit.splitWalletType || undefined,
       splitPaidAmount: purchaseToEdit.splitPaidAmount || 0,
@@ -1043,15 +1058,17 @@ const PurchaseInvoicePage = () => {
   // ?editId=… (the purchase view's Edit, used from the navigator / history panel) → load
   // that purchase into the form once it and the catalog (variant lines need it) are in,
   // then drop the param.
-  const { data: purchaseToEditById } = useGetPurchaseByIdQuery(search.editId, { skip: !search.editId });
+  // ?duplicateId=… does the same as a copy (the list's Duplicate, from the Purchase History page).
+  const loadById = search.editId || search.duplicateId;
+  const { data: purchaseToEditById } = useGetPurchaseByIdQuery(loadById, { skip: !loadById });
   const editByIdAppliedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!search.editId || !purchaseToEditById || catalogLoading) return;
-    if (editByIdAppliedRef.current === search.editId) return;
-    editByIdAppliedRef.current = search.editId;
-    handleEdit(purchaseToEditById);
+    if (!loadById || !purchaseToEditById || catalogLoading) return;
+    if (editByIdAppliedRef.current === loadById) return;
+    editByIdAppliedRef.current = loadById;
+    handleEdit(purchaseToEditById, search.editId ? undefined : { duplicate: true });
     navigate({ to: '/purchase-invoice', search: {}, replace: true });
-  }, [search.editId, purchaseToEditById, catalogLoading, handleEdit, navigate]);
+  }, [loadById, search.editId, purchaseToEditById, catalogLoading, handleEdit, navigate]);
 
   const refreshProductsAfterPurchase = useCallback(() => {
     setProducts(prevProducts => {

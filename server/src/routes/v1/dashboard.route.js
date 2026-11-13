@@ -15,6 +15,14 @@ router
   .get(auth('viewDashboard'), dashboardController.getRevenueData);
 
 router
+  .route('/trends')
+  .get(auth('viewDashboard'), dashboardController.getTrends);
+
+router
+  .route('/money-overview')
+  .get(auth('viewDashboard'), dashboardController.getMoneyOverview);
+
+router
   .route('/top-products')
   .get(auth('viewDashboard'), dashboardController.getTopProducts);
 

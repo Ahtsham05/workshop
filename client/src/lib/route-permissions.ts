@@ -168,6 +168,9 @@ export const ROUTE_RULES: RouteRule[] = [
   // document and hides the list (see each page's canView).
   { prefix: '/purchase-orders', anyPermission: ['viewPurchaseOrders', 'createPurchaseOrders'] },
   { prefix: '/purchase-invoice', anyPermission: ['viewPurchases', 'createPurchases'] },
+  // Full-page invoice-wise / item-wise histories (same API permission as the side panel).
+  { prefix: '/purchase-history', anyPermission: ['viewPurchases'], excludeBusinessTypes: ['school'] },
+  { prefix: '/invoice-history', anyPermission: ['viewInvoices'], excludeBusinessTypes: ['school', 'restaurant'] },
   { prefix: '/purchase-returns', anyPermission: ['viewPurchaseReturns', 'createPurchaseReturns'] },
   { prefix: '/fast-billing', anyPermission: ['createInvoices'] },
   { prefix: '/invoice', anyPermission: ['viewInvoices', 'createInvoices'] },

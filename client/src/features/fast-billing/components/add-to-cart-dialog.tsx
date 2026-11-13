@@ -7,6 +7,15 @@ import { Label } from '@/components/ui/label'
 import { Minus, Package, Plus, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+import { CustomerRateHistoryPanel } from '@/features/invoice/components/customer-rate-history-panel'
+import {
+  RATE_HISTORY_ANCHOR_ATTR,
+  RATE_HISTORY_AUTO_OPEN_MIN_WIDTH,
+  readRateHistoryAutoOpen,
+  writeRateHistoryAutoOpen,
+} from '@/features/invoice/components/customer-rate-history-prefs'
+import type { FastBillCustomer } from '../utils/build-invoice-payload'
+import { useRateBoxCustomer } from '../utils/use-rate-box-customer'
 import { stockBadgeClasses, stockDotClasses, stockLabel } from '../utils/stock-badge'
 import { getDefaultBatch } from '../types'
 
@@ -18,20 +27,32 @@ type Props = {
    * something outside it (e.g. the scan input), since Radix's own close-focus restoration
    * fires later and would otherwise steal focus back to whatever opened the dialog. */
   onAfterClose?: () => void
+  /** Selected customer — the price field then shows what they paid for this product before. */
+  customer?: FastBillCustomer
 }
 
 const noSpinner =
   '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
 
-export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose }: Props) {
+export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose, customer }: Props) {
   const formatMoney = useFormatMoney()
   const currencySymbol = useCurrencyMeta().symbol
   const [quantity, setQuantity] = useState(1)
   const [unitPrice, setUnitPrice] = useState(0)
   const qtyRef = useRef<HTMLInputElement>(null)
   const priceRef = useRef<HTMLInputElement>(null)
+  // Rate-history box beside the price field (same box as New Invoice / the cart rows).
+  const [rateBoxOpen, setRateBoxOpen] = useState(false)
+  const [rateAutoOpen, setRateAutoOpen] = useState(readRateHistoryAutoOpen)
+  const openRateBox = (auto: boolean) => {
+    if (!customer?.id) return
+    if (auto && (!rateAutoOpen || window.innerWidth < RATE_HISTORY_AUTO_OPEN_MIN_WIDTH)) return
+    setRateBoxOpen(true)
+  }
+  const { boxCustomer, customerBalance, loadingBalance } = useRateBoxCustomer(customer, Boolean(item && rateBoxOpen))
 
   useEffect(() => {
+    setRateBoxOpen(false)
     if (!item) return
     setQuantity(1)
     // Default to the auto-picked batch's own selling price when the product is
@@ -158,12 +179,16 @@ export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose }: Prop
               </span>
               <NumericInput
                 ref={priceRef}
+                {...{ [RATE_HISTORY_ANCHOR_ATTR]: '' }}
+                onFocus={() => openRateBox(true)}
+                onClick={() => openRateBox(true)}
                 min={0}
                 value={unitPrice}
                 onValueChange={setUnitPrice}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault()
+                    setRateBoxOpen(false)
                     confirm()
                   }
                 }}
@@ -190,6 +215,46 @@ export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose }: Prop
             Add to Cart
           </Button>
         </div>
+
+        {/* Rendered inside the dialog so Radix treats it as a child layer: Esc closes the box
+            first, and clicks in it don't close the dialog. */}
+        {boxCustomer && rateBoxOpen ? (
+          <CustomerRateHistoryPanel
+            open
+            onOpenChange={(next) => !next && setRateBoxOpen(false)}
+            anchor={priceRef.current}
+            side='right'
+            // px-5 (20px) dialog padding + 12px gap → the box sits clear of the dialog.
+            sideOffset={32}
+            customer={boxCustomer}
+            customerBalance={customerBalance}
+            loadingBalance={loadingBalance}
+            line={{
+              productId: item.productId,
+              variantId: item.variantId,
+              name: item.name,
+              nameUrdu: item.nameUrdu,
+              quantity,
+              unit: item.unit,
+              unitPrice,
+              cost: item.cost ?? 0,
+            }}
+            listPrice={item.price}
+            showCost={false}
+            onApplyRate={setUnitPrice}
+            autoOpen={rateAutoOpen}
+            onAutoOpenChange={(value) => {
+              setRateAutoOpen(value)
+              writeRateHistoryAutoOpen(value)
+            }}
+            onReturnFocus={() =>
+              requestAnimationFrame(() => {
+                priceRef.current?.focus()
+                priceRef.current?.select()
+              })
+            }
+          />
+        ) : null}
       </DialogContent>
     </Dialog>
   )

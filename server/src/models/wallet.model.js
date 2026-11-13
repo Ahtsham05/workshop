@@ -22,8 +22,15 @@ const walletSchema = new mongoose.Schema(
     },
     balance: {
       type: Number,
-      min: 0,
       default: 0,
+      // Never negative — except payment-method accounts (Credit Card / ACH / Check), which act
+      // as clearing accounts and may run below zero (see walletService.adjustWalletBalance).
+      validate: {
+        validator(value) {
+          return value >= 0 || Boolean(this && this.paymentMode);
+        },
+        message: 'Balance cannot be negative',
+      },
     },
     isActive: {
       type: Boolean,
@@ -84,6 +91,14 @@ const walletSchema = new mongoose.Schema(
     accountType: {
       type: String,
       enum: ['cash', 'bank', 'mobile_wallet'],
+    },
+    // Marks this account as the one that receives a customer payment method on the
+    // payment-method cards (wholesale + distributor invoices): Credit Card / ACH / Check.
+    // Seeded by walletService.ensureDefaultPaymentMethodWallets; renaming the account keeps
+    // the link because the card looks it up by this flag, never by name.
+    paymentMode: {
+      type: String,
+      enum: ['card', 'ach', 'check'],
     },
     bankName: {
       type: String,

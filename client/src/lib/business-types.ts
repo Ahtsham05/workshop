@@ -105,6 +105,16 @@ export const isDistributorBusiness = (value?: string | null) => {
 }
 
 /**
+ * Wholesale / distribution businesses only sell to known accounts: New Invoice and Fast
+ * Billing hide "Walk-in Customer" (and its free-text name field) and won't save until a
+ * registered customer is picked. Old walk-in invoices still open and edit as before.
+ */
+export const requiresRegisteredCustomer = (value?: string | null) => {
+  const type = normalizeBusinessType(value)
+  return type === 'distributor' || type === 'wholesale'
+}
+
+/**
  * Which menu pages an organization shows — two layers:
  *  1. Business-type defaults: whole modules a type doesn't use start switched off
  *     (BUSINESS_TYPE_HIDDEN_MODULES).

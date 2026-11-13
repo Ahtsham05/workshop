@@ -165,6 +165,12 @@ const InvoiceSchema = new mongoose.Schema({
     // account in the same sale. Always the opposite "bucket" from `paymentMethod` (cash vs
     // wallet) so the two legs land in different ledgers (Cash Book vs Wallet Entry) and never
     // collide on the same reference key.
+    // How the customer paid, as a tender: cash / card / ach / check (receiving account flagged
+    // with Wallet.paymentMode) or 'bank' for any other account. Derived on save from
+    // paymentMethod + walletType (pre-save hook below) — never trusted from the client.
+    paymentMode: { type: String, enum: ['cash', 'card', 'ach', 'check', 'bank'] },
+    // Check number / ACH reference / card last-4 or auth code for that tender.
+    paymentReference: { type: String, trim: true, maxlength: 60 },
     splitPaymentMethod: { type: String, enum: ['cash', 'wallet'] },
     splitWalletType: { type: String },
     splitPaidAmount: { type: Number, default: 0, min: 0 },
@@ -448,8 +454,45 @@ InvoiceSchema.statics.getStatistics = async function(dateFrom, dateTo) {
     };
 };
 
-const Invoice = mongoose.model('Invoice', InvoiceSchema);
+/**
+ * paymentMode = the tender the customer used, derived from the receiving account so every
+ * save path (New Invoice, Fast Billing, quotation convert, AI assistant, edits) agrees:
+ * cash → 'cash'; an account flagged Wallet.paymentMode (Credit Card / ACH / Check) → that
+ * mode; any other bank / wallet account → 'bank'. Quotations / pending have no payment.
+ */
+InvoiceSchema.pre('save', async function derivePaymentMode() {
+    const touched = this.isNew
+        || this.isModified('paymentMethod')
+        || this.isModified('walletType')
+        || this.isModified('type')
+        || this.isModified('paymentReference');
+    if (!touched) return;
 
-module.exports = Invoice;
+    if (this.type === 'quotation' || this.type === 'pending') {
+        this.paymentMode = undefined;
+        this.paymentReference = undefined;
+        return;
+    }
+
+    const method = String(this.paymentMethod || 'cash').toLowerCase();
+    let mode = 'cash';
+    if (method === 'wallet' && this.walletType) {
+        mode = 'bank';
+        const wallet = await mongoose.model('Wallet')
+            .findOne({ organizationId: this.organizationId, branchId: this.branchId, type: String(this.walletType).trim() })
+            .select('paymentMode')
+            .lean();
+        if (wallet?.paymentMode) mode = wallet.paymentMode;
+    } else if (method === 'card') {
+        mode = 'card';
+    } else if (method === 'bank') {
+        mode = 'bank';
+    }
+    this.paymentMode = mode;
+    // A reference only means something for a non-cash tender (check #, ACH ref, card last-4).
+    if (mode === 'cash' || !this.paymentReference) this.paymentReference = undefined;
+});
+
+const Invoice = mongoose.model('Invoice', InvoiceSchema);
 
 module.exports = Invoice;

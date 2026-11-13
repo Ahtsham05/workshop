@@ -114,10 +114,15 @@ const userSchema = mongoose.Schema(
         ],
         default: 'default',
       },
-      /** Arrange dashboard: section and KPI-card order (ids only; empty = standard order). */
+      /**
+       * Arrange dashboard: section and KPI-card order (ids only; empty = standard order), and
+       * Settings → Dashboard: ids of the sections, widgets and cards the person switched off
+       * (hidden ids, so anything new shows by default).
+       */
       dashboardLayout: {
         sections: { type: [String], default: undefined },
         cards: { type: [String], default: undefined },
+        hidden: { type: [String], default: undefined },
       },
       /** New Invoice / New Purchase screens: ids of the toolbar buttons and side cards the person hid. */
       transactionLayout: {

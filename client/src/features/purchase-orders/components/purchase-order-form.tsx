@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { toast } from 'sonner'
-import { ArrowLeft, ClipboardList, Columns2, LayoutGrid } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
+import { Columns2, History, Keyboard, LayoutGrid, ShoppingCart } from 'lucide-react'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { usePermissions } from '@/context/permission-context'
 import { useTradeProductFilter } from '@/hooks/use-trade-product-filter'
 import { cn } from '@/lib/utils'
 import { fetchAllProducts } from '@/stores/product.slice'
@@ -15,6 +18,7 @@ import type { PurchaseOrder } from '@/stores/purchaseOrder.api'
 import { CATALOG_REVALIDATE_ON_MOUNT, useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 
 import PurchaseOrderPanel from './purchase-order-panel'
+import { STATUS_LABELS, STATUS_STYLES } from './po-status'
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
 // array every render while the query is loading.
@@ -40,6 +44,10 @@ interface Props {
 
 export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillItems, prefillSupplierId }: Props) {
   const dispatch = useDispatch<AppDispatch>()
+  const navigate = useNavigate()
+  const { hasExplicitPermission } = usePermissions()
+  const canViewList = hasExplicitPermission('viewPurchaseOrders') || hasExplicitPermission('viewPurchases')
+  const canOpenPurchases = hasExplicitPermission('createPurchases') || hasExplicitPermission('viewPurchases')
   const addProductRef = useRef<(product: Product, quantity?: number, variantId?: string) => void>(() => {})
   const prefillAppliedRef = useRef(false)
 
@@ -223,95 +231,116 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
   )
 
   const title = editing ? `Edit ${editing.orderNumber}` : 'New Purchase Order'
+  const status = editing?.status || 'draft'
 
+  // Same page shell as Purchase Invoice (purchase-invoice/index.tsx): title + status badge,
+  // a toolbar of utility buttons with Save draft / Save & send portaled in on the right
+  // (catalog hidden), the three-column panel, and the keyboard-shortcut banner.
   return (
-    <div
-      className={cn(
-        'flex h-full min-h-0 flex-col p-4',
-        showProductCatalog ? 'gap-4' : 'gap-3 pt-3',
-      )}
-    >
-      {/* Title + back button, its own row — the toolbar below carries the byline and
-          action buttons (including the primary Save draft/Save & send actions, compact
-          mode only). Mirrors Purchase Invoice's header exactly — see
-          features/purchase-invoice/index.tsx. */}
-      <div className='flex items-center gap-2'>
-        <Button type='button' variant='ghost' size='sm' className='-ml-2 h-8 w-8 p-0' onClick={onBack}>
-          <ArrowLeft className='h-4 w-4' aria-hidden />
-        </Button>
-        <h1 className='flex items-center gap-2 text-lg font-semibold sm:text-xl'>
-          <ClipboardList className='h-5 w-5' />
-          {title}
-        </h1>
-      </div>
+    <div className={cn('p-4 pb-6', showProductCatalog ? 'pt-3 md:pt-4' : 'pt-2 md:pt-2.5')}>
+      <div className={cn('space-y-3', !showProductCatalog && 'space-y-2')}>
+        <div className='flex items-center gap-2'>
+          <h1 className='text-lg font-semibold sm:text-xl'>{title}</h1>
+          <Badge className={STATUS_STYLES[status]}>{STATUS_LABELS[status]}</Badge>
+        </div>
 
-      <div className={cn('flex flex-wrap items-center gap-2', showProductCatalog ? 'justify-end' : 'justify-between')}>
-        <p className='order-2 max-w-xl text-xs leading-snug text-muted-foreground sm:order-1'>
-          Pick supplier → order date → products. Press Enter to move to the next field. Click
-          products in the catalog or scan a barcode to add lines quickly.
-        </p>
-        <div className='order-1 flex flex-wrap items-center justify-end gap-2 sm:order-2'>
-          <Button
-            type='button'
-            variant='outline'
-            size='sm'
-            className='gap-2 shadow-sm'
-            onClick={toggleProductCatalog}
-            aria-pressed={showProductCatalog}
-          >
-            {showProductCatalog ? (
-              <>
-                <Columns2 className='h-4 w-4 shrink-0' />
-                Hide catalog
-              </>
-            ) : (
-              <>
-                <LayoutGrid className='h-4 w-4 shrink-0' />
-                Show catalog
-              </>
+        <div className={cn('flex flex-wrap items-center gap-2', !showProductCatalog ? 'justify-between' : 'justify-end')}>
+          <div className='flex flex-wrap items-center gap-2'>
+            {canViewList && (
+              <Button type='button' variant='outline' size='sm' className='gap-2 shadow-sm' onClick={onBack}>
+                <History className='h-4 w-4 shrink-0' aria-hidden />
+                Order history
+              </Button>
             )}
-          </Button>
+            {canOpenPurchases && (
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='gap-2 shadow-sm'
+                onClick={() => navigate({ to: '/purchase-invoice' })}
+              >
+                <ShoppingCart className='h-4 w-4 shrink-0' aria-hidden />
+                Purchases
+              </Button>
+            )}
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              className='gap-2 shadow-sm'
+              onClick={toggleProductCatalog}
+              aria-pressed={showProductCatalog}
+            >
+              {showProductCatalog ? (
+                <>
+                  <Columns2 className='h-4 w-4 shrink-0' aria-hidden />
+                  Hide catalog
+                </>
+              ) : (
+                <>
+                  <LayoutGrid className='h-4 w-4 shrink-0' aria-hidden />
+                  Show catalog
+                </>
+              )}
+            </Button>
+          </div>
+          {/* Phones use the panel's fixed bottom bar instead. */}
+          {!showProductCatalog && (
+            <div ref={setHeaderActionsSlot} className='flex flex-wrap items-center gap-2 max-sm:hidden' />
+          )}
         </div>
-        {!showProductCatalog && (
-          <div ref={setHeaderActionsSlot} className='order-3 flex flex-wrap items-center gap-2' />
-        )}
-      </div>
 
-      <div
-        className={cn(
-          'grid min-h-0 w-full flex-1 items-start content-start',
-          showProductCatalog ? 'grid-cols-1 gap-6 lg:grid-cols-2' : 'grid-cols-1 gap-4',
-        )}
-      >
-        <div className='min-w-0 pb-6'>
-          <PurchaseOrderPanel
-            onSaved={onSaved}
-            editing={editing}
-            products={products}
-            productsLoading={loading}
-            prefillSupplierId={prefillSupplierId}
-            onRegisterAddProduct={(fn) => {
-              addProductRef.current = fn
-            }}
-            showProductCatalog={showProductCatalog}
-            stickyActionsContainer={headerActionsSlot}
-          />
-        </div>
-
-        {showProductCatalog ? (
-          <div className='min-w-0 max-h-[2000px] overflow-y-auto pb-6'>
-            <ProductCatalog
-              categorizedProducts={categorizedProducts}
-              loading={loading}
-              showImages={showImages}
-              setShowImages={setShowImages}
-              searchTerm={searchTerm}
-              setSearchTerm={setSearchTerm}
-              onAddToInvoice={addToOrder}
-              onBarcodeSearch={handleBarcodeSearch}
+        <div
+          className={cn(
+            'grid w-full items-start content-start',
+            showProductCatalog ? 'gap-6 lg:grid-cols-2' : 'grid-cols-1 gap-4',
+          )}
+        >
+          <div className={cn('min-w-0 space-y-4', showProductCatalog && 'pb-6')}>
+            <PurchaseOrderPanel
+              onSaved={onSaved}
+              onBack={canViewList ? onBack : undefined}
+              editing={editing}
+              products={products}
+              productsLoading={loading}
+              prefillSupplierId={prefillSupplierId}
+              onRegisterAddProduct={(fn) => {
+                addProductRef.current = fn
+              }}
+              showProductCatalog={showProductCatalog}
+              stickyActionsContainer={headerActionsSlot}
             />
           </div>
-        ) : null}
+
+          {showProductCatalog && (
+            <div className='min-w-0 max-h-[2000px] space-y-4 overflow-y-auto pb-6'>
+              <ProductCatalog
+                categorizedProducts={categorizedProducts}
+                loading={loading}
+                showImages={showImages}
+                setShowImages={setShowImages}
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                onAddToInvoice={addToOrder}
+                onBarcodeSearch={handleBarcodeSearch}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Shortcut banner — same look as Purchase Invoice's autosave banner. */}
+        <div className='mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300 max-sm:hidden'>
+          <Keyboard className='h-3.5 w-3.5 shrink-0' aria-hidden />
+          Keyboard shortcuts:
+          <span className='flex flex-wrap items-center gap-x-1.5 gap-y-1 text-emerald-700 dark:text-emerald-400'>
+            <kbd className='rounded border border-emerald-300 bg-white px-1 font-mono dark:border-emerald-700 dark:bg-emerald-950'>Ctrl+D</kbd>
+            Save draft
+            <span className='opacity-50'>·</span>
+            <kbd className='rounded border border-emerald-300 bg-white px-1 font-mono dark:border-emerald-700 dark:bg-emerald-950'>Ctrl+Enter</kbd>
+            {editing && editing.status !== 'draft' ? 'Save' : 'Save & send'}
+          </span>
+        </div>
       </div>
     </div>
   )

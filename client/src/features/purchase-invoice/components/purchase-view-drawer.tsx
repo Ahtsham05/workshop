@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { formatPaymentMethod } from '@/lib/payment-modes'
 import { useNavigate } from '@tanstack/react-router'
 import { differenceInCalendarDays } from 'date-fns'
 import { toast } from 'sonner'
@@ -532,6 +533,11 @@ export function PurchaseViewDrawer({
 
                     <div className='grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-md border px-3 py-2'>
                       <Field label={t('Payment Type')}>{paymentTypeLabel}</Field>
+                      {purchase.paymentMode && purchase.paymentMode !== 'cash' && Number(purchase.paidAmount || 0) > 0 && (
+                        <Field label={t('Paid By') || 'Paid By'}>
+                          {formatPaymentMethod({ ...purchase, type: undefined, splitPaymentMethod: undefined }, { withAccount: true })}
+                        </Field>
+                      )}
                       <Field label={t('Invoice Status')}>
                         <Badge variant={purchase.status ? 'default' : 'secondary'}>
                           {purchase.status ? t('Completed') : t('Pending')}

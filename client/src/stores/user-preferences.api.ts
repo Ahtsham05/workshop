@@ -85,8 +85,8 @@ export const userPreferencesApi = createApi({
         body,
       }),
     }),
-    /** Arrange dashboard: section + KPI card order, saved on the account. */
-    updateDashboardLayout: builder.mutation<unknown, { dashboardLayout: { sections: string[]; cards: string[] } }>({
+    /** Arrange dashboard (order) + Settings → Dashboard (switched-off items), saved on the account. */
+    updateDashboardLayout: builder.mutation<unknown, { dashboardLayout: { sections: string[]; cards: string[]; hidden: string[] } }>({
       query: (body) => ({
         url: '/users/me/ui-preferences',
         method: 'PATCH',

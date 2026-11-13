@@ -148,7 +148,9 @@ import { BilingualName } from '@/components/bilingual-name'
 import { useUrduDisplay } from '@/context/urdu-display-context'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-preferences'
-import { isWholesaleRetailBusiness } from '@/lib/business-types'
+import { isWholesaleRetailBusiness, requiresRegisteredCustomer } from '@/lib/business-types'
+import { usesPaymentMethodCards } from '@/lib/payment-modes'
+import { PaymentMethodCards } from '@/components/payment-method-cards'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 import {
   buildMergedPaymentOptions,
@@ -447,6 +449,16 @@ export function InvoicePanel({
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
+  // Wholesale / distribution: no walk-in sales — every invoice needs a registered customer.
+  const customerRequired = requiresRegisteredCustomer(orgData?.businessType || user?.businessType)
+  // Wholesale / distribution: Payment Method as cards (Cash · Credit Card · ACH · Check) and the
+  // sale stays Cash when a customer is picked — switching to Credit is always a deliberate click.
+  const paymentCards = usesPaymentMethodCards(orgData?.businessType || user?.businessType)
+  // Exceptions: an old walk-in invoice opened for editing, and a quotation for a CRM lead
+  // (a lead isn't a customer yet — it rides on walk-in + the lead's name).
+  const walkInAllowed =
+    !customerRequired || (isEditing && editingInvoice?.customerId === 'walk-in') || Boolean(invoice.leadId)
+  const hasValidCustomer = Boolean(invoice.customerId) && (walkInAllowed || invoice.customerId !== 'walk-in')
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
   const branchDefaultTerms = branchData?.defaultInvoiceTerms?.trim() || ''
   const canSaveDefaultTerms = hasPermission('manageBranches' as never) || hasPermission('editSettings' as never)
@@ -526,9 +538,9 @@ export function InvoicePanel({
   )
   // Every line's history is fetched up front in one batch, so clicking a rate needs no request.
   useRateHistoryPrefetch({
-    customerId: rateHistoryCustomerReady ? String(invoice.customerId) : null,
+    partyId: rateHistoryCustomerReady ? String(invoice.customerId) : null,
     lines: invoice.items,
-    excludeInvoiceId: isEditing ? editingInvoiceId : undefined,
+    excludeId: isEditing ? editingInvoiceId : undefined,
     enabled: rateHistoryCustomerReady,
   })
   // Line deleted, customer switched to walk-in, or the form reset after a save → close, so it
@@ -812,6 +824,14 @@ export function InvoicePanel({
       }))
     }
   }, [isEditing, editingInvoice, setInvoice])
+
+  // Wholesale / distribution: a new invoice starts with no customer instead of Walk-in,
+  // so the picker shows "Select customer *" until a real customer is chosen.
+  useEffect(() => {
+    if (!walkInAllowed && invoice.customerId === 'walk-in') {
+      setInvoice(prev => (prev.customerId === 'walk-in' ? { ...prev, customerId: '', walkInCustomerName: undefined } : prev))
+    }
+  }, [walkInAllowed, invoice.customerId, setInvoice])
 
   // Handle walk-in customer business rules
   useEffect(() => {
@@ -1462,7 +1482,11 @@ export function InvoicePanel({
           const list = prev || []
           return list.some((c: any) => (c._id || c.id) === customerId) ? list : [...list, entity]
         })
-        setInvoice((prev) => ({
+        setInvoice((prev) => paymentCards ? {
+          ...prev,
+          customerId,
+          customerName: entity.name,
+        } : {
           ...prev,
           customerId,
           customerName: entity.name,
@@ -1471,7 +1495,7 @@ export function InvoicePanel({
           // paidAmount/balance so a fresh credit invoice doesn't save as fully paid.
           paidAmount: 0,
           balance: prev.total,
-        }))
+        })
         setCustomerSearchQuery('')
         goToProducts()
         return
@@ -1537,6 +1561,7 @@ export function InvoicePanel({
       goToProducts,
       handleProductSelect,
       invoice.items,
+      paymentCards,
       quickCreateProductItemId,
       setCustomers,
       setInvoice,
@@ -1614,8 +1639,9 @@ export function InvoicePanel({
   const handleSaveInvoice = useCallback(async (requestedPrint: 'none' | PaperSize = 'none') => {
     const printType: 'none' | PaperSize = canPrint ? requestedPrint : 'none'
     // Validate required fields
-    if (!invoice.customerId) {
+    if (!hasValidCustomer) {
       toast.error('Please select a customer')
+      setCustomerSelectOpen(true)
       return
     }
 
@@ -1752,6 +1778,10 @@ export function InvoicePanel({
         splitPayment: invoice.splitPayment,
         paymentMethod: invoice.paymentMethod || 'cash',
         walletType: invoice.paymentMethod === 'wallet' ? (invoice.walletType || '') : undefined,
+        paymentReference:
+          invoice.paymentMethod === 'wallet' && invoice.type !== 'pending' && invoice.type !== 'quotation'
+            ? (invoice.paymentReference || '').trim()
+            : '',
         splitPaymentMethod: invoice.splitPaymentMethod,
         splitWalletType: invoice.splitPaymentMethod === 'wallet' ? (invoice.splitWalletType || '') : undefined,
         splitPaidAmount: splitPaidAmountForSave,
@@ -2124,7 +2154,7 @@ export function InvoicePanel({
     } finally {
       setSavingType(null)
     }
-  }, [canPrint, invoice, createInvoice, updateInvoice, isEditing, editingInvoice, editingInvoiceId, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms, sendWhatsAppMessage, invoiceTemplate, confirmNotDuplicate, checkCredit, handleCreditError])
+  }, [canPrint, hasValidCustomer, invoice, createInvoice, updateInvoice, isEditing, editingInvoice, editingInvoiceId, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms, sendWhatsAppMessage, invoiceTemplate, confirmNotDuplicate, checkCredit, handleCreditError])
 
   useInvoiceSaveShortcuts(
     () => handleSaveInvoice('none'),
@@ -3078,7 +3108,7 @@ export function InvoicePanel({
   // form). Independent of showProductCatalog — unlike the two existing action groups
   // above/below (both now `max-sm:hidden`), this is the only one that renders on phones.
   // Mirrors PurchasePanel's identical bar (see purchase-panel.tsx).
-  const mobileSaveDisabled = !invoice.customerId || invoice.items.length === 0 || savingType !== null
+  const mobileSaveDisabled = !hasValidCustomer || invoice.items.length === 0 || savingType !== null
   const mobileActionsBar = (
     <div className='fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/90 px-3 pt-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:hidden'>
       <div className='mb-1.5 flex items-center justify-between gap-2'>
@@ -3429,6 +3459,7 @@ export function InvoicePanel({
                     ) : null}
                     <CommandList className="max-h-[300px] overflow-y-auto">
                       <CommandGroup>
+                        {walkInAllowed && (
                         <CommandItem
                           onSelect={() => {
                             setInvoice(prev => ({ ...prev, customerId: 'walk-in' }))
@@ -3448,6 +3479,7 @@ export function InvoicePanel({
                             </div>
                           )}
                         </CommandItem>
+                        )}
                         {visibleCustomers.map((customer) => {
                           const customerId = customer._id || customer.id
                           const isSelected = invoice.customerId === customerId
@@ -3455,7 +3487,11 @@ export function InvoicePanel({
                             <CommandItem
                               key={customerId}
                               onSelect={() => {
-                                setInvoice(prev => ({
+                                setInvoice(prev => paymentCards ? {
+                                  ...prev,
+                                  customerId,
+                                  customerName: customer.name,
+                                } : {
                                   ...prev,
                                   customerId,
                                   customerName: customer.name, // Set customer name for editing
@@ -3466,7 +3502,7 @@ export function InvoicePanel({
                                   // left uncorrected, the invoice saves as fully paid/cash-equivalent.
                                   paidAmount: 0,
                                   balance: prev.total,
-                                }))
+                                })
                                 setCustomerSelectOpen(false)
                                 setCustomerSearchQuery('')
                                 goToProducts()
@@ -4300,7 +4336,34 @@ export function InvoicePanel({
           {/* Payment Details */}
           <div className='space-y-4'>
             {/* Payment Method selector — gated by SHOW_INVOICE_PAYMENT_METHOD_UI */}
-            {SHOW_INVOICE_PAYMENT_METHOD_UI && invoice.type !== 'pending' && invoice.type !== 'quotation' && (
+            {SHOW_INVOICE_PAYMENT_METHOD_UI && paymentCards && invoice.type !== 'pending' && invoice.type !== 'quotation' && (
+              <PaymentMethodCards
+                label={t('payment_method') || 'Payment Method'}
+                wallets={wallets}
+                paymentMethod={invoice.paymentMethod}
+                walletType={invoice.walletType}
+                reference={invoice.paymentReference}
+                compact={showProductCatalog}
+                onSelect={(selection) =>
+                  setInvoice(prev => ({
+                    ...prev,
+                    paymentMethod: selection.paymentMethod,
+                    walletType: selection.walletType,
+                    // A reference belongs to one tender — a new card starts blank.
+                    paymentReference:
+                      prev.paymentMethod === selection.paymentMethod && prev.walletType === selection.walletType
+                        ? prev.paymentReference
+                        : undefined,
+                    // The split leg's bucket is derived from the primary method — stale once it changes.
+                    splitPaymentMethod: undefined,
+                    splitWalletType: undefined,
+                    splitPaidAmount: 0,
+                  }))
+                }
+                onReferenceChange={(paymentReference) => setInvoice(prev => ({ ...prev, paymentReference }))}
+              />
+            )}
+            {SHOW_INVOICE_PAYMENT_METHOD_UI && !paymentCards && invoice.type !== 'pending' && invoice.type !== 'quotation' && (
               <div className='space-y-3'>
                 <div>
                   <Label className='mb-2 block'>{t('payment_method') || 'Payment Method'}</Label>
@@ -4499,7 +4562,7 @@ export function InvoicePanel({
                   onClick={() => handleSaveInvoice('none')}
                   className='w-full'
                   size="lg"
-                  disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
+                  disabled={!hasValidCustomer || invoice.items.length === 0 || savingType !== null}
                   variant="outline"
                 >
                   {savingType === 'none' ? (
@@ -4524,7 +4587,7 @@ export function InvoicePanel({
                     size="lg"
                     variant="default"
                     fullWidth
-                    disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
+                    disabled={!hasValidCustomer || invoice.items.length === 0 || savingType !== null}
                     mainButtonContent={
                       savingType !== null && savingType !== 'none' ? (
                         <>
@@ -4649,7 +4712,7 @@ export function InvoicePanel({
           visible" when the cards column alone is taller than the viewport. Falls back to
           rendering inline (with its own sticky positioning) until that slot exists. */}
       {headerActions && (() => {
-        const disabled = !invoice.customerId || invoice.items.length === 0 || savingType !== null
+        const disabled = !hasValidCustomer || invoice.items.length === 0 || savingType !== null
         const bar = (
           <div className='flex flex-wrap items-center gap-2'>
             {showPreview && (

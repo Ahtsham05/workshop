@@ -785,3 +785,41 @@ html[data-custom-header='on'] header.app-header {
 html[data-custom-header='on'] header.app-header [data-slot='separator'] {
   background: color-mix(in oklab, var(--app-header-fg) 25%, transparent);
 }
+
+/*
+ * Dashboard insight charts (features/dashboard/components/insights). Categorical slots are
+ * used in this fixed order (validated light + dark for colour-blind separation); the aging
+ * ramp is one hue, light→dark = newer→older. Status colours mean state only (overdue, due soon).
+ */
+.dash-viz {
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-3: #1baf7a;
+  --viz-4: #eda100;
+  --viz-5: #e87ba4;
+  --viz-other: #b4b2aa;
+  --viz-age-1: #86b6ef;
+  --viz-age-2: #3987e5;
+  --viz-age-3: #1c5cab;
+  --viz-age-4: #0d366b;
+  --viz-status-critical: #d03b3b;
+  --viz-status-warning: #fab219;
+  --viz-neutral: #d6d4cc;
+  --viz-grid: #e1e0d9;
+  --viz-axis: #898781;
+}
+.dark .dash-viz {
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #199e70;
+  --viz-4: #c98500;
+  --viz-5: #d55181;
+  --viz-other: #6b6a64;
+  --viz-age-1: #184f95;
+  --viz-age-2: #2a78d6;
+  --viz-age-3: #6da7ec;
+  --viz-age-4: #b7d3f6;
+  --viz-neutral: #44443f;
+  --viz-grid: #2c2c2a;
+  --viz-axis: #898781;
+}

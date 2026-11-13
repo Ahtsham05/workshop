@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { PaymentMethodBadge } from '@/components/payment-method-badge'
 import { WarehouseTag } from '@/components/warehouse-tag'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
@@ -71,6 +72,8 @@ interface PurchaseListProps {
   onEdit?: (purchase: any) => void
   /** Opens the create panel pre-filled from an existing purchase (a new invoice, not an edit). */
   onDuplicate?: (purchase: any) => void
+  /** Shown inside the Purchase History page: its own title row is dropped (the page has one). */
+  embedded?: boolean
 }
 
 /** One headline number above the table. */
@@ -110,7 +113,7 @@ function StatCard({
   )
 }
 
-export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate }: PurchaseListProps) {
+export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate, embedded = false }: PurchaseListProps) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
   const canViewCreatedBy = useCanViewCreatedBy()
@@ -262,7 +265,8 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate 
   return (
     <div className='space-y-4'>
       {/* Header */}
-      <div className='flex flex-wrap items-start justify-between gap-3'>
+      <div className={cn('flex flex-wrap items-start justify-between gap-3', embedded && 'justify-end')}>
+        {!embedded && (
         <div className='flex items-center gap-3'>
           {onBack && (
             <Button variant='ghost' size='icon' onClick={onBack}>
@@ -274,6 +278,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate 
             <p className='text-sm text-muted-foreground'>{t('Track supplier purchases, invoices and payments.')}</p>
           </div>
         </div>
+        )}
         <div className='flex flex-wrap items-center gap-2'>
           {canCreate && (
             <Button variant='outline' onClick={() => openPaymentFor()}>
@@ -431,7 +436,12 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate 
                     const settlement = resolvePurchaseSettlement(purchase)
                     const statusMeta = SETTLEMENT_STATUS_META[settlement.settlementStatus]
                     const dueMeta = DUE_STATUS_META[settlement.dueStatus]
-                    const paymentTypeLabel = resolvePaymentTypeLabel(purchase)
+                    // With a tender recorded (Check / ACH / Card / account), the badge shows the
+                    // settlement (Cash / Credit) and the tender gets its own label underneath.
+                    const tender = purchase.paymentMode && purchase.paymentMode !== 'cash' ? purchase.paymentMode : ''
+                    const paymentTypeLabel = tender
+                      ? (purchase.type === 'credit' ? 'Credit' : 'Cash')
+                      : resolvePaymentTypeLabel(purchase)
                     const isOverdue = settlement.dueStatus === 'overdue'
 
                     return (
@@ -496,6 +506,9 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate 
                           <Badge variant='outline' className={cn('font-normal', paymentTypeClassName(paymentTypeLabel))}>
                             {paymentTypeLabel}
                           </Badge>
+                          {tender && settlement.settledAmount > 0 && (
+                            <PaymentMethodBadge source={purchase} withAccount className='mt-1 flex w-fit' />
+                          )}
                         </TableCell>
 
                         <TableCell className='text-right font-semibold tabular-nums'>

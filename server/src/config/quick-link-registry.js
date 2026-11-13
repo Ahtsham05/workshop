@@ -78,6 +78,17 @@ const QUICK_LINK_ACTIONS = [
     color: 'bg-red-500 hover:bg-red-600',
     excludeBusinessTypes: ['school', 'restaurant'],
   },
+  {
+    actionKey: 'invoice_history',
+    permission: 'viewInvoices',
+    label: 'Invoice History',
+    iconKey: 'IconHistory',
+    route: '/invoice-history',
+    category: 'Sales',
+    color: 'bg-cyan-600 hover:bg-cyan-700',
+    excludeBusinessTypes: ['school', 'restaurant'],
+    synonyms: ['sales history', 'sale history', 'invoice wise history', 'item wise sales'],
+  },
 
   // ---- Purchasing ----
   {
@@ -116,6 +127,18 @@ const QUICK_LINK_ACTIONS = [
     category: 'Purchasing',
     color: 'bg-orange-600 hover:bg-orange-700',
     excludeBusinessTypes: ['school', 'restaurant'],
+  },
+  {
+    actionKey: 'purchase_history',
+    permission: 'viewPurchases',
+    label: 'Purchase History',
+    iconKey: 'IconHistory',
+    route: '/purchase-history',
+    category: 'Purchasing',
+    color: 'bg-emerald-600 hover:bg-emerald-700',
+    // Restaurants keep it — their own 'Purchase history' sidebar entry uses this route.
+    excludeBusinessTypes: ['school'],
+    synonyms: ['purchases history', 'buying history', 'item wise purchases'],
   },
 
   // ---- Catalog & Inventory ----
@@ -2180,6 +2203,8 @@ const QUICK_LINK_ACTIONS = [
 const DEFAULT_ACTION_KEY_ORDER = [
   'new_invoice',
   'new_purchase',
+  'invoice_history',
+  'purchase_history',
   'stock_transfer',
   'new_stock_transfer',
   'stock_adjustments',

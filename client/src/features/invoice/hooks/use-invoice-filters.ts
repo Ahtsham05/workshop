@@ -32,6 +32,8 @@ export interface InvoiceFilters {
   /** Invoice Type — a single value from the existing dropdown (all/cash/credit/pending/quotation/pending-converted). */
   type: string
   customer: string[]
+  /** How it was paid: cash / card / ach / check / bank. */
+  paymentMode: string[]
   paymentStatus: string[]
   dueStatus: string[]
   createdBy: string[]
@@ -49,6 +51,7 @@ export const EMPTY_FILTERS: InvoiceFilters = {
   searchBy: 'all',
   type: '',
   customer: [],
+  paymentMode: [],
   paymentStatus: [],
   dueStatus: [],
   createdBy: [],
@@ -126,6 +129,7 @@ export function buildInvoiceQueryParams(filters: InvoiceFilters): Record<string,
   }
   if (filters.type && filters.type !== 'all') params.type = filters.type
   if (filters.customer.length) params.customerId = list(filters.customer)
+  if (filters.paymentMode?.length) params.paymentMode = list(filters.paymentMode)
   if (filters.paymentStatus.length) params.paymentStatus = list(filters.paymentStatus)
   if (filters.dueStatus.length) params.dueStatus = list(filters.dueStatus)
   if (filters.createdBy.length) params.createdBy = list(filters.createdBy)
@@ -143,6 +147,7 @@ export function buildInvoiceQueryParams(filters: InvoiceFilters): Record<string,
 export function countActiveFilters(filters: InvoiceFilters): number {
   let count = 0
   count += filters.customer.length ? 1 : 0
+  count += filters.paymentMode?.length ? 1 : 0
   count += filters.paymentStatus.length ? 1 : 0
   count += filters.dueStatus.length ? 1 : 0
   count += filters.createdBy.length ? 1 : 0

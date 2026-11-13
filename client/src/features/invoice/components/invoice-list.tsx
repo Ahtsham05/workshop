@@ -3,6 +3,7 @@ import { useIsModuleHidden } from '@/hooks/use-hidden-modules'
 import { WarehouseTag } from '@/components/warehouse-tag'
 import { useFormatMoney } from '@/lib/format-money'
 import { Link } from '@tanstack/react-router'
+import { useIsPageHidden } from '@/hooks/use-hidden-modules'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -42,6 +43,7 @@ import {
   TrendingUp,
   AlertTriangle,
   FileDown,
+  History,
 } from 'lucide-react'
 import { useGetInvoicesListQuery, useGetInvoicesSummaryQuery, useLazyExportInvoicesQuery, useUpdateInvoiceFlagMutation } from '@/stores/invoice.api'
 import { FlagBadge, FlagPickerPopover } from '@/components/flag-badge'
@@ -80,6 +82,7 @@ import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-pre
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 import { formatAppDate } from '@/lib/date-format'
 import { InvoiceDetailDialog } from '@/components/invoice-detail-dialog'
+import { PaymentMethodBadge } from '@/components/payment-method-badge'
 import { useInvoicePrinter } from '../hooks/use-invoice-printer'
 
 import { useNativeLanguageName } from '@/hooks/use-native-language-name'
@@ -89,6 +92,9 @@ interface InvoiceListProps {
   onEdit?: (invoice: any) => void
   onConvertPending?: () => void
   initialTypeFilter?: string
+  /** Shown inside the Invoice History page: its own title row is dropped (the page has one)
+   *  and the link back to that page is hidden; the action buttons stay. */
+  embedded?: boolean
 }
 
 const typeColors: Record<string, string> = {
@@ -144,6 +150,7 @@ function StatCard({
 export function InvoiceList({ onBack, onCreateNew, onEdit,
   onConvertPending,
   initialTypeFilter,
+  embedded = false,
 }: InvoiceListProps) {
   const { t } = useLanguage()
   const nativeLanguageName = useNativeLanguageName()
@@ -151,6 +158,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const { settings: ledgerSettings } = useLedgerAlertSettings()
   const { hasExplicitPermission } = usePermissions()
   const canCreate = hasExplicitPermission('createInvoices')
+  // Settings → Menu & Pages can switch the Invoice History page off.
+  const invoiceHistoryHidden = useIsPageHidden('/invoice-history')
   const canEdit = hasExplicitPermission('editInvoices')
   const canDelete = hasExplicitPermission('deleteInvoices')
   const canPrint = hasExplicitPermission('printInvoices')
@@ -439,7 +448,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className={cn('flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between', embedded && 'lg:justify-end')}>
+        {!embedded && (
         <div className="flex items-center gap-4">
           {onBack && (
             <Button variant="ghost" size="sm" onClick={onBack}>
@@ -451,6 +461,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
             <p className="text-muted-foreground mt-1">{t('manage_customer_invoices')}</p>
           </div>
         </div>
+        )}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:justify-end">
           <Button variant="outline" className="whitespace-nowrap" asChild>
             <Link to="/fast-billing">
@@ -458,6 +469,14 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
               Fast Billing
             </Link>
           </Button>
+          {!invoiceHistoryHidden && !embedded && (
+            <Button variant="outline" className="whitespace-nowrap" asChild>
+              <Link to="/invoice-history" search={{ tab: 'history' }}>
+                <History className="h-4 w-4 mr-2" />
+                {t('Invoice History')}
+              </Link>
+            </Button>
+          )}
           <Button variant="outline" className="whitespace-nowrap" onClick={onConvertPending}>
             <Clock className="h-4 w-4 mr-2" />
             {t('convert_pending_invoices')}
@@ -749,19 +768,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {invoice.paymentMethod && invoice.paymentMethod !== 'cash' ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                          {invoice.paymentMethod === 'wallet' && invoice.walletType
-                            ? invoice.walletType
-                            : invoice.paymentMethod === 'bank'
-                              ? 'Bank'
-                              : invoice.paymentMethod === 'card'
-                                ? 'Card'
-                                : invoice.paymentMethod}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">Cash</span>
-                      )}
+                      <PaymentMethodBadge source={invoice} />
                     </TableCell>
                     <TableCell>
                       {invoice.billNumber ? (

@@ -69,21 +69,21 @@ export function LowStockWidget() {
               </div>
               <div className='space-y-2 max-h-[120px] overflow-y-auto'>
                 {outOfStock.slice(0, 3).map((product) => (
-                  <div key={product.id} className='flex items-center justify-between p-2 bg-red-50 dark:bg-red-950/20 rounded-lg'>
-                    <div className='flex items-center gap-2'>
+                  <div key={product.id} className='flex items-center gap-2 p-2 bg-red-50 dark:bg-red-950/20 rounded-lg'>
+                    <div className='flex min-w-0 flex-1 items-center gap-2'>
                       {product.image?.url ? (
-                        <img src={product.image.url} alt={product.name} className='h-8 w-8 rounded object-cover' />
+                        <img src={product.image.url} alt={product.name} className='h-8 w-8 shrink-0 rounded object-cover' />
                       ) : (
-                        <div className='h-8 w-8 rounded bg-gray-200 flex items-center justify-center'>
+                        <div className='h-8 w-8 shrink-0 rounded bg-gray-200 flex items-center justify-center'>
                           <Package className='h-4 w-4 text-gray-500' />
                         </div>
                       )}
-                      <div>
-                        <p className='text-sm font-medium'>{product.name}</p>
+                      <div className='min-w-0 flex-1'>
+                        <p className='text-sm font-medium leading-snug line-clamp-2 break-words' title={product.name}>{product.name}</p>
                         {/* <p className='text-xs text-muted-foreground'>{product.category}</p> */}
                       </div>
                     </div>
-                    <Badge variant='destructive' className='text-xs'>0</Badge>
+                    <Badge variant='destructive' className='text-xs shrink-0'>0</Badge>
                   </div>
                 ))}
                 {outOfStock.length > 3 && (
@@ -106,21 +106,21 @@ export function LowStockWidget() {
               </div>
               <div className='space-y-2 max-h-[120px] overflow-y-auto'>
                 {lowStock.slice(0, 3).map((product) => (
-                  <div key={product.id} className='flex items-center justify-between p-2 bg-orange-50 dark:bg-orange-950/20 rounded-lg'>
-                    <div className='flex items-center gap-2'>
+                  <div key={product.id} className='flex items-center gap-2 p-2 bg-orange-50 dark:bg-orange-950/20 rounded-lg'>
+                    <div className='flex min-w-0 flex-1 items-center gap-2'>
                       {product.image?.url ? (
-                        <img src={product.image.url} alt={product.name} className='h-8 w-8 rounded object-cover' />
+                        <img src={product.image.url} alt={product.name} className='h-8 w-8 shrink-0 rounded object-cover' />
                       ) : (
-                        <div className='h-8 w-8 rounded bg-gray-200 flex items-center justify-center'>
+                        <div className='h-8 w-8 shrink-0 rounded bg-gray-200 flex items-center justify-center'>
                           <Package className='h-4 w-4 text-gray-500' />
                         </div>
                       )}
-                      <div>
-                        <p className='text-sm font-medium'>{product.name}</p>
+                      <div className='min-w-0 flex-1'>
+                        <p className='text-sm font-medium leading-snug line-clamp-2 break-words' title={product.name}>{product.name}</p>
                         {/* <p className='text-xs text-muted-foreground'>{product.category}</p> */}
                       </div>
                     </div>
-                    <Badge variant='outline' className='text-xs bg-orange-100 dark:bg-orange-950'>
+                    <Badge variant='outline' className='text-xs shrink-0 tabular-nums bg-orange-100 dark:bg-orange-950'>
                       {product.stockQuantity}
                     </Badge>
                   </div>

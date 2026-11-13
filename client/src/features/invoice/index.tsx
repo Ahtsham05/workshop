@@ -53,6 +53,7 @@ import { calculateInvoiceLineValues, getProductUnitOptions, resolveUnitConversio
 import { applyLineDiscount, computeDiscountAmount, type DiscountType } from '@/lib/discount'
 import { useFormatMoney } from '@/lib/format-money'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { usesPaymentMethodCards } from '@/lib/payment-modes'
 import { usePreviewTaxMutation, type TaxLine, type TaxPreviewResponse } from '@/stores/taxCalculator.api'
 import { formatAppDateTime } from '@/lib/date-format'
 import { TransactionHistoryButton } from '@/components/transaction-history-sheet'
@@ -220,6 +221,10 @@ export interface Invoice {
   // Payment method (how customer paid)
   paymentMethod?: 'cash' | 'wallet' | 'bank' | 'card'
   walletType?: string
+  /** Check # / ACH reference / card last-4 (payment-method cards, wholesale + distributor). */
+  paymentReference?: string
+  /** Server-derived tender: cash / card / ach / check / bank. Read-only on the client. */
+  paymentMode?: 'cash' | 'card' | 'ach' | 'check' | 'bank'
   // Optional second payment leg (e.g. paid partly cash, partly from a wallet/bank account) —
   // always the opposite bucket from `paymentMethod`.
   splitPaymentMethod?: 'cash' | 'wallet'
@@ -308,6 +313,9 @@ export default function InvoicePage() {
   const dispatch = useDispatch<AppDispatch>()
   const navigate = useNavigate()
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
+  // Wholesale / distribution: a sale stays Cash when the customer is picked (also when opened
+  // from a customer's page with ?customerId=) — Credit is chosen on purpose, never implied.
+  const userBusinessType = useSelector((state: RootState) => state.auth.data?.user?.businessType)
   const search = useSearch({ from: '/_authenticated/invoice/' })
 
   // A role may create invoices without seeing the list (or the other way round): the
@@ -334,7 +342,12 @@ export default function InvoicePage() {
     language: preferredLanguage,
     isUrduOnly: getInitialUrduOnlyPreference(),
     customerId: search.customerId?.trim() || 'walk-in',
-    type: search.type === 'quotation' ? 'quotation' : search.customerId?.trim() ? 'credit' : 'cash',
+    type:
+      search.type === 'quotation'
+        ? 'quotation'
+        : search.customerId?.trim() && !usesPaymentMethodCards(userBusinessType)
+          ? 'credit'
+          : 'cash',
     walkInCustomerName: search.leadName?.trim() || undefined,
     leadId: search.leadId?.trim() || undefined,
     subtotal: 0,
@@ -349,6 +362,7 @@ export default function InvoicePage() {
     balance: 0,
     paymentMethod: 'cash',
     walletType: undefined,
+    paymentReference: undefined,
     splitPaymentMethod: undefined,
     splitWalletType: undefined,
     splitPaidAmount: 0,
@@ -386,6 +400,7 @@ export default function InvoicePage() {
   // orgData is also fetched independently by InvoicePanel (RTK Query dedupes the request).
   const authUser = useSelector((state: RootState) => state.auth.data?.user)
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !authUser?.organizationId })
+  const keepCashOnCustomerPick = usesPaymentMethodCards(orgData?.businessType || authUser?.businessType)
   const [previewTax] = usePreviewTaxMutation()
   // Fast-invoicing mode (catalog hidden): DOM node in the page header for InvoicePanel's
   // Preview/Save Draft/Save & Print actions, rendered there via a portal so those buttons'
@@ -498,6 +513,7 @@ export default function InvoicePage() {
       balance: 0,
       paymentMethod: 'cash',
       walletType: undefined,
+      paymentReference: undefined,
       splitPaymentMethod: undefined,
       splitWalletType: undefined,
       splitPaidAmount: 0,
@@ -763,6 +779,10 @@ export default function InvoicePage() {
     const customerId = search.customerId?.trim()
     if (!customerId || currentView !== 'create') return
     const match = customers.find((c) => c._id === customerId || c.id === customerId)
+    if (keepCashOnCustomerPick) {
+      setInvoice((prev) => ({ ...prev, customerId, customerName: match?.name || prev.customerName }))
+      return
+    }
     setInvoice((prev) => ({
       ...prev,
       customerId,
@@ -771,7 +791,7 @@ export default function InvoicePage() {
       paidAmount: 0,
       balance: prev.total,
     }))
-  }, [search.customerId, customers, currentView])
+  }, [search.customerId, customers, currentView, keepCashOnCustomerPick])
 
   // Group the flat sellable catalog by category for the catalog tile grid — one tile
   // per real variant (its own price/cost/stock), one tile per non-variant product.
@@ -1630,6 +1650,7 @@ export default function InvoicePage() {
       balance: 0,
       paymentMethod: 'cash',
       walletType: undefined,
+      paymentReference: undefined,
       splitPaymentMethod: undefined,
       splitWalletType: undefined,
       splitPaidAmount: 0,
@@ -1726,6 +1747,7 @@ export default function InvoicePage() {
       balance: invoiceData.balance || 0,
       paymentMethod: invoiceData.paymentMethod || 'cash',
       walletType: invoiceData.walletType || undefined,
+      paymentReference: invoiceData.paymentReference || undefined,
       splitPaymentMethod: invoiceData.splitPaymentMethod || undefined,
       splitWalletType: invoiceData.splitWalletType || undefined,
       splitPaidAmount: invoiceData.splitPaidAmount || 0,
@@ -1836,6 +1858,7 @@ export default function InvoicePage() {
       balance: 0,
       paymentMethod: 'cash',
       walletType: undefined,
+      paymentReference: undefined,
       splitPaymentMethod: undefined,
       splitWalletType: undefined,
       splitPaidAmount: 0,

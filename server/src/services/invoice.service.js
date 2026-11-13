@@ -28,6 +28,7 @@ const documentNumberingService = require('./documentNumbering.service');
 const creditControlService = require('./creditControl.service');
 const ledgerAlertsService = require('./ledgerAlerts.service');
 const Money = require('../utils/money');
+const rateHistory = require('../utils/rateHistory');
 const { tokenizeSearch, tokenSearchClauses } = require('../utils/searchQuery');
 const { buildSettlementAddFieldsStage } = require('../utils/invoiceSettlement');
 
@@ -2117,112 +2118,16 @@ const getCustomerProductHistory = async (filter = {}, params = {}) => {
 
   const lines = [];
   invoiceRows.forEach((row) => {
-    row.lines.forEach((line) => lines.push(formatRateHistoryLine(row, line)));
+    row.lines.forEach((line) => lines.push(rateHistory.formatRateHistoryLine(row, line)));
   });
-  return buildRateHistoryResult(lines, totals, truncated);
-};
-
-/** One sold line, as the rate-history panel shows it. `row` carries the invoice fields. */
-const formatRateHistoryLine = (row, line) => {
-  const quantity = Number(line.quantity) || 0;
-  const conversionFactor = Number(line.conversionFactor) > 0 ? Number(line.conversionFactor) : 1;
-  const unitPrice = Number(line.unitPrice) || 0;
-  const subtotal = Number(line.subtotal) || 0;
-  // `subtotal` is already net of the line discount (see resolveInvoiceItemDiscount).
-  const netUnitPrice = quantity > 0 ? Money.roundMoney(subtotal / quantity) : unitPrice;
-  return {
-    invoiceId: String(row._id),
-    invoiceNumber: row.invoiceNumber || '',
-    billNumber: row.billNumber || '',
-    date: row.invoiceDate || row.createdAt,
-    type: row.type,
-    status: row.status || '',
-    variantId: line.variantId ? String(line.variantId) : null,
-    batchNumber: line.batchNumber || '',
-    quantity,
-    unit: line.unit || '',
-    conversionFactor,
-    unitPrice,
-    discountType: line.discountType || 'fixed',
-    discountValue: Number(line.discountValue) || 0,
-    discountAmount: Number(line.discountAmount) || 0,
-    netUnitPrice,
-    netRatePerStockUnit: Money.roundMoney(netUnitPrice / conversionFactor, 4),
-    subtotal,
-  };
+  return rateHistory.buildRateHistoryResult(lines, totals, truncated);
 };
 
 /**
- * Lines (newest first) + totals over ALL matching lines → the response shape shared by the
- * single-product and batch endpoints. `totals` = { invoiceIds, lineCount, totalQuantity,
- * totalStockQuantity, totalAmount, pricedStockQuantity, firstDate, minRate, maxRate } or null.
- */
-const buildRateHistoryResult = (lines, totals, truncated) => {
-  const latest = lines[0] || null;
-  const stats = totals
-    ? {
-        invoiceCount: totals.invoiceIds.length,
-        lineCount: totals.lineCount,
-        totalQuantity: totals.totalQuantity,
-        totalStockQuantity: totals.totalStockQuantity,
-        totalAmount: Money.roundMoney(totals.totalAmount),
-        firstDate: totals.firstDate,
-        lastDate: latest ? latest.date : null,
-        // Quantity-weighted over charged lines: what the customer paid per stock unit on average.
-        avgRatePerStockUnit:
-          totals.pricedStockQuantity > 0 ? Money.roundMoney(totals.totalAmount / totals.pricedStockQuantity, 4) : null,
-        minRatePerStockUnit: totals.minRate === null ? null : Money.roundMoney(totals.minRate, 4),
-        maxRatePerStockUnit: totals.maxRate === null ? null : Money.roundMoney(totals.maxRate, 4),
-      }
-    : null;
-
-  return {
-    lines,
-    truncated,
-    stats,
-    // Legacy shape (ProductHistoryDialog on the catalog and fast billing).
-    history: lines.map((line) => ({
-      _id: line.invoiceId,
-      invoiceNumber: line.invoiceNumber,
-      date: line.date,
-      type: line.type,
-      quantity: line.quantity,
-      unitPrice: line.unitPrice,
-      subtotal: line.subtotal,
-    })),
-    totalQuantity: totals ? totals.totalQuantity : 0,
-    lastPrice: latest ? latest.unitPrice : null,
-    avgPrice: lines.length ? lines.reduce((sum, line) => sum + line.unitPrice, 0) / lines.length : null,
-    minPrice: lines.length ? Math.min(...lines.map((line) => line.unitPrice)) : null,
-    maxPrice: lines.length ? Math.max(...lines.map((line) => line.unitPrice)) : null,
-  };
-};
-
-// Net rate per stock unit of one unwound line ($lines); null for free / zero-qty lines so they
-// stay out of min/max/avg.
-const RATE_HISTORY_LINE_RATE = {
-  $cond: [
-    { $and: [{ $gt: ['$lines.quantity', 0] }, { $gt: ['$lines.subtotal', 0] }] },
-    {
-      $divide: [
-        { $divide: ['$lines.subtotal', '$lines.quantity'] },
-        {
-          $cond: [{ $gt: [{ $ifNull: ['$lines.conversionFactor', 1] }, 0] }, { $ifNull: ['$lines.conversionFactor', 1] }, 1],
-        },
-      ],
-    },
-    null,
-  ],
-};
-
-const RATE_HISTORY_BATCH_MAX_KEYS = 100;
-const RATE_HISTORY_BATCH_DEFAULT_LIMIT = 50;
-
-/**
- * Rate history for many products of one customer in ONE request and ONE aggregation — the
- * New Invoice screen prefetches every line's history with it, so clicking a rate is instant.
- * Same rules as getCustomerProductHistory (tenant/branch scope, real sales only). `limit`
- * caps the lines returned per product (newest first); stats always cover every line.
+ * Rate history for many products of one customer in ONE request and ONE aggregation — New
+ * Invoice / Fast Billing prefetch every line's history with it, so clicking a rate is
+ * instant. Same rules as getCustomerProductHistory (tenant/branch scope, real sales only).
+ * `limit` caps the lines returned per product (newest first); stats always cover every line.
  *
  * @param {Object} filter - { organizationId, branchId }
  * @param {Object} params - { customerId, items: [{ productId, variantId? }], excludeInvoiceId?, limit? }
@@ -2230,36 +2135,12 @@ const RATE_HISTORY_BATCH_DEFAULT_LIMIT = 50;
  */
 const getCustomerRateHistoryBatch = async (filter = {}, params = {}) => {
   const { customerId, excludeInvoiceId } = params;
-  const limit = Math.min(
-    RATE_HISTORY_MAX_LIMIT,
-    Math.max(1, parseInt(params.limit, 10) || RATE_HISTORY_BATCH_DEFAULT_LIMIT)
-  );
-
-  const keys = [];
-  const seen = new Set();
-  (Array.isArray(params.items) ? params.items : []).forEach((item) => {
-    const productId = item && item.productId ? String(item.productId) : '';
-    if (!mongoose.Types.ObjectId.isValid(productId)) return;
-    const variantId =
-      item.variantId && mongoose.Types.ObjectId.isValid(String(item.variantId)) ? String(item.variantId) : null;
-    const key = `${productId}|${variantId || ''}`;
-    if (seen.has(key) || keys.length >= RATE_HISTORY_BATCH_MAX_KEYS) return;
-    seen.add(key);
-    keys.push({ productId, variantId });
-  });
+  const keys = rateHistory.normaliseRateHistoryKeys(params.items);
   if (!keys.length) return { results: [] };
+  if (!customerId || customerId === 'walk-in') return { results: keys.map(rateHistory.emptyRateHistoryFor) };
 
-  const emptyFor = (key) => ({
-    productId: key.productId,
-    variantId: key.variantId,
-    history: buildRateHistoryResult([], null, false),
-  });
-  if (!customerId || customerId === 'walk-in') return { results: keys.map(emptyFor) };
-
-  const productObjectIds = [...new Set(keys.map((k) => k.productId))].map((id) => new mongoose.Types.ObjectId(id));
   const match = {
     customerId: { $in: toCustomerIdMatchValues(customerId) },
-    'items.productId': { $in: productObjectIds },
     type: { $in: RATE_HISTORY_SALE_TYPES },
     isConvertedToBill: { $ne: true },
     status: { $ne: 'cancelled' },
@@ -2270,117 +2151,21 @@ const getCustomerRateHistoryBatch = async (filter = {}, params = {}) => {
     match._id = { $ne: new mongoose.Types.ObjectId(String(excludeInvoiceId)) };
   }
 
-  // One group per product + variant actually sold; a product-level key merges its groups below.
-  const groups = await Invoice.aggregate([
-    { $match: match },
-    {
-      $project: {
-        invoiceNumber: 1,
-        billNumber: 1,
-        invoiceDate: 1,
-        createdAt: 1,
-        type: 1,
-        status: 1,
-        lines: {
-          $filter: {
-            input: { $ifNull: ['$items', []] },
-            as: 'line',
-            cond: { $in: ['$$line.productId', productObjectIds] },
-          },
-        },
-      },
+  return rateHistory.runRateHistoryBatch({
+    Model: Invoice,
+    match,
+    keys,
+    limit: params.limit,
+    fields: {
+      items: 'items',
+      product: 'productId',
+      price: 'unitPrice',
+      total: 'subtotal',
+      date: 'invoiceDate',
+      number: 'invoiceNumber',
+      bill: 'billNumber',
     },
-    { $unwind: '$lines' },
-    { $sort: { invoiceDate: -1, createdAt: -1, _id: -1 } },
-    { $addFields: { lineRate: RATE_HISTORY_LINE_RATE } },
-    {
-      $group: {
-        _id: { productId: '$lines.productId', variantId: { $ifNull: ['$lines.variantId', null] } },
-        rows: {
-          $push: {
-            _id: '$_id',
-            invoiceNumber: '$invoiceNumber',
-            billNumber: '$billNumber',
-            invoiceDate: '$invoiceDate',
-            createdAt: '$createdAt',
-            type: '$type',
-            status: '$status',
-            line: '$lines',
-          },
-        },
-        invoiceIds: { $addToSet: '$_id' },
-        lineCount: { $sum: 1 },
-        totalQuantity: { $sum: '$lines.quantity' },
-        totalStockQuantity: {
-          $sum: { $multiply: ['$lines.quantity', { $ifNull: ['$lines.conversionFactor', 1] }] },
-        },
-        totalAmount: { $sum: '$lines.subtotal' },
-        pricedStockQuantity: {
-          $sum: {
-            $cond: [
-              { $gt: ['$lines.subtotal', 0] },
-              { $multiply: ['$lines.quantity', { $ifNull: ['$lines.conversionFactor', 1] }] },
-              0,
-            ],
-          },
-        },
-        firstDate: { $min: { $ifNull: ['$invoiceDate', '$createdAt'] } },
-        minRate: { $min: '$lineRate' },
-        maxRate: { $max: '$lineRate' },
-      },
-    },
-    // Newest `limit + 1` lines per group — the extra one says "there are older ones".
-    {
-      $project: {
-        rows: { $slice: ['$rows', limit + 1] },
-        invoiceIds: 1,
-        lineCount: 1,
-        totalQuantity: 1,
-        totalStockQuantity: 1,
-        totalAmount: 1,
-        pricedStockQuantity: 1,
-        firstDate: 1,
-        minRate: 1,
-        maxRate: 1,
-      },
-    },
-  ]).option({ allowDiskUse: true });
-
-  const rowTime = (row) => new Date(row.invoiceDate || row.createdAt || 0).getTime();
-  const results = keys.map((key) => {
-    const mine = groups.filter(
-      (g) =>
-        String(g._id.productId) === key.productId &&
-        (!key.variantId || (g._id.variantId && String(g._id.variantId) === key.variantId))
-    );
-    if (!mine.length) return emptyFor(key);
-
-    const rows = mine
-      .flatMap((g) => g.rows)
-      .sort((a, b) => rowTime(b) - rowTime(a) || String(b._id).localeCompare(String(a._id)));
-    const truncated = rows.length > limit;
-    const invoiceIds = new Set();
-    const nums = (field) => mine.map((g) => g[field]).filter((v) => v !== null && v !== undefined);
-    mine.forEach((g) => g.invoiceIds.forEach((id) => invoiceIds.add(String(id))));
-    const sum = (field) => mine.reduce((total, g) => total + (Number(g[field]) || 0), 0);
-    const mins = nums('minRate');
-    const maxs = nums('maxRate');
-    const firstDates = nums('firstDate').map((d) => new Date(d));
-    const totals = {
-      invoiceIds: [...invoiceIds],
-      lineCount: sum('lineCount'),
-      totalQuantity: sum('totalQuantity'),
-      totalStockQuantity: sum('totalStockQuantity'),
-      totalAmount: sum('totalAmount'),
-      pricedStockQuantity: sum('pricedStockQuantity'),
-      firstDate: firstDates.length ? new Date(Math.min(...firstDates.map((d) => d.getTime()))) : null,
-      minRate: mins.length ? Math.min(...mins) : null,
-      maxRate: maxs.length ? Math.max(...maxs) : null,
-    };
-    const lines = rows.slice(0, limit).map((row) => formatRateHistoryLine(row, row.line));
-    return { productId: key.productId, variantId: key.variantId, history: buildRateHistoryResult(lines, totals, truncated) };
   });
-  return { results };
 };
 
 const escapeRegexLiteral = (raw) => String(raw).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -2456,6 +2241,18 @@ const buildInvoiceListMatch = async (filter = {}, options = {}) => {
 
     if (conditions.length === 1) Object.assign(match, conditions[0]);
     else if (conditions.length > 1) match.$and = [...(match.$and || []), { $or: conditions }];
+  }
+
+  // Payment method (tender). Invoices saved before paymentMode existed fall back to their
+  // paymentMethod: a plain cash/credit sale reads as cash, a legacy card payment as card.
+  if (options.paymentMode) {
+    const modes = toIdArray(options.paymentMode).map((value) => value.toLowerCase());
+    const conditions = [{ paymentMode: { $in: modes } }];
+    const legacy = { paymentMode: { $exists: false }, type: { $in: ['cash', 'credit'] } };
+    if (modes.includes('cash')) conditions.push({ ...legacy, paymentMethod: { $in: ['cash', null] } });
+    if (modes.includes('card')) conditions.push({ ...legacy, paymentMethod: 'card' });
+    if (modes.includes('bank')) conditions.push({ ...legacy, paymentMethod: { $in: ['bank', 'wallet'] } });
+    match.$and = [...(match.$and || []), { $or: conditions }];
   }
 
   if (options.startDate || options.endDate) {
@@ -2774,6 +2571,12 @@ const getInvoiceListForExport = async (filter, options = {}) => {
         dueDate: 1,
         type: 1,
         paymentMethod: 1,
+        walletType: 1,
+        paymentMode: 1,
+        paymentReference: 1,
+        splitPaymentMethod: 1,
+        splitWalletType: 1,
+        splitPaidAmount: 1,
         total: 1,
         settledAmount: 1,
         remainingAmount: 1,
@@ -2827,6 +2630,11 @@ const getInvoiceHistory = async (filter, options = {}) => {
         isConvertedToBill: 1,
         paymentMethod: 1,
         walletType: 1,
+        paymentMode: 1,
+        paymentReference: 1,
+        splitPaymentMethod: 1,
+        splitWalletType: 1,
+        splitPaidAmount: 1,
         discount: 1,
         tax: 1,
         deliveryCharge: 1,
@@ -2898,6 +2706,10 @@ const getInvoiceHistory = async (filter, options = {}) => {
       type: row.type === 'pending' && row.isConvertedToBill ? 'pending-converted' : row.type || 'cash',
       paymentMethod: row.paymentMethod || 'cash',
       walletType: row.walletType || '',
+      paymentMode: row.paymentMode || '',
+      paymentReference: row.paymentReference || '',
+      splitWalletType: row.splitPaymentMethod === 'wallet' ? row.splitWalletType || '' : row.splitPaymentMethod === 'cash' ? 'cash' : '',
+      splitPaidAmount: row.splitPaymentMethod ? Number(row.splitPaidAmount) || 0 : 0,
       discount: Number(row.discount) || 0,
       tax: Number(row.tax) || 0,
       // Delivery + service charges, so a ledger's invoice-wise view can show how the bill adds up.

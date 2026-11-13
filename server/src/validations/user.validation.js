@@ -89,6 +89,7 @@ const updateUiPreferences = {
       dashboardLayout: Joi.object().keys({
         sections: Joi.array().items(Joi.string().pattern(/^[a-z0-9-]{1,60}$/)).max(20),
         cards: Joi.array().items(Joi.string().pattern(/^[a-z0-9-]{1,60}$/)).max(100),
+        hidden: Joi.array().items(Joi.string().pattern(/^[a-z0-9-]{1,60}$/)).max(150),
       }),
       transactionLayout: Joi.object().keys({
         sale: Joi.array().items(Joi.string().pattern(/^[a-z0-9-]{1,40}$/)).max(30),

@@ -63,6 +63,10 @@ const createPurchase = {
     // can still specify a real account for whatever's paid right now.
     type: Joi.string().valid('cash', 'credit'),
     paymentMethod: Joi.string().valid('cash', 'wallet'),
+    // Tender (payment-method cards) + its check # / ACH ref / card last-4. paymentMode is
+    // forced to 'cash' server-side whenever the money came from cash.
+    paymentMode: Joi.string().valid('cash', 'card', 'ach', 'check', 'bank').empty(['', null]),
+    paymentReference: Joi.string().trim().max(60).allow('', null),
     walletType: Joi.string().trim().when('paymentMethod', {
       is: 'wallet',
       then: Joi.required(),
@@ -102,6 +106,7 @@ const purchaseListQuery = Joi.object().keys({
   fieldName: Joi.string().allow(''),
   paymentStatus: Joi.string().allow(''),
   paymentType: Joi.string().allow(''),
+  paymentMode: Joi.string().allow(''),
   invoiceStatus: Joi.string().allow(''),
   dueStatus: Joi.string().allow(''),
   createdBy: Joi.string().allow(''),
@@ -120,6 +125,25 @@ const getPurchasesSummary = { query: purchaseListQuery };
 const exportPurchases = { query: purchaseListQuery };
 
 const getPurchaseHistory = { query: purchaseListQuery };
+
+// Many products' past costs from one supplier (New Purchase rate-history box, one request).
+const getSupplierCostHistoryBatch = {
+  body: Joi.object().keys({
+    supplierId: Joi.string().custom(objectId).required(),
+    items: Joi.array()
+      .items(
+        Joi.object().keys({
+          productId: Joi.string().custom(objectId).required(),
+          variantId: Joi.string().custom(objectId).allow(null, ''),
+        })
+      )
+      .min(1)
+      .max(100)
+      .required(),
+    excludePurchaseId: Joi.string().custom(objectId),
+    limit: Joi.number().integer().min(1).max(500),
+  }),
+};
 
 // Previous/next full-record stepping on New Purchase — the list filters plus a position.
 const getPurchaseNavigation = {
@@ -203,6 +227,10 @@ const updatePurchase = {
     // can still specify a real account for whatever's paid right now.
     type: Joi.string().valid('cash', 'credit'),
     paymentMethod: Joi.string().valid('cash', 'wallet'),
+    // Tender (payment-method cards) + its check # / ACH ref / card last-4. paymentMode is
+    // forced to 'cash' server-side whenever the money came from cash.
+    paymentMode: Joi.string().valid('cash', 'card', 'ach', 'check', 'bank').empty(['', null]),
+    paymentReference: Joi.string().trim().max(60).allow('', null),
     walletType: Joi.string().trim().when('paymentMethod', {
       is: 'wallet',
       then: Joi.required(),
@@ -269,6 +297,7 @@ module.exports = {
   getPurchasesSummary,
   exportPurchases,
   getPurchaseHistory,
+  getSupplierCostHistoryBatch,
   addPurchaseComment,
   deletePurchaseComment,
   getPurchase,

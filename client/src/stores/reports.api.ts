@@ -96,7 +96,24 @@ export interface SalesInvoiceDetail {
   customerName: string
   customerNameUrdu?: string
   customerPhone: string
+  /** How it was paid (null for quotations / pending) — see lib/payment-modes.ts. */
+  paymentMode?: string | null
+  paymentMethod?: string
+  walletType?: string
+  paymentReference?: string
+  splitPaymentMethod?: string | null
+  splitWalletType?: string
+  splitPaidAmount?: number
   items: SalesInvoiceItem[]
+}
+
+/** Money collected at the time of sale, by tender (Cash / Credit Card / ACH / Check / account). */
+export interface SalesPaymentMethodTotal {
+  key: string
+  mode: 'cash' | 'card' | 'ach' | 'check' | 'bank'
+  label: string
+  invoices: number
+  amount: number
 }
 
 export interface SalesInvoiceDetailsSummary {
@@ -157,6 +174,14 @@ export interface PurchaseInvoiceDetail {
   supplierNameUrdu?: string
   supplierPhone?: string
   attachments?: PurchaseInvoiceDetailAttachment[]
+  /** How the supplier was paid — see lib/payment-modes.ts. */
+  paymentMode?: string | null
+  paymentMethod?: string
+  walletType?: string
+  paymentReference?: string
+  splitPaymentMethod?: string | null
+  splitWalletType?: string
+  splitPaidAmount?: number
   items: PurchaseInvoiceItem[]
 }
 
@@ -1306,6 +1331,7 @@ export const reportsApi = createApi({
     }),
     getSalesInvoiceDetails: builder.query<{
       invoices: SalesInvoiceDetail[]
+      byPaymentMethod?: SalesPaymentMethodTotal[]
       summary: SalesInvoiceDetailsSummary
       period: { startDate: string; endDate: string }
     }, { startDate?: string; endDate?: string }>({
@@ -1334,6 +1360,7 @@ export const reportsApi = createApi({
     }),
     getPurchaseInvoiceDetails: builder.query<{
       purchases: PurchaseInvoiceDetail[]
+      byPaymentMethod?: SalesPaymentMethodTotal[]
       summary: PurchaseInvoiceDetailsSummary
       period: { startDate: string; endDate: string }
     }, { startDate?: string; endDate?: string }>({

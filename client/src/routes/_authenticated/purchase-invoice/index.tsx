@@ -6,6 +6,8 @@ const purchaseInvoiceSearchSchema = z.object({
   supplierId: z.string().optional(),
   // Opens that purchase straight in the edit form — the purchase view's Edit from other screens.
   editId: z.string().optional(),
+  // Opens a copy of that purchase as a new one — Duplicate from the Purchase History page.
+  duplicateId: z.string().optional(),
   prefillItems: z
     .array(z.object({ productId: z.string(), variantId: z.string().optional(), quantity: z.number() }))
     .optional(),

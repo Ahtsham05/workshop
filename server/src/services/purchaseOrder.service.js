@@ -217,6 +217,27 @@ const resolveOrderTotals = async (body) => {
 /**
  * Create a new purchase order.
  */
+/**
+ * The number the next new order will most likely get — a read-only peek at the counter
+ * (no increment), shown as a preview on the New Purchase Order screen. The real number is
+ * still assigned atomically by generateOrderNumber() on save, so two people creating orders
+ * at once may see the same preview; each still saves under its own number.
+ */
+const peekNextOrderNumber = async (organizationId) => {
+  if (!organizationId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Organization is required');
+  }
+  const counter = await mongoose.connection.db
+    .collection('_sequences')
+    .findOne({ _id: `purchaseOrder_${organizationId}` });
+  let seq = Number(counter?.seq);
+  if (!Number.isFinite(seq) || seq <= 0) {
+    const orders = await PurchaseOrder.find({ organizationId }).select('orderNumber').lean();
+    seq = orders.reduce((max, order) => Math.max(max, parseOrderSequence(order.orderNumber)), 1000);
+  }
+  return `PO-${seq + 1}`;
+};
+
 const createPurchaseOrder = async (body) => {
   await ensurePurchaseOrderIndexes();
 
@@ -723,4 +744,5 @@ module.exports = {
   receiveItems,
   getStats,
   generateOrderNumber,
+  peekNextOrderNumber,
 };

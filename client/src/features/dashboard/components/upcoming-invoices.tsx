@@ -47,19 +47,19 @@ export function UpcomingInvoices() {
         <CardDescription>{t('Credit invoices awaiting payment, soonest due date first')}</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className='space-y-3'>
+        <div className='@container space-y-3'>
           {invoices && invoices.length > 0 ? (
             invoices.map((invoice) => (
               <div
                 key={invoice.id}
                 className={cn(
-                  'flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors',
+                  'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-2.5 @md:flex-nowrap @md:p-3 transition-colors',
                   invoice.isOverdue
                     ? 'border-rose-200/80 bg-rose-50/60 dark:border-rose-900/40 dark:bg-rose-950/20'
                     : 'hover:bg-muted/50',
                 )}
               >
-                <div className='flex items-center gap-3'>
+                <div className='flex min-w-0 flex-1 items-center gap-3'>
                   <div
                     className={cn(
                       'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
@@ -70,8 +70,8 @@ export function UpcomingInvoices() {
                   >
                     <FileText className='h-4 w-4' />
                   </div>
-                  <div>
-                    <p className='text-sm font-medium'>
+                  <div className='min-w-0 flex-1'>
+                    <p className='text-sm font-medium leading-snug line-clamp-2 break-words'>
                       {t('Invoice')} {invoice.invoiceNumber} - {invoice.customerName}
                     </p>
                     <p className='text-xs text-muted-foreground'>
@@ -85,9 +85,9 @@ export function UpcomingInvoices() {
                     </p>
                   </div>
                 </div>
-                <div className='flex flex-col items-end gap-1'>
-                  <div className='flex items-center gap-2'>
-                    <span className='text-sm font-semibold'>{formatMoney(invoice.balance)}</span>
+                <div className='flex shrink-0 flex-col items-end gap-1 text-right @md:max-w-[55%] @md:shrink'>
+                  <div className='flex flex-col items-end gap-1 @md:flex-row @md:flex-wrap @md:items-center @md:justify-end @md:gap-x-2'>
+                    <span className='text-sm font-semibold tabular-nums whitespace-nowrap'>{formatMoney(invoice.balance)}</span>
                     <Badge
                       variant={invoice.isOverdue ? 'destructive' : 'outline'}
                       className={cn(
@@ -98,9 +98,13 @@ export function UpcomingInvoices() {
                       {invoice.isOverdue ? t('Overdue') : t('Due Soon')}
                     </Badge>
                   </div>
-                  <p className='text-[11px] text-muted-foreground tabular-nums'>
+                  <p className='hidden text-[11px] text-muted-foreground tabular-nums @md:block'>
                     {t('Paid')}: {formatMoney(invoice.paidAmount)} · {t('Balance')}: {formatMoney(invoice.balance)}
                   </p>
+                </div>
+                <div className='flex basis-full justify-between gap-2 border-t border-current/10 pt-2 text-[11px] text-muted-foreground tabular-nums @md:hidden'>
+                  <span>{t('Paid')}: {formatMoney(invoice.paidAmount)}</span>
+                  <span>{t('Balance')}: {formatMoney(invoice.balance)}</span>
                 </div>
               </div>
             ))

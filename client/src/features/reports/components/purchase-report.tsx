@@ -1,4 +1,8 @@
 import { useState, useCallback, useMemo } from 'react'
+import { formatPaymentMethod } from '@/lib/payment-modes'
+import { PaymentMethodBadge } from '@/components/payment-method-badge'
+import { PaymentMethodTotalsCard } from './payment-method-totals-card'
+import { paymentMethodSheetRows } from '@/lib/payment-modes'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -70,6 +74,9 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
       startDate,
       endDate,
     })
+    // Paid to suppliers, by tender — only interesting once something other than cash shows up.
+    const paymentTotals = detailData?.byPaymentMethod ?? []
+    const showPaymentTotals = paymentTotals.some((row) => row.mode !== 'cash')
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
     const [viewInvoice, setViewInvoice] = useState<PurchaseInvoiceDetail | null>(null)
     const [showProductsOnly, setShowProductsOnly] = useState(false)
@@ -168,6 +175,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                     idx === 0 ? reportEntityName(language, p.supplierName, p.supplierNameUrdu) : '',
                   'Supplier Phone': idx === 0 ? p.supplierPhone : '',
                   'Payment Type': idx === 0 ? p.paymentType : '',
+                  'Payment Method': idx === 0 && (p.paidAmount || 0) > 0 ? formatPaymentMethod(p, { withAccount: true }) : '',
                   'Invoice Total': idx === 0 ? p.totalAmount : '',
                   Product: reportEntityName(language, item.name, item.nameUrdu),
                   Variant: item.variantLabel || '',
@@ -196,6 +204,10 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
               Subtotal: detailData.summary.totalPurchases,
             })
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Purchase Details')
+          }
+
+          if (showPaymentTotals) {
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(paymentMethodSheetRows(paymentTotals, 'Paid', 'Purchases')), 'Payment Methods')
           }
 
           if (wb.SheetNames.length === 0) {
@@ -287,6 +299,15 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
             </CardContent>
           </Card>
         </div>
+
+        {showPaymentTotals && (
+          <PaymentMethodTotalsCard
+            rows={paymentTotals}
+            title='Payments by Payment Method'
+            description='Paid to suppliers at the time of purchase, by how they were paid'
+            countLabel={['purchase', 'purchases']}
+          />
+        )}
 
         <Card>
           <CardHeader>
@@ -556,6 +577,9 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                               >
                                 {p.paymentType}
                               </span>
+                              {p.paymentMode && p.paymentMode !== 'cash' && (p.paidAmount || 0) > 0 && (
+                                <PaymentMethodBadge source={p} withAccount className='mx-auto mt-1 flex w-fit max-w-[10rem] text-[10px]' />
+                              )}
                             </TableCell>
                             <TableCell className='text-right text-sm'>{totalQty}</TableCell>
                             <TableCell className='text-right font-semibold'>

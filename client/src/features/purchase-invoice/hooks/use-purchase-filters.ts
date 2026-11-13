@@ -33,6 +33,8 @@ export interface PurchaseFilters {
   supplier: string[]
   paymentStatus: string[]
   paymentType: string[]
+  /** Tender: cash / card / ach / check / bank (wholesale + distributor). */
+  paymentMode: string[]
   dueStatus: string[]
   createdBy: string[]
   invoiceStatus: string
@@ -52,6 +54,7 @@ export const EMPTY_FILTERS: PurchaseFilters = {
   supplier: [],
   paymentStatus: [],
   paymentType: [],
+  paymentMode: [],
   dueStatus: [],
   createdBy: [],
   invoiceStatus: '',
@@ -132,6 +135,7 @@ export function buildPurchaseQueryParams(filters: PurchaseFilters): Record<strin
   if (filters.supplier.length) params.supplier = list(filters.supplier)
   if (filters.paymentStatus.length) params.paymentStatus = list(filters.paymentStatus)
   if (filters.paymentType.length) params.paymentType = list(filters.paymentType)
+  if (filters.paymentMode?.length) params.paymentMode = list(filters.paymentMode)
   if (filters.dueStatus.length) params.dueStatus = list(filters.dueStatus)
   if (filters.createdBy.length) params.createdBy = list(filters.createdBy)
   if (filters.invoiceStatus) params.invoiceStatus = filters.invoiceStatus
@@ -151,6 +155,7 @@ export function countActiveFilters(filters: PurchaseFilters): number {
   count += filters.supplier.length ? 1 : 0
   count += filters.paymentStatus.length ? 1 : 0
   count += filters.paymentType.length ? 1 : 0
+  count += filters.paymentMode?.length ? 1 : 0
   count += filters.dueStatus.length ? 1 : 0
   count += filters.createdBy.length ? 1 : 0
   count += filters.invoiceStatus ? 1 : 0

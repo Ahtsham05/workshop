@@ -5,6 +5,7 @@ const ApiError = require('../utils/ApiError');
 const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory, StockAdjustment, InventoryTransfer, Imei, WalletTransfer, SalesmanCommissionLedger, PartnerProfitShareLedger, WalletEntry, BankReconciliationSession } = require('../models');
 const { cashBookService, stockAdjustmentService, mobileDashboardService, walletService } = require('../services');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
+const { resolveInvoicePaymentMode, buildPaymentModeBreakdown } = require('../utils/paymentMode');
 
 /**
  * Build a scoped match with properly cast ObjectIds for aggregate pipelines.
@@ -190,6 +191,13 @@ const getSalesInvoiceDetails = catchAsync(async (req, res) => {
         profit: { $ifNull: ['$totalProfit', 0] },
         paidAmount: 1,
         balance: 1,
+        paymentMethod: { $ifNull: ['$paymentMethod', 'cash'] },
+        walletType: { $ifNull: ['$walletType', ''] },
+        paymentMode: { $ifNull: ['$paymentMode', null] },
+        paymentReference: { $ifNull: ['$paymentReference', ''] },
+        splitPaymentMethod: { $ifNull: ['$splitPaymentMethod', null] },
+        splitWalletType: { $ifNull: ['$splitWalletType', ''] },
+        splitPaidAmount: { $ifNull: ['$splitPaidAmount', 0] },
         customerName: {
           $ifNull: [
             '$walkInCustomerName',
@@ -277,8 +285,20 @@ const getSalesInvoiceDetails = catchAsync(async (req, res) => {
     0,
   );
 
+  // Collections by payment method (Cash / Credit Card / ACH / Check / other accounts).
+  const modeWallets = await Wallet.find({ ...scope, paymentMode: { $exists: true, $ne: null } })
+    .select('type paymentMode')
+    .lean();
+  const walletModeByName = new Map(modeWallets.map((w) => [String(w.type).trim(), w.paymentMode]));
+  invoices.forEach((inv) => {
+    if (inv.type === 'quotation' || inv.type === 'pending') inv.paymentMode = null;
+    else inv.paymentMode = resolveInvoicePaymentMode(inv);
+  });
+  const byPaymentMethod = buildPaymentModeBreakdown(invoices, walletModeByName);
+
   res.status(httpStatus.OK).send({
     invoices,
+    byPaymentMethod,
     summary: { totalSales, totalInvoices: invoices.length, totalItems },
     period: { startDate: start, endDate: end },
   });
@@ -450,6 +470,13 @@ const getPurchaseInvoiceDetails = catchAsync(async (req, res) => {
         vendorBillNumber: { $first: '$vendorBillNumber' },
         purchaseDate: { $first: '$purchaseDate' },
         paymentType: { $first: '$paymentType' },
+        paymentMethod: { $first: { $ifNull: ['$paymentMethod', 'cash'] } },
+        walletType: { $first: { $ifNull: ['$walletType', ''] } },
+        paymentMode: { $first: { $ifNull: ['$paymentMode', null] } },
+        paymentReference: { $first: { $ifNull: ['$paymentReference', ''] } },
+        splitPaymentMethod: { $first: { $ifNull: ['$splitPaymentMethod', null] } },
+        splitWalletType: { $first: { $ifNull: ['$splitWalletType', ''] } },
+        splitPaidAmount: { $first: { $ifNull: ['$splitPaidAmount', 0] } },
         totalAmount: { $first: '$totalAmount' },
         paidAmount: { $first: { $ifNull: ['$paidAmount', 0] } },
         balance: { $first: { $ifNull: ['$balance', 0] } },
@@ -525,6 +552,13 @@ const getPurchaseInvoiceDetails = catchAsync(async (req, res) => {
         vendorBillNumber: 1,
         purchaseDate: 1,
         paymentType: 1,
+        paymentMethod: 1,
+        walletType: 1,
+        paymentMode: 1,
+        paymentReference: 1,
+        splitPaymentMethod: 1,
+        splitWalletType: 1,
+        splitPaidAmount: 1,
         totalAmount: 1,
         paidAmount: '$effectivePaid',
         balance: '$effectiveBalance',
@@ -545,8 +579,19 @@ const getPurchaseInvoiceDetails = catchAsync(async (req, res) => {
     0
   );
 
+  // Payments to suppliers by tender (Cash / Credit Card / ACH / Check / other accounts).
+  const modeWallets = await Wallet.find({ ...scope, paymentMode: { $exists: true, $ne: null } })
+    .select('type paymentMode')
+    .lean();
+  const walletModeByName = new Map(modeWallets.map((w) => [String(w.type).trim(), w.paymentMode]));
+  purchases.forEach((p) => {
+    p.paymentMode = resolveInvoicePaymentMode(p);
+  });
+  const byPaymentMethod = buildPaymentModeBreakdown(purchases, walletModeByName);
+
   res.status(httpStatus.OK).send({
     purchases,
+    byPaymentMethod,
     summary: { totalPurchases, totalInvoices: purchases.length, totalItems },
     period: { startDate: start, endDate: end },
   });

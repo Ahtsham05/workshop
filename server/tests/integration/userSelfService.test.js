@@ -98,6 +98,26 @@ describe('Appearance: profile photo + UI preferences', () => {
       expect(dbUser.uiPreferences.transactionLayout.purchase).toEqual(['purchase-orders', 'catalog-toggle']);
     });
 
+    test('saves which dashboard items the person switched off, next to the arranged order', async () => {
+      await insertUsers([userOne]);
+      const dashboardLayout = { sections: ['kpis', 'quick-links'], cards: ['total-sales'], hidden: ['roi', 'money', 'insight-expenses'] };
+      await request(app)
+        .patch('/v1/users/me/ui-preferences')
+        .set('Authorization', `Bearer ${userOneAccessToken}`)
+        .send({ dashboardLayout })
+        .expect(httpStatus.OK);
+
+      const dbUser = await User.findById(userOne._id);
+      expect(dbUser.uiPreferences.dashboardLayout.hidden).toEqual(['roi', 'money', 'insight-expenses']);
+      expect(dbUser.uiPreferences.dashboardLayout.sections).toEqual(['kpis', 'quick-links']);
+
+      await request(app)
+        .patch('/v1/users/me/ui-preferences')
+        .set('Authorization', `Bearer ${userOneAccessToken}`)
+        .send({ dashboardLayout: { hidden: ['Bad Id!'] } })
+        .expect(httpStatus.BAD_REQUEST);
+    });
+
     test('rejects a screen layout id that is not a plain slug', async () => {
       await insertUsers([userOne]);
 

@@ -131,6 +131,8 @@ export interface PrintInvoiceData {
   customerAddress?: string
   customerEmail?: string
   customerTaxNumber?: string
+  /** How the sale was paid, ready to print — "Cash", "Check #10234", "Credit Card · Card 4242". */
+  paymentLabel?: string
   /** Customer payment terms code: cash | due_on_receipt | net_15 | net_30 | net_60. */
   customerPaymentTerms?: string
   companyWebsite?: string

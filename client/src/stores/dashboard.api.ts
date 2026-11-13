@@ -239,8 +239,62 @@ export interface ProductDetail {
   trackSerial?: boolean
 }
 
+/** Trend widgets (Profit & Loss, Sales, Expenses) — server/src/services/dashboardInsights.service.js */
+export type TrendRange = '30d' | '90d' | '180d' | '365d' | 'ytd'
+
+export interface TrendBucket {
+  /** 'YYYY-MM' (monthly) or 'YYYY-MM-DD' (daily, 30-day range) */
+  key: string
+  income: number
+  sales: number
+  salesReturns: number
+  invoiceCount: number
+  returnCount: number
+  /** Stripped by the server for roles without viewCostPrices. */
+  costOfGoods?: number
+  expenses: number
+  ledgerDiscountNet: number
+  /** Stripped by the server for roles without viewCostPrices. */
+  netProfit?: number
+}
+
+export interface DashboardTrends {
+  range: TrendRange
+  granularity: 'day' | 'month'
+  startDate: string
+  endDate: string
+  buckets: TrendBucket[]
+  totals: Omit<TrendBucket, 'key' | 'returnCount'>
+  expensesByCategory: { category: string; amount: number; count: number }[]
+}
+
+export interface OpenAmountSummary {
+  total: number
+  parties: number
+  overdueParties: number
+  overdue: number
+  dueToday: number
+  dueSoon: number
+  notDue: number
+  noDueDate: number
+  /** By days since the invoice/bill date; `undated` = balance no document explains. */
+  age: { d0_30: number; d31_60: number; d61_90: number; d90_plus: number; undated: number }
+}
+
+export interface MoneyOverview {
+  today: string
+  dueDatesEnabled: boolean
+  receivable: OpenAmountSummary
+  payable: OpenAmountSummary
+  cashFlow: {
+    months: { key: string; moneyIn: number; moneyOut: number; expected: boolean }[]
+    pastMonths: number
+    futureMonths: number
+  }
+}
+
 /** Every tag the dashboard page's widgets read — invalidating these reloads the whole page at once. */
-export const DASHBOARD_WIDGET_TAGS = ['DashboardStats', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities', 'UpcomingInvoices'] as const
+export const DASHBOARD_WIDGET_TAGS = ['DashboardStats', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities', 'UpcomingInvoices', 'DashboardTrends', 'MoneyOverview'] as const
 
 /**
  * Stale-while-revalidate for the dashboard page's widgets: coming back to the dashboard
@@ -254,7 +308,7 @@ export const dashboardApi = createApi({
   reducerPath: 'dashboardApi',
   baseQuery: baseQueryWithAuth,
   keepUnusedDataFor: 300,
-  tagTypes: ['DashboardStats', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities', 'UpcomingInvoices', 'CategoryProducts', 'BrandProducts', 'SubCategoryProducts'],
+  tagTypes: ['DashboardStats', 'DashboardTrends', 'MoneyOverview', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities', 'UpcomingInvoices', 'CategoryProducts', 'BrandProducts', 'SubCategoryProducts'],
   endpoints: (builder) => ({
     getDashboardStats: builder.query<DashboardStats, DashboardDateParams>({
       query: (params) => ({
@@ -269,6 +323,14 @@ export const dashboardApi = createApi({
         params,
       }),
       providesTags: ['Revenue'],
+    }),
+    getDashboardTrends: builder.query<DashboardTrends, { range: TrendRange }>({
+      query: (params) => ({ url: '/trends', params }),
+      providesTags: ['DashboardTrends'],
+    }),
+    getMoneyOverview: builder.query<MoneyOverview, void>({
+      query: () => '/money-overview',
+      providesTags: ['MoneyOverview'],
     }),
     getTopProducts: builder.query<TopProduct[], DashboardDateParams & { limit?: number }>({
       query: ({ limit = 5, ...params }) => ({
@@ -350,6 +412,8 @@ export const dashboardApi = createApi({
 export const {
   useGetDashboardStatsQuery,
   useGetRevenueDataQuery,
+  useGetDashboardTrendsQuery,
+  useGetMoneyOverviewQuery,
   useGetTopProductsQuery,
   useGetTopCustomersQuery,
   useGetLowStockProductsQuery,

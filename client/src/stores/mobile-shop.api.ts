@@ -54,6 +54,8 @@ export interface WalletRecord {
   /** GST % on the whole Received/Send amount — paid by the customer on top (tax payable). */
   amountGstRate?: number
   accountType?: BankAccountType
+  /** Receives this payment method on the invoice payment cards (wholesale / distributor). */
+  paymentMode?: 'card' | 'ach' | 'check'
   bankName?: string
   accountNumber?: string
   branchName?: string

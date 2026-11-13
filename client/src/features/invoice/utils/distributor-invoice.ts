@@ -1,6 +1,6 @@
 /**
  * "Distributor" invoice layout — a US wholesale invoice: centred logo, "INVOICE : number"
- * with a Code 39 barcode, date / due date and any licence numbers the branch entered, Sold To,
+ * with a Code 128 barcode of the invoice number, date / due date and any licence numbers the branch entered, Sold To,
  * a Terms · Status · Invoiced By · Tax ID band, UPC / Qty / Unit Price / Sold Price
  * (+ Tax when charged) / Amount columns, totals, a grey balance band, the policies and terms
  * that have text, a signature line and a page footer. Anything not entered is left out.
@@ -67,8 +67,9 @@ const PAYMENT_TERMS: Record<string, string> = {
 
 const esc = (v: unknown) => escapeHtml(String(v ?? ''))
 
-/** Code 39 encodes A–Z 0–9 and - . $ / + % space; anything else would print a broken barcode. */
-const barcodeSafe = (value: string) => value.toUpperCase().replace(/[^A-Z0-9\-. $/+%]/g, '-')
+/** Code 128 encodes printable ASCII exactly as typed (case kept), so a scanner reads back the
+ *  real invoice number; anything outside ASCII becomes '-' rather than a broken barcode. */
+const barcodeSafe = (value: string) => value.trim().replace(/[^\x20-\x7e]/g, '-')
 
 function partyName(data: PrintInvoiceData, native: boolean): string {
   if (data.customerId === 'walk-in') return data.walkInCustomerName?.trim() || 'Walk-in Customer'
@@ -298,45 +299,69 @@ const showsCompany = () => headerStyle() !== 'no-logo'
 
 const hasLogo = (data: PrintInvoiceData) => headerStyle() === 'logo' && Boolean(data.companyLogo || data.isTrial)
 /* ── Barcode ──────────────────────────────────────────────────────────────
- * A real Code 39 drawn as SVG bars (JsBarcode), sized like the reference: about 8u of width per
- * character (start/stop * included) and a fixed bar height, so a short number gets a compact
- * barcode and a long one a wider (never taller) one. Vector bars stay sharp in print and PDF.
- * Falls back to the Libre Barcode 39 font when there is no DOM to draw into.
+ * A real Code 128 of the invoice number drawn as SVG bars (JsBarcode), so any scanner reads back
+ * exactly the number printed next to it. Code 128 is the standard for documents: much shorter
+ * than Code 39 for the same number (digit runs pack two per symbol), so the bars come out
+ * thicker and scan reliably. Width follows the real module count at 0.75u per module (≈0.26mm
+ * on A4, the usual 10-mil minimum), capped by the column. Page 1 prints the number under the
+ * bars (human-readable line) like a professional label. Vector bars stay sharp in print/PDF.
  */
 const BARCODE_H_U = 18
-const BARCODE_U_PER_CHAR = 8
-const barcodeWidthU = (value: string, maxU: number) => Math.min(maxU, (value.length + 2) * BARCODE_U_PER_CHAR)
+const BARCODE_TEXT_U = 10 // human-readable line under the page-1 barcode
+const BARCODE_U_PER_MODULE = 0.75
 
-function barcodeHtml(value: string, maxWidthU: number, heightU = BARCODE_H_U): string {
-  if (!value) return ''
-  const width = `calc(${barcodeWidthU(value, maxWidthU).toFixed(2)} * var(--u))`
-  const height = `calc(${heightU} * var(--u))`
+type DrawnBarcode = { svg: SVGSVGElement; modules: number }
+const barcodeCache = new Map<string, DrawnBarcode | null>()
+
+function drawBarcode(value: string): DrawnBarcode | null {
+  if (barcodeCache.has(value)) return barcodeCache.get(value)!
+  let drawn: DrawnBarcode | null = null
   if (typeof document !== 'undefined') {
     try {
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-      JsBarcode(svg, value, { format: 'CODE39', width: 1, height: 40, margin: 0, displayValue: false, background: '#ffffff', lineColor: '#000000' })
+      JsBarcode(svg, value, { format: 'CODE128', width: 1, height: 40, margin: 0, displayValue: false, background: '#ffffff', lineColor: '#000000' })
       // Drop JsBarcode's background <rect>: the page is already white, and a background some print
       // pipelines cannot read (e.g. fill="transparent" in Chrome's black-and-white printing) is
       // painted black over every bar. Only the bar group (explicit black fill) is kept.
       svg.querySelectorAll(':scope > rect').forEach((r) => r.remove())
-      const w = parseFloat(svg.getAttribute('width') || '0')
-      if (w > 0) {
-        svg.setAttribute('viewBox', `0 0 ${w} 40`)
-        svg.setAttribute('preserveAspectRatio', 'none')
-        svg.removeAttribute('width')
-        svg.removeAttribute('height')
-        svg.removeAttribute('style')
-        svg.setAttribute('class', 'ds-barcode-svg')
-        svg.setAttribute('aria-hidden', 'true')
-        svg.setAttribute('style', `width:${width};height:${height}`)
-        return svg.outerHTML
-      }
+      const modules = parseFloat(svg.getAttribute('width') || '0')
+      if (modules > 0) drawn = { svg, modules }
     } catch {
-      /* fall through to the font */
+      /* no barcode */
     }
   }
-  const fontU = Math.min(heightU / 1.15, maxWidthU / Math.max(1, (value.length + 2) * 0.57))
-  return `<div class="ds-barcode" style="font-size:calc(${fontU.toFixed(2)} * var(--u))" aria-hidden="true">*${esc(value)}*</div>`
+  barcodeCache.set(value, drawn)
+  return drawn
+}
+
+/** Code 128 module count: start 11 + 11 per symbol + check 11 + stop 13 (estimate when no DOM). */
+const barcodeModules = (value: string) => drawBarcode(value)?.modules ?? 35 + value.length * 11
+const barcodeWidthU = (value: string, maxU: number) => Math.min(maxU, barcodeModules(value) * BARCODE_U_PER_MODULE)
+
+function barcodeHtml(value: string, maxWidthU: number, heightU = BARCODE_H_U, withText = false): string {
+  if (!value) return ''
+  const widthU = barcodeWidthU(value, maxWidthU)
+  const width = `calc(${widthU.toFixed(2)} * var(--u))`
+  const height = `calc(${heightU} * var(--u))`
+  const drawn = drawBarcode(value)
+  let bars = ''
+  if (drawn) {
+    const svg = drawn.svg.cloneNode(true) as SVGSVGElement
+    svg.setAttribute('viewBox', `0 0 ${drawn.modules} 40`)
+    svg.setAttribute('preserveAspectRatio', 'none')
+    svg.removeAttribute('width')
+    svg.removeAttribute('height')
+    svg.removeAttribute('style')
+    svg.setAttribute('class', 'ds-barcode-svg')
+    svg.setAttribute('role', 'img')
+    svg.setAttribute('aria-label', `Barcode ${value}`)
+    svg.setAttribute('style', `width:${width};height:${height}`)
+    bars = svg.outerHTML
+  }
+  // Without a DOM to draw into, the number alone still prints (never fake bars).
+  if (!bars) return `<div class="ds-barcode-text" style="width:${width}">${esc(value)}</div>`
+  if (!withText) return bars
+  return `<div class="ds-barcode-box" style="width:${width}">${bars}<div class="ds-barcode-text">${esc(value)}</div></div>`
 }
 
 /* "INVOICE : number" on one 16u line; a long title/number shrinks the line to fit
@@ -350,7 +375,7 @@ function firstPageTopU(data: PrintInvoiceData, ctx: DistributorPrintContext): nu
   const co = showsCompany() ? companyLines(data, ctx.nativeNames).length * 13.2 : 0
   const logo = hasLogo(data) ? 97 : 0
   const heading = 24 // "INVOICE : number" line
-  const doc = heading + (barcodeSafe(ctx.printNumber) ? BARCODE_H_U + 4 : 0) + metaLineCount(metaLines(data, ctx)) * 12
+  const doc = heading + (barcodeSafe(ctx.printNumber) ? BARCODE_H_U + BARCODE_TEXT_U + 4 : 0) + metaLineCount(metaLines(data, ctx)) * 12
   const parties = 14 + 15 + partyLines(data, ctx.nativeNames).length * 12
   const terms = showsCompany() ? 4 + 19.5 + 13 : 0
   return PAGE_TOP_PAD_U + Math.max(co, logo, doc) + parties + terms + TABLE_HEAD_U
@@ -383,7 +408,7 @@ function letterhead(data: PrintInvoiceData, ctx: DistributorPrintContext, title:
     ${logo ? `<div class="ds-logo-slot">${logo}</div>` : ''}
     <div class="ds-doc">
       ${heading}
-      ${barcodeValue ? `<div class="ds-barcode-row">${barcodeHtml(barcodeValue, DOC_COL_U)}</div>` : ''}
+      ${barcodeValue ? `<div class="ds-barcode-row">${barcodeHtml(barcodeValue, DOC_COL_U, BARCODE_H_U, true)}</div>` : ''}
       <div class="ds-meta">${meta.map((m) => `<div>${m}</div>`).join('')}</div>
     </div>
   </header>`
@@ -406,6 +431,10 @@ function termsBand(data: PrintInvoiceData, ctx: DistributorPrintContext): string
     : [
         ['Terms', termsText(data, ctx.isQuotation)],
         ['Status', statusText(data, ctx.isQuotation)],
+        // How it was paid ("Check #10234") — only once money was actually collected.
+        ...(!ctx.isQuotation && data.paymentLabel?.trim() && Number(data.paidAmount) > 0
+          ? [['Paid By', data.paymentLabel.trim()] as [string, string]]
+          : []),
         ['Invoiced By', data.invoicedBy?.trim() || '-'],
         taxId,
       ]
@@ -719,8 +748,10 @@ function distributorCss(sheet: SheetKey, layout: Layout): string {
     .ds-barcode-row { margin: ${u(1)} 0 ${u(3)}; line-height: 0; }
     .ds-barcode-svg { display: block; }
     .ds-barcode-svg rect, .ds-barcode-svg g { shape-rendering: crispEdges; }
+    .ds-barcode-box { line-height: 0; }
+    .ds-barcode-text { font-size: ${u(7.5)}; line-height: ${u(BARCODE_TEXT_U)}; height: ${u(BARCODE_TEXT_U)}; font-weight: 500; letter-spacing: ${u(1.2)};
+      text-align: center; white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; }
     .ds-title { font-size: ${u(HEADING_U)}; line-height: ${u(24)}; font-weight: 600; white-space: nowrap; overflow: hidden; text-transform: uppercase; }
-    .ds-barcode { font-family: 'Libre Barcode 39', monospace; font-weight: 400; line-height: 1.15; height: 1.15em; white-space: nowrap; overflow: hidden; }
     .ds-meta { line-height: ${u(12)}; margin-top: ${u(1)}; overflow-wrap: anywhere; }
 
     /* sold to / ship to */

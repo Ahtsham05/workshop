@@ -460,6 +460,12 @@ export interface InvoiceExportRow {
   dueDate?: string | null
   type?: 'cash' | 'credit' | 'pending' | 'quotation'
   paymentMethod?: string
+  walletType?: string
+  paymentMode?: string
+  paymentReference?: string
+  splitPaymentMethod?: string
+  splitWalletType?: string
+  splitPaidAmount?: number
   total: number
   settledAmount: number
   remainingAmount: number

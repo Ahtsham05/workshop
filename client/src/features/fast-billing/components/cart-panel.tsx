@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Button } from '@/components/ui/button'
 import { NumericInput } from '@/components/ui/numeric-input'
@@ -9,7 +9,15 @@ import { stockBadgeClasses, stockDotClasses, stockLabel } from '../utils/stock-b
 import type { CartLine } from '../types'
 import type { FastBillCustomer } from '../utils/build-invoice-payload'
 import { computeDiscountAmount, type DiscountType } from '@/lib/discount'
-import { ProductHistoryDialog } from '@/features/invoice/components/product-history-dialog'
+import { CustomerRateHistoryPanel } from '@/features/invoice/components/customer-rate-history-panel'
+import { useRateHistoryPrefetch } from '@/features/invoice/components/customer-rate-history-cache'
+import {
+  RATE_HISTORY_ANCHOR_ATTR,
+  RATE_HISTORY_AUTO_OPEN_MIN_WIDTH,
+  readRateHistoryAutoOpen,
+  writeRateHistoryAutoOpen,
+} from '@/features/invoice/components/customer-rate-history-prefs'
+import { useRateBoxCustomer } from '../utils/use-rate-box-customer'
 import { BatchAllocationEditor, SerialSummaryTrigger } from '@/components/serial-batch-line-controls'
 import type { PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { formatAppDate } from '@/lib/date-format'
@@ -50,12 +58,28 @@ export function CartPanel({
 }: Props) {
   const formatMoney = useFormatMoney()
   const currencySymbol = useCurrencyMeta().symbol
-  const [historyDialog, setHistoryDialog] = useState<{
-    open: boolean
-    productId: string
-    productName: string
-    currentPrice: number
-  }>({ open: false, productId: '', productName: '', currentPrice: 0 })
+  // Rate-history box (same one as New Invoice): hangs under the clicked line's rate and
+  // shows what this customer paid for that product before.
+  const [rateLineKey, setRateLineKey] = useState<string | null>(null)
+  const [rateAutoOpen, setRateAutoOpen] = useState(readRateHistoryAutoOpen)
+  const priceInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const customerId = customer?.id || null
+  const openRateHistory = (key: string, auto: boolean) => {
+    if (!customerId) return
+    if (auto && (!rateAutoOpen || window.innerWidth < RATE_HISTORY_AUTO_OPEN_MIN_WIDTH)) return
+    setRateLineKey(key)
+  }
+  // Every line's history is fetched up front in one batch — clicking a rate sends no request.
+  useRateHistoryPrefetch({ partyId: customerId, lines: cart, enabled: Boolean(customerId) })
+
+  const rateLine = rateLineKey ? cart.find((l) => l.key === rateLineKey) : undefined
+  const boxOpen = Boolean(customerId && rateLine)
+  const { boxCustomer, customerBalance, loadingBalance } = useRateBoxCustomer(customer, boxOpen)
+
+  // Line removed or customer cleared → close.
+  useEffect(() => {
+    if (rateLineKey && !boxOpen) setRateLineKey(null)
+  }, [rateLineKey, boxOpen])
 
   if (cart.length === 0) {
     return (
@@ -208,6 +232,12 @@ export function CartPanel({
                     {currencySymbol}
                   </span>
                   <NumericInput
+                    ref={(el: HTMLInputElement | null) => {
+                      priceInputRefs.current[line.key] = el
+                    }}
+                    {...{ [RATE_HISTORY_ANCHOR_ATTR]: '' }}
+                    onFocus={() => openRateHistory(line.key, true)}
+                    onClick={() => openRateHistory(line.key, true)}
                     min={0}
                     value={line.unitPrice}
                     onValueChange={(price) => onPriceChange(line.key, price)}
@@ -257,16 +287,9 @@ export function CartPanel({
                     type='button'
                     size='sm'
                     variant='ghost'
-                    title='View past purchases of this product by this customer'
+                    title='Rate history — what this customer paid for this product before'
                     className='h-7 w-7 shrink-0 p-0 text-blue-500 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/30'
-                    onClick={() =>
-                      setHistoryDialog({
-                        open: true,
-                        productId: line.productId,
-                        productName: line.name,
-                        currentPrice: line.unitPrice,
-                      })
-                    }
+                    onClick={() => openRateHistory(line.key, false)}
                   >
                     <History className='h-3.5 w-3.5' />
                   </Button>
@@ -287,17 +310,29 @@ export function CartPanel({
         })}
       </ul>
 
-      {customer?.id && (
-        <ProductHistoryDialog
-          open={historyDialog.open}
-          onOpenChange={(open) => setHistoryDialog((prev) => ({ ...prev, open }))}
-          customerId={customer.id}
-          productId={historyDialog.productId}
-          productName={historyDialog.productName}
-          customerName={customer.name}
-          currentPrice={historyDialog.currentPrice}
+      {boxCustomer && rateLine ? (
+        <CustomerRateHistoryPanel
+          open
+          onOpenChange={(next) => !next && setRateLineKey(null)}
+          anchor={priceInputRefs.current[rateLine.key] ?? null}
+          customer={boxCustomer}
+          customerBalance={customerBalance}
+          loadingBalance={loadingBalance}
+          line={rateLine}
+          listPrice={catalogByKey.get(rateLine.key)?.price}
+          showCost={false}
+          onApplyRate={(rate) => onPriceChange(rateLine.key, rate)}
+          autoOpen={rateAutoOpen}
+          onAutoOpenChange={(value) => {
+            setRateAutoOpen(value)
+            writeRateHistoryAutoOpen(value)
+          }}
+          onReturnFocus={() => {
+            const input = priceInputRefs.current[rateLine.key]
+            if (input) requestAnimationFrame(() => { input.focus(); input.select() })
+          }}
         />
-      )}
+      ) : null}
     </ScrollArea>
   )
 }

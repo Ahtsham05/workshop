@@ -35,6 +35,7 @@ const { buildSettlementAddFieldsStage } = require('../utils/purchaseSettlement')
 const { resolveTransactionTaxAndCurrency } = require('./transactionTaxSnapshot.service');
 const { tokenizeSearch, tokenSearchClauses } = require('../utils/searchQuery');
 const Money = require('../utils/money');
+const rateHistory = require('../utils/rateHistory');
 
 /**
  * Resolves input tax + currency snapshot for a purchase's line items — genuinely new
@@ -1804,6 +1805,16 @@ const buildPurchaseListMatch = async (filter = {}, options = {}) => {
     else if (conditions.length > 1) match.$and = [...(match.$and || []), { $or: conditions }];
   }
 
+  // Payment method (tender). Purchases saved before paymentMode existed fall back to their
+  // paymentMethod: paid from cash reads as cash, paid from any account as bank.
+  if (options.paymentMode) {
+    const modes = toIdArray(options.paymentMode).map((value) => value.toLowerCase());
+    const conditions = [{ paymentMode: { $in: modes } }];
+    if (modes.includes('cash')) conditions.push({ paymentMode: { $exists: false }, paymentMethod: { $ne: 'wallet' } });
+    if (modes.includes('bank')) conditions.push({ paymentMode: { $exists: false }, paymentMethod: 'wallet' });
+    match.$and = [...(match.$and || []), { $or: conditions }];
+  }
+
   if (options.invoiceStatus) {
     const statuses = toIdArray(options.invoiceStatus).map((value) => value.toLowerCase());
     if (statuses.length === 1) match.status = statuses[0] === 'completed';
@@ -2092,6 +2103,13 @@ const getPurchaseListForExport = async (filter, options = {}) => {
         dueDate: 1,
         type: 1,
         paymentType: 1,
+        paymentMethod: 1,
+        walletType: 1,
+        paymentMode: 1,
+        paymentReference: 1,
+        splitPaymentMethod: 1,
+        splitWalletType: 1,
+        splitPaidAmount: 1,
         totalAmount: 1,
         settledAmount: 1,
         remainingAmount: 1,
@@ -2105,6 +2123,45 @@ const getPurchaseListForExport = async (filter, options = {}) => {
   ]).option({ allowDiskUse: true });
 
   return { results: rows, limit: EXPORT_ROW_LIMIT, truncated: rows.length >= EXPORT_ROW_LIMIT };
+};
+
+/**
+ * What we paid THIS SUPPLIER for each product before — the rate-history box on New Purchase
+ * (click Unit Cost). Many products in ONE request and ONE aggregation (the screen prefetches
+ * every line), tenant/branch scoped, newest first, `limit` lines per product; stats cover
+ * every line. `excludePurchaseId` keeps the purchase being edited out of its own history.
+ *
+ * @param {Object} filter - { organizationId, branchId }
+ * @param {Object} params - { supplierId, items: [{ productId, variantId? }], excludePurchaseId?, limit? }
+ */
+const getSupplierCostHistoryBatch = async (filter = {}, params = {}) => {
+  const { supplierId, excludePurchaseId } = params;
+  const keys = rateHistory.normaliseRateHistoryKeys(params.items);
+  if (!keys.length) return { results: [] };
+  if (!supplierId || !mongoose.Types.ObjectId.isValid(String(supplierId))) {
+    return { results: keys.map(rateHistory.emptyRateHistoryFor) };
+  }
+  const match = { supplier: new mongoose.Types.ObjectId(String(supplierId)) };
+  if (filter.organizationId) match.organizationId = toFilterObjectId(filter.organizationId);
+  if (filter.branchId) match.branchId = toFilterObjectId(filter.branchId);
+  if (excludePurchaseId && mongoose.Types.ObjectId.isValid(String(excludePurchaseId))) {
+    match._id = { $ne: new mongoose.Types.ObjectId(String(excludePurchaseId)) };
+  }
+  return rateHistory.runRateHistoryBatch({
+    Model: Purchase,
+    match,
+    keys,
+    limit: params.limit,
+    fields: {
+      items: 'items',
+      product: 'product',
+      price: 'priceAtPurchase',
+      total: 'total',
+      date: 'purchaseDate',
+      number: 'invoiceNumber',
+      bill: 'vendorBillNumber',
+    },
+  });
 };
 
 /**
@@ -2143,6 +2200,11 @@ const getPurchaseHistory = async (filter, options = {}) => {
         type: 1,
         paymentMethod: 1,
         walletType: 1,
+        paymentMode: 1,
+        paymentReference: 1,
+        splitPaymentMethod: 1,
+        splitWalletType: 1,
+        splitPaidAmount: 1,
         discount: 1,
         tax: 1,
         totalAmount: 1,
@@ -2212,6 +2274,10 @@ const getPurchaseHistory = async (filter, options = {}) => {
       type: row.type || 'cash',
       paymentMethod: row.paymentMethod || 'cash',
       walletType: row.walletType || '',
+      paymentMode: row.paymentMode || '',
+      paymentReference: row.paymentReference || '',
+      splitWalletType: row.splitPaymentMethod === 'wallet' ? row.splitWalletType || '' : row.splitPaymentMethod === 'cash' ? 'cash' : '',
+      splitPaidAmount: row.splitPaymentMethod ? Number(row.splitPaidAmount) || 0 : 0,
       discount: Number(row.discount) || 0,
       tax: Number(row.tax) || 0,
       total: Number(row.totalAmount) || 0,
@@ -2330,6 +2396,7 @@ module.exports = {
   getPurchaseListSummary,
   getPurchaseListForExport,
   getPurchaseHistory,
+  getSupplierCostHistoryBatch,
   addPurchaseComment,
   deletePurchaseComment,
   getPurchaseById,

@@ -1,4 +1,7 @@
 import { useState, useCallback, useMemo, Fragment } from 'react'
+import { PaymentMethodTotalsCard } from './payment-method-totals-card'
+import { paymentMethodSheetRows } from '@/lib/payment-modes'
+import { formatPaymentMethod, resolvePaymentMode, PAYMENT_MODE_BADGE, type PaymentMode } from '@/lib/payment-modes'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -86,6 +89,9 @@ interface UnifiedInvoiceRow {
   balance: number
   discount?: number
   module: string
+  /** Sales invoices only — "Cash", "Check #10234", "Credit Card + Cash". */
+  paymentLabel?: string
+  paymentMode?: PaymentMode | null
   items: UnifiedInvoiceItem[]
 }
 
@@ -113,6 +119,8 @@ const salesRowFromDetail = (inv: SalesInvoiceDetail): UnifiedInvoiceRow => ({
   balance: inv.balance,
   discount: inv.discount,
   module: 'Sales',
+  paymentLabel: formatPaymentMethod(inv),
+  paymentMode: resolvePaymentMode(inv),
   items: inv.items,
 })
 
@@ -231,6 +239,8 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
       { startDate, endDate },
       { skip: !isMobileShop || !isAgentBillUser }
     )
+
+    const paymentTotals = detailData?.byPaymentMethod ?? []
 
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
     const [viewInvoice, setViewInvoice] = useState<UnifiedInvoiceRow | null>(null)
@@ -410,6 +420,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                   'Cust. Phone':  idx === 0 ? (inv.customerPhone || '') : '',
                   Type:           idx === 0 ? inv.type : '',
                   Status:         idx === 0 ? inv.status : '',
+                  Payment:        idx === 0 ? (inv.paymentLabel || '') : '',
                   'Invoice Total': idx === 0 ? inv.total : '',
                   'Invoice Discount': idx === 0 ? (inv.discount || 0) : '',
                   'Paid Amount':  idx === 0 ? inv.paidAmount : '',
@@ -454,6 +465,12 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             XLSX.utils.book_append_sheet(wb, detailSheet, 'Invoice Details')
           }
 
+          // Sheet 3 — collections by payment method
+          if (paymentTotals.length > 0) {
+            const paymentSheet = XLSX.utils.json_to_sheet(paymentMethodSheetRows(paymentTotals, 'Collected', 'Invoices'))
+            XLSX.utils.book_append_sheet(wb, paymentSheet, 'Payment Methods')
+          }
+
           if (wb.SheetNames.length === 0) {
             toast.error(t('No data available to export'))
             return
@@ -466,7 +483,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
           toast.error(t('Failed to export data'))
         }
       },
-    }), [canViewCost, chartRows, mergedInvoices, mergedSummary, isMobileShop, t, language])
+    }), [canViewCost, chartRows, mergedInvoices, mergedSummary, isMobileShop, t, language, paymentTotals])
 
     const formatCurrency = useFormatMoney()
 
@@ -545,6 +562,14 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             </CardContent>
           </Card>
         </div>
+
+        {/* ── Collections by payment method ───────────────────────────────── */}
+        <PaymentMethodTotalsCard
+          rows={paymentTotals}
+          title='Collections by Payment Method'
+          description='Money received at the time of sale, by how the customer paid'
+          countLabel={['invoice', 'invoices']}
+        />
 
         {/* ── Sales Chart ──────────────────────────────────────────────────── */}
         <Card>
@@ -872,6 +897,17 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${typeColors[inv.type] ?? ''}`}>
                                 {inv.type}
                               </span>
+                              {inv.paymentMode && inv.paymentLabel && (inv.paidAmount || 0) > 0 && (
+                                <span
+                                  title={inv.paymentLabel}
+                                  className={cn(
+                                    'mx-auto mt-1 block max-w-[10rem] truncate rounded-full border px-2 py-0.5 text-[10px] font-medium',
+                                    PAYMENT_MODE_BADGE[inv.paymentMode],
+                                  )}
+                                >
+                                  {inv.paymentLabel}
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell className='text-center'>
                               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${statusColors[inv.status] ?? ''}`}>

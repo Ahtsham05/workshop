@@ -6,6 +6,8 @@ import { fetchCategories } from '@/stores/category.slice'
 import { useGetUsersQuery } from '@/stores/users.api'
 import { useCanViewCreatedBy } from '@/components/created-by-cell'
 import { useGetMyBranchesQuery } from '@/stores/branch.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { usesPaymentMethodCards } from '@/lib/payment-modes'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -65,6 +67,14 @@ const PAYMENT_TYPE_OPTIONS = [
   { value: 'cash', label: 'Cash' },
   { value: 'credit', label: 'Credit' },
   { value: 'wallet', label: 'Bank / Wallet' },
+]
+
+const PAYMENT_MODE_OPTIONS = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'card', label: 'Credit Card' },
+  { value: 'ach', label: 'ACH' },
+  { value: 'check', label: 'Check' },
+  { value: 'bank', label: 'Bank / other account' },
 ]
 
 const DUE_STATUS_OPTIONS = [
@@ -220,6 +230,10 @@ export function PurchaseFiltersToolbar({
     [categories]
   )
 
+  // Credit Card / ACH / Check tenders only exist for wholesale + distributor businesses.
+  const { data: orgData } = useGetMyOrganizationQuery()
+  const showTenderFilter = usesPaymentMethodCards(orgData?.businessType)
+
   /** Applied filters, as removable pills — the "what am I actually looking at" line. */
   const activePills = useMemo(() => {
     const pills: { key: string; label: string; clear: () => void }[] = []
@@ -228,6 +242,8 @@ export function PurchaseFiltersToolbar({
 
     if (filters.supplier.length)
       pills.push({ key: 'supplier', label: `Supplier: ${labelFor(supplierOptions, filters.supplier)}`, clear: () => onPatchImmediate({ supplier: [] }) })
+    if (filters.paymentMode?.length)
+      pills.push({ key: 'paymentMode', label: `Paid by: ${labelFor(PAYMENT_MODE_OPTIONS, filters.paymentMode)}`, clear: () => onPatchImmediate({ paymentMode: [] }) })
     if (filters.paymentStatus.length)
       pills.push({ key: 'paymentStatus', label: `Payment: ${labelFor(PAYMENT_STATUS_OPTIONS, filters.paymentStatus)}`, clear: () => onPatchImmediate({ paymentStatus: [] }) })
     if (filters.paymentType.length)
@@ -519,6 +535,16 @@ export function PurchaseFiltersToolbar({
                 onChange={(values) => onPatchDraft({ paymentType: values })}
                 searchable={false}
               />
+              {showTenderFilter && (
+                <MultiSelectFilter
+                  label={t('Payment Method')}
+                  placeholder={t('Any method')}
+                  options={PAYMENT_MODE_OPTIONS}
+                  selected={draft.paymentMode || []}
+                  onChange={(values) => onPatchDraft({ paymentMode: values })}
+                  searchable={false}
+                />
+              )}
               <MultiSelectFilter
                 label={t('Due Status')}
                 placeholder={t('Any due status')}

@@ -155,6 +155,7 @@ export const sidebarData: SidebarData = {
           items: [
             { title: 'Purchase Orders', url: '/purchase-orders', icon: ClipboardList, anyPermission: ['viewPurchaseOrders', 'createPurchaseOrders'] },
             { title: 'Purchases', url: '/purchase-invoice', icon: IconPackages, anyPermission: ['viewPurchases', 'createPurchases'] },
+            { title: 'Purchase History', url: '/purchase-history', icon: IconHistory, permission: 'viewPurchases' },
             { title: 'Purchase Returns', url: '/purchase-returns', icon: IconRefresh, anyPermission: ['viewPurchaseReturns', 'createPurchaseReturns'] },
           ],
         },
@@ -166,6 +167,7 @@ export const sidebarData: SidebarData = {
           items: [
             { title: 'Invoices', url: '/invoice', icon: IconPackages, anyPermission: ['viewInvoices', 'createInvoices'] },
             { title: 'Fast Billing', url: '/fast-billing', icon: IconBarcode, permission: 'createInvoices' },
+            { title: 'Invoice History', url: '/invoice-history', icon: IconHistory, permission: 'viewInvoices' },
             { title: 'Sales Returns', url: '/sales-returns', icon: IconRefresh, anyPermission: ['viewSalesReturns', 'createSalesReturns'] },
           ],
         },
@@ -302,6 +304,13 @@ export const sidebarData: SidebarData = {
           title: 'Stock purchases',
           url: '/purchase-invoice',
           icon: IconPackages,
+          businessTypes: ['restaurant'],
+          permission: 'viewPurchases',
+        },
+        {
+          title: 'Purchase history',
+          url: '/purchase-history',
+          icon: IconHistory,
           businessTypes: ['restaurant'],
           permission: 'viewPurchases',
         },

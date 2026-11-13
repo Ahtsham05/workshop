@@ -35,6 +35,12 @@ export interface TransactionHistoryEntry {
   type: string
   paymentMethod: string
   walletType?: string
+  /** Sales only — tender (cash / card / ach / check / bank) + its check # / reference. */
+  paymentMode?: string
+  paymentReference?: string
+  /** Sales only — second payment leg: an account name, or 'cash'. */
+  splitWalletType?: string
+  splitPaidAmount?: number
   discount: number
   tax: number
   /** Sales only — delivery + service charges added to the bill. */

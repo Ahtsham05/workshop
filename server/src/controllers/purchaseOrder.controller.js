@@ -76,7 +76,13 @@ const getStats = catchAsync(async (req, res) => {
   res.send(stats);
 });
 
+const getNextOrderNumber = catchAsync(async (req, res) => {
+  const orderNumber = await purchaseOrderService.peekNextOrderNumber(req.organizationId);
+  res.send({ orderNumber });
+});
+
 module.exports = {
+  getNextOrderNumber,
   createPurchaseOrder,
   getPurchaseOrders,
   getPurchaseOrder,

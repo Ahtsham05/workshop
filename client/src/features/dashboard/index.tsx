@@ -11,10 +11,12 @@ import { UpcomingInvoices } from './components/upcoming-invoices'
 import { TopProducts } from './components/top-products'
 import { TopCustomers } from './components/top-customers'
 import { QuickLinksPanel } from './components/quick-links-panel'
+import { ExpensesWidget, ProfitLossWidget, SalesTrendWidget } from './components/insights/trend-widgets'
+import { AgingWidget, DueSummaryWidget, MoneyFlowWidget } from './components/insights/money-widgets'
 import { SortableCardGrid, SortableSection, SortableSectionList } from './components/sortable-layout'
 import { applyOrder, DASHBOARD_SECTIONS, useDashboardLayout, type DashboardSectionId } from './lib/dashboard-layout'
 import { Button } from '@/components/ui/button'
-import { Check, LayoutDashboard, RotateCcw } from 'lucide-react'
+import { Check, LayoutDashboard, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import { DashboardDateFilter } from './components/dashboard-date-filter'
 import {
   DASHBOARD_QUERY_OPTIONS,
@@ -55,7 +57,7 @@ import {
   AlarmClock,
 } from 'lucide-react'
 import SchoolDashboard from '@/features/school/dashboard'
-import { Navigate } from '@tanstack/react-router'
+import { Link, Navigate } from '@tanstack/react-router'
 import { useDashboardCardVisible } from './lib/card-permissions'
 
 // Every card on this page uses the phone layout with the icon beside the title. It's opt-in on
@@ -161,6 +163,8 @@ export default function Dashboard() {
   const canViewLeads = hasExplicitPermission('viewLeads')
   // Each card follows its module's permission (lib/card-permissions.ts).
   const cardVisible = useDashboardCardVisible()
+  // Shown = the role may see it AND the person hasn't switched it off (Settings → Dashboard).
+  const shows = (id: string) => cardVisible(id) && dashboardLayout.isOn(id)
   const { data: leadStats, isLoading: leadStatsLoading } = useGetLeadStatsQuery(undefined, { skip: !canViewLeads })
   const openPipelineValue = useMemo(
     () => (leadStats?.byStage || [])
@@ -208,7 +212,7 @@ export default function Dashboard() {
       arranging={arranging}
       onReorder={(ids) => dashboardLayout.update({ cards: ids })}
       className={cn(DASHBOARD_CARD_GRID, 'transition-opacity', statsRefreshing && !arranging && 'opacity-60')}
-      isVisible={cardVisible}
+      isVisible={shows}
     >
           {showMobileCards && (
             <>
@@ -685,6 +689,42 @@ export default function Dashboard() {
             </SortableCardGrid>
   )
 
+  // ── Insight widgets (charts + due/aging), each shown only to roles allowed its module ──
+  const showProfitLoss = shows('insight-profit-loss')
+  const dueCards = [
+    shows('insight-due-invoices') && <DueSummaryWidget key='due-in' side='receivable' />,
+    shows('insight-bills-to-pay') && <DueSummaryWidget key='due-out' side='payable' />,
+  ].filter(Boolean)
+  const financeNode =
+    showProfitLoss || dueCards.length ? (
+      <div className={cn('mb-6 grid grid-cols-1 gap-6', showProfitLoss ? 'lg:grid-cols-3' : 'md:grid-cols-2')}>
+        {showProfitLoss && <ProfitLossWidget className={dueCards.length ? 'lg:col-span-2' : 'lg:col-span-3'} />}
+        {showProfitLoss && dueCards.length ? <div className='grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-1'>{dueCards}</div> : dueCards}
+      </div>
+    ) : null
+  const showSales = shows('insight-sales')
+  const showExpenses = shows('insight-expenses')
+  const salesExpensesNode =
+    showSales || showExpenses ? (
+      <div className={cn('mb-6 grid grid-cols-1 gap-6', showSales && showExpenses && 'lg:grid-cols-3')}>
+        {showSales && <SalesTrendWidget className={showExpenses ? 'lg:col-span-2' : undefined} />}
+        {showExpenses && <ExpensesWidget />}
+      </div>
+    ) : null
+  const moneyCards = [
+    shows('insight-money-flow') && <MoneyFlowWidget key='flow' className='md:col-span-2 lg:col-span-1' />,
+    shows('insight-receivable-aging') && <AgingWidget key='ar' side='receivable' />,
+    shows('insight-payable-aging') && <AgingWidget key='ap' side='payable' />,
+  ].filter(Boolean)
+  const moneyNode = moneyCards.length ? (
+    <div className='mb-6 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3'>{moneyCards}</div>
+  ) : null
+
+  const showRevenueChart = dashboardLayout.isOn('revenue-chart')
+  const showLowStock = dashboardLayout.isOn('low-stock')
+  const showTopProducts = dashboardLayout.isOn('top-products')
+  const showTopCustomers = dashboardLayout.isOn('top-customers')
+
   // ── Page sections, in the person's own order (Arrange dashboard) ──
   const sectionNodes: Record<DashboardSectionId, { label: string; node: ReactNode }> = {
     'quick-links': {
@@ -696,23 +736,34 @@ export default function Dashboard() {
       ),
     },
     kpis: { label: t('Key figures'), node: kpiCards },
+    finance: { label: t('Profit & loss, due invoices and bills'), node: financeNode },
+    'sales-expenses': { label: t('Sales and expenses'), node: salesExpensesNode },
+    money: { label: t('Money in & out, receivable and payable'), node: moneyNode },
     charts: {
       label: t('Revenue chart & low stock'),
-      node: (
-        <div className='grid grid-cols-1 gap-6 lg:grid-cols-7 mb-6'>
-          <RevenueChart dateRange={dateRange} />
-          <LowStockWidget />
-        </div>
-      ),
+      // Revenue spans 4 of 7 columns and low stock 3: alone, each gets a grid of its own width.
+      node:
+        showRevenueChart || showLowStock ? (
+          <div
+            className={cn(
+              'mb-6 grid grid-cols-1 gap-6',
+              showRevenueChart && showLowStock ? 'lg:grid-cols-7' : showRevenueChart ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
+            )}
+          >
+            {showRevenueChart && <RevenueChart dateRange={dateRange} />}
+            {showLowStock && <LowStockWidget />}
+          </div>
+        ) : null,
     },
     'top-lists': {
       label: t('Top products & customers'),
-      node: (
-        <div className='grid grid-cols-1 gap-6 lg:grid-cols-2 mb-6'>
-          <TopProducts dateRange={dateRange} />
-          <TopCustomers dateRange={dateRange} />
-        </div>
-      ),
+      node:
+        showTopProducts || showTopCustomers ? (
+          <div className={cn('mb-6 grid grid-cols-1 gap-6', showTopProducts && showTopCustomers && 'lg:grid-cols-2')}>
+            {showTopProducts && <TopProducts dateRange={dateRange} />}
+            {showTopCustomers && <TopCustomers dateRange={dateRange} />}
+          </div>
+        ) : null,
     },
     activities: {
       label: t('Recent activities'),
@@ -731,7 +782,11 @@ export default function Dashboard() {
       ),
     },
   }
-  const sectionIds = applyOrder(DASHBOARD_SECTIONS, dashboardLayout.layout.sections)
+  // A section with nothing this role may see is left out entirely (no empty drag bar).
+  // Switched-off sections (Settings → Dashboard) are left out the same way.
+  const sectionIds = applyOrder(DASHBOARD_SECTIONS, dashboardLayout.layout.sections).filter(
+    (id) => dashboardLayout.isOn(id) && sectionNodes[id].node != null
+  )
   const sections = sectionIds.map((id) => (
     <SortableSection key={id} id={id} label={sectionNodes[id].label} arranging={arranging}>
       {sectionNodes[id].node}
@@ -784,6 +839,12 @@ export default function Dashboard() {
                     >
                       <LayoutDashboard className='size-4' />
                     </Button>
+                    <Button asChild variant='outline' size='icon' className='relative size-9 shadow-sm'>
+                      <Link to='/settings/dashboard' aria-label={t('Customize dashboard')} title={t('Choose which sections, charts and cards show')}>
+                        <SlidersHorizontal className='size-4' />
+                        {dashboardLayout.hiddenCount > 0 && <span className='absolute top-1.5 right-1.5 size-1.5 rounded-full bg-primary' aria-hidden />}
+                      </Link>
+                    </Button>
                   </>
                 )}
               </div>
@@ -809,9 +870,21 @@ export default function Dashboard() {
                   </Button>
                 </>
               ) : (
-                <Button variant='outline' size='sm' onClick={() => setArranging(true)} className='h-9 gap-1.5 shadow-sm max-sm:hidden' title={t('Drag cards, quick links and sections into your own order')}>
-                  <LayoutDashboard className='size-4' /> {t('Arrange')}
-                </Button>
+                <>
+                  <Button variant='outline' size='sm' onClick={() => setArranging(true)} className='h-9 gap-1.5 shadow-sm max-sm:hidden' title={t('Drag cards, quick links and sections into your own order')}>
+                    <LayoutDashboard className='size-4' /> {t('Arrange')}
+                  </Button>
+                  <Button asChild variant='outline' size='sm' className='h-9 gap-1.5 shadow-sm max-sm:hidden'>
+                    <Link to='/settings/dashboard' title={t('Choose which sections, charts and cards show')}>
+                      <SlidersHorizontal className='size-4' /> {t('Customize')}
+                      {dashboardLayout.hiddenCount > 0 && (
+                        <span className='rounded-full bg-primary/10 px-1.5 text-[11px] font-medium text-primary tabular-nums'>
+                          {t('{{n}} hidden', { n: dashboardLayout.hiddenCount })}
+                        </span>
+                      )}
+                    </Link>
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -825,6 +898,21 @@ export default function Dashboard() {
               {t('Drag any card or quick link to a new place, or drag a section by its bar. Every change is saved to your account straight away — press Done when finished.')}
             </p>
           </div>
+        )}
+
+        {sectionIds.length === 0 && (
+          <Card className='mb-6 items-center gap-3 border-dashed px-6 py-12 text-center'>
+            <SlidersHorizontal className='size-6 text-muted-foreground' />
+            <div>
+              <p className='font-semibold'>{t('Everything on your dashboard is switched off')}</p>
+              <p className='mt-1 text-sm text-muted-foreground'>{t('Choose the sections, charts and cards you want to see.')}</p>
+            </div>
+            <Button asChild size='sm' className='gap-1.5'>
+              <Link to='/settings/dashboard'>
+                <SlidersHorizontal className='size-4' /> {t('Customize dashboard')}
+              </Link>
+            </Button>
+          </Card>
         )}
 
         {arranging ? (

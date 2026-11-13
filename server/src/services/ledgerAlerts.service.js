@@ -527,13 +527,8 @@ const computeAging = async ({ organizationId, customers, settings, now = new Dat
 
 const STATE_RANK = { overdue: 0, due_today: 1, due_soon: 2, current: 3, no_due_date: 4, clear: 5 };
 
-/**
- * Every customer in scope who owes something, with their aging + colour band, plus totals
- * per band. One call feeds the customer lists' colours and the Overdue Ledgers report.
- * @param {{organizationId, branchId?, now?}} params
- */
-const getStatusBoard = async ({ organizationId, branchId, now = new Date() }) => {
-  const settings = await getSettings(organizationId);
+/** Customers in scope who owe something (or have an open pending invoice), lean. */
+const loadOwingCustomers = async ({ organizationId, branchId, settings }) => {
   const scope = { organizationId, isEmployeeAccount: { $ne: true }, isSupplierAccount: { $ne: true } };
   if (branchId) scope.branchId = branchId;
 
@@ -546,13 +541,22 @@ const getStatusBoard = async ({ organizationId, branchId, now = new Date() }) =>
       .filter((id) => mongoose.Types.ObjectId.isValid(id));
   }
 
-  const customers = await Customer.find({
+  return Customer.find({
     ...scope,
     $or: [{ balance: { $gt: EPS } }, ...(pendingCustomerIds.length ? [{ _id: { $in: pendingCustomerIds } }] : [])],
   })
     .select('name nameUrdu phone whatsapp balance paymentTerms')
     .lean();
+};
 
+/**
+ * Every customer in scope who owes something, with their aging + colour band, plus totals
+ * per band. One call feeds the customer lists' colours and the Overdue Ledgers report.
+ * @param {{organizationId, branchId?, now?}} params
+ */
+const getStatusBoard = async ({ organizationId, branchId, now = new Date() }) => {
+  const settings = await getSettings(organizationId);
+  const customers = await loadOwingCustomers({ organizationId, branchId, settings });
   const rows = await computeAging({ organizationId, customers, settings, now });
   rows.sort(
     (a, b) =>
@@ -630,6 +634,7 @@ module.exports = {
   bandIndexFor,
   classifyItem,
   computeAging,
+  loadOwingCustomers,
   getStatusBoard,
   getCustomerAging,
   // exported for tests

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useDoNotOrderWarning } from '@/features/products/lists/use-do-not-order-warning'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { createPortal } from 'react-dom'
-import { useSelector } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import {
+  ArrowLeft,
   ArrowLeftRight,
   Check,
   ChevronDown,
@@ -19,6 +20,7 @@ import {
   Search,
   Send,
   Trash2,
+  Truck,
 } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -28,6 +30,8 @@ import { Input } from '@/components/ui/input'
 import { NumericInput } from '@/components/ui/numeric-input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { DatePicker } from '@/components/ui/date-picker'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { BilingualName } from '@/components/bilingual-name'
 import { useUrduDisplay } from '@/context/urdu-display-context'
@@ -39,6 +43,7 @@ import {
 } from '@/components/ui/popover'
 import {
   Command,
+  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -46,13 +51,29 @@ import {
 } from '@/components/ui/command'
 
 import type { Product } from '@/features/invoice/index'
-import type { RootState } from '@/stores/store'
+import type { AppDispatch, RootState } from '@/stores/store'
 import {
   useCreatePurchaseOrderMutation,
   useUpdatePurchaseOrderMutation,
   useSendPurchaseOrderMutation,
+  useGetNextPurchaseOrderNumberQuery,
   type PurchaseOrder,
 } from '@/stores/purchaseOrder.api'
+import { fetchSuppliers } from '@/stores/supplier.slice'
+import { usePermissions } from '@/context/permission-context'
+import { useIsBelowXl, useIsPhone } from '@/hooks/use-mobile'
+import { useIsNarrower } from '@/hooks/use-element-width'
+import { useFitListToViewport } from '@/lib/use-fit-list-to-viewport'
+import { getBusinessToday } from '@/lib/business-timezone'
+import { WarehouseStockTrigger } from '@/components/warehouse-stock-trigger'
+import {
+  EntityCreateEmptyPrompt,
+  EntityCreateShortcutButton,
+  EntityQuickCreateDialogs,
+  type QuickCreateState,
+} from '@/components/entity-create-shortcut'
+import { InactiveProductMatches, useInactiveProductMatches } from '@/components/inactive-product-matches'
+import { STATUS_LABELS, STATUS_STYLES } from './po-status'
 import { normalizeSuppliersList } from '@/features/purchase-invoice/utils/catalog-helpers'
 import { computeDiscountAmount, type DiscountType } from '@/features/purchase-invoice/utils/discount'
 import { focusField, onEnterAdvance, useInvoiceSaveShortcuts, usePickerEnterGuard } from '@/lib/invoice-form-keyboard'
@@ -144,7 +165,8 @@ function createInitialOrderItems(showProductCatalog: boolean): OrderItem[] {
   return Array.from({ length: count }, () => createEmptyOrderManualItem())
 }
 
-const todayISO = () => new Date().toISOString().slice(0, 10)
+// Business-timezone day (Asia/Karachi), not the browser's UTC day.
+const todayISO = () => getBusinessToday()
 
 function buildInitialDraft(
   editing?: PurchaseOrder | null,
@@ -238,6 +260,8 @@ function buildInitialDraft(
 
 interface Props {
   onSaved: () => void
+  /** Back to the orders list — shown as the arrow in the Order Details card header. */
+  onBack?: () => void
   editing?: PurchaseOrder | null
   products: Product[]
   productsLoading?: boolean
@@ -256,6 +280,7 @@ interface Props {
 
 export default function PurchaseOrderPanel({
   onSaved,
+  onBack,
   editing,
   productsLoading = false,
   onRegisterAddProduct,
@@ -282,6 +307,20 @@ export default function PurchaseOrderPanel({
   const productPickerEnterGuard = usePickerEnterGuard(productSelectOpen, productSearchQuery)
   const [applyDiscountOpen, setApplyDiscountOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const dispatch = useDispatch<AppDispatch>()
+  const { hasPermission } = usePermissions()
+  const canCreateSupplier = hasPermission('createSuppliers' as never)
+  const canCreateProduct = hasPermission('createProducts' as never)
+  const [quickCreate, setQuickCreate] = useState<QuickCreateState>(null)
+  const [quickCreateProductIndex, setQuickCreateProductIndex] = useState<number | null>(null)
+  // Inactive products are left out of the picker; name any the search matches so an empty
+  // result explains itself (same as Purchase Invoice).
+  const inactiveProductMatches = useInactiveProductMatches(productSelectOpen ? productSearchQuery : '')
+  // Preview of the number this order will get on save (real number when editing).
+  const { data: nextNumberData } = useGetNextPurchaseOrderNumberQuery(undefined, { skip: !!editing })
+  const orderNumberLabel = editing ? editing.orderNumber : nextNumberData?.orderNumber
+  const isPhone = useIsPhone()
+  const isBelowXl = useIsBelowXl()
 
   // Raw text the user is currently typing into a decimal field (cost/discount/sell/
   // tax/shipping), keyed by a field id — e.g. "3:expectedPrice". A controlled input
@@ -310,9 +349,20 @@ export default function PurchaseOrderPanel({
 
   const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const costInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const sellInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const orderDateRef = useRef<HTMLInputElement>(null)
   const expectedDateRef = useRef<HTMLInputElement>(null)
   const itemsScrollRef = useRef<HTMLDivElement>(null)
+  // Same table-vs-cards and fit-to-viewport rules as Purchase Invoice (purchase-panel.tsx):
+  // the items table needs ~740px for its fixed columns, below that rows render as cards;
+  // on the three-column desktop layout the list sizes itself to the viewport.
+  const itemsAreaRef = useRef<HTMLDivElement>(null)
+  const isItemsAreaNarrow = useIsNarrower(itemsAreaRef, 740)
+  const panelRootRef = useRef<HTMLDivElement>(null)
+  const itemsListMaxHeight = useFitListToViewport(itemsScrollRef, panelRootRef, {
+    enabled: !showProductCatalog && !isPhone && !isBelowXl,
+  })
+  const useCards = showProductCatalog || isPhone || isItemsAreaNarrow
   const autoOpenDoneRef = useRef(false)
   const prefillSupplierAppliedRef = useRef(false)
 
@@ -756,36 +806,546 @@ export default function PurchaseOrderPanel({
     prefillSupplierAppliedRef.current = true
   }, [prefillSupplierId, editing, suppliers, selectSupplier])
 
+  const openQuickCreate = useCallback(
+    (type: 'supplier' | 'product', defaultName?: string, productIndex?: number) => {
+      setQuickCreate({ type, defaultName: defaultName?.trim() || undefined })
+      if (productIndex != null) setQuickCreateProductIndex(productIndex)
+      if (type === 'supplier') setSupplierSelectOpen(false)
+      if (type === 'product') {
+        setProductSelectOpen('')
+        setProductSearchQuery('')
+      }
+    },
+    [],
+  )
+
+  const handleQuickCreated = useCallback(
+    async (type: 'customer' | 'supplier' | 'product', entity: { _id?: string; id?: string; name: string } & Record<string, unknown>) => {
+      if (type === 'supplier') {
+        await dispatch(fetchSuppliers({ page: 1, limit: 1000 }))
+        selectSupplier({ ...entity, _id: entity._id || entity.id || '' } as (typeof suppliers)[number])
+        return
+      }
+      if (type === 'product') {
+        const product = { ...entity, id: entity.id || entity._id, _id: entity._id || entity.id } as unknown as Product
+        if (quickCreateProductIndex != null) {
+          handleProductSelect(quickCreateProductIndex, product)
+        } else {
+          addProductToOrder(product)
+        }
+        setQuickCreateProductIndex(null)
+      }
+    },
+    [dispatch, selectSupplier, handleProductSelect, addProductToOrder, quickCreateProductIndex],
+  )
+
   const supplierId = draft.supplier._id
+  const filledItems = draft.items.filter((i) => getProductId(i) && i.product.name)
+  const totalQuantity = filledItems.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0)
+  const orderStatus = editing?.status || 'draft'
+  const saveDisabled = saving || !supplierId || filledItems.length === 0
+  const sendLabel = editing && editing.status !== 'draft' ? 'Save' : 'Save & send'
+
+  // Stock pill — same colours/thresholds as Purchase Invoice's item rows.
+  const renderStockPill = (product: Product) => {
+    const stock = getDisplayStock(product)
+    return (
+      <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium ${
+        stock <= 0 ? 'bg-red-100 text-red-700' :
+        stock <= 5 ? 'bg-red-50 text-red-500' :
+        stock <= 20 ? 'bg-amber-50 text-amber-600' :
+        'bg-green-50 text-green-700'
+      }`}>
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+          stock <= 0 ? 'bg-red-500' :
+          stock <= 5 ? 'bg-red-400' :
+          stock <= 20 ? 'bg-amber-400' :
+          'bg-green-500'
+        }`} />
+        {stock <= 0 ? 'Out of stock' : `${stock} in stock`}
+      </span>
+    )
+  }
+
+  // Control markup shared by the table row and the card row, so both render identical
+  // inputs. Mirrors Purchase Invoice's renderPurchaseItemParts (purchase-panel.tsx).
+  const renderItemParts = (item: OrderItem) => {
+    const productId = getProductId(item)
+    const rk = rowKey(productId, item.variantId)
+    const itemGross = item.quantity * item.expectedPrice
+    const itemDiscountAmount = computeDiscountAmount(itemGross, item.discountType, item.discountValue)
+    const itemNet = itemGross - itemDiscountAmount
+
+    const productCell = (
+      <div className='flex items-start gap-2'>
+        {item.product.image?.url ? (
+          <img src={item.product.image.url} alt={item.product.name} className='h-8 w-8 shrink-0 rounded-lg object-cover' />
+        ) : (
+          <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted'>
+            <Package className='h-4 w-4 text-muted-foreground/50' />
+          </div>
+        )}
+        <div className='min-w-0 flex-1'>
+          <BilingualName primary={item.product.name} secondary={item.product.nameUrdu} primaryClassName='font-medium text-sm' truncate />
+          <div className='mt-1 flex flex-wrap items-center gap-1.5'>{renderStockPill(item.product)}</div>
+        </div>
+      </div>
+    )
+
+    const qtyControl = (
+      <div className='flex w-fit items-center overflow-hidden rounded-lg border bg-background'>
+        <Button
+          type='button'
+          size='sm'
+          variant='ghost'
+          className='h-7 w-6 rounded-none border-r p-0 text-muted-foreground hover:bg-muted hover:text-foreground'
+          onClick={() => updateQuantity(productId, Math.max(1, item.quantity - 1), item.variantId)}
+        >
+          <Minus className='h-3 w-3' />
+        </Button>
+        <NumericInput
+          ref={(el) => {
+            qtyInputRefs.current[rk] = el
+          }}
+          decimals={false}
+          min={1}
+          emptyValue={null}
+          value={item.quantity}
+          onValueChange={(qty) => updateQuantity(productId, qty, item.variantId)}
+          onKeyDown={(e) => onEnterAdvance(e, () => focusField(costInputRefs.current[rk]))}
+          className='h-7 w-12 rounded-none border-0 text-center text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+          aria-label='Quantity'
+        />
+        <Button
+          type='button'
+          size='sm'
+          variant='ghost'
+          className='h-7 w-6 rounded-none border-l p-0 text-muted-foreground hover:bg-muted hover:text-foreground'
+          onClick={() => updateQuantity(productId, item.quantity + 1, item.variantId)}
+        >
+          <Plus className='h-3 w-3' />
+        </Button>
+      </div>
+    )
+
+    const purchasePriceControl = (
+      <div className='flex w-fit items-center overflow-hidden rounded-lg border bg-background'>
+        <span className='flex h-7 select-none items-center border-r bg-muted px-1.5 text-[11px] font-medium text-muted-foreground'>{currencySymbol}</span>
+        <Input
+          ref={(el) => {
+            costInputRefs.current[rk] = el
+          }}
+          type='text'
+          inputMode='decimal'
+          showVoiceInput={false}
+          value={getNumericDraftValue(`${rk}:expectedPrice`, item.expectedPrice)}
+          onChange={(e) =>
+            handleNumericDraftChange(`${rk}:expectedPrice`, e.target.value, (parsed) =>
+              updateExpectedPrice(productId, parsed, item.variantId),
+            )
+          }
+          onKeyDown={(e) => onEnterAdvance(e, () => focusField(sellInputRefs.current[rk]))}
+          onFocus={(e) => e.target.select()}
+          onBlur={() => clearNumericDraft(`${rk}:expectedPrice`)}
+          className='h-7 w-20 rounded-none border-0 text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0'
+          aria-label='Purchase Price'
+        />
+      </div>
+    )
+
+    const sellingPriceControl = (
+      <div className='flex w-fit items-center overflow-hidden rounded-lg border border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20'>
+        <span className='flex h-7 select-none items-center border-r border-blue-200 bg-blue-100/60 px-1.5 text-[11px] font-medium text-blue-500 dark:border-blue-800 dark:bg-blue-900/30'>{currencySymbol}</span>
+        <Input
+          ref={(el) => {
+            sellInputRefs.current[rk] = el
+          }}
+          type='text'
+          inputMode='decimal'
+          showVoiceInput={false}
+          value={getNumericDraftValue(`${rk}:expectedSellingPrice`, item.expectedSellingPrice ?? 0)}
+          onChange={(e) =>
+            handleNumericDraftChange(`${rk}:expectedSellingPrice`, e.target.value, (parsed) =>
+              updateSellingPrice(productId, parsed, item.variantId),
+            )
+          }
+          onKeyDown={(e) => onEnterAdvance(e, addNewRowAndOpenProduct)}
+          onFocus={(e) => e.target.select()}
+          onBlur={() => clearNumericDraft(`${rk}:expectedSellingPrice`)}
+          placeholder='0'
+          className='h-7 w-20 rounded-none border-0 bg-transparent text-sm font-semibold text-blue-700 focus-visible:ring-0 focus-visible:ring-offset-0 dark:text-blue-300'
+          aria-label='Sale Price'
+        />
+      </div>
+    )
+
+    const discountControl = (
+      <div className='flex w-fit items-center overflow-hidden rounded-lg border bg-background'>
+        <Input
+          type='text'
+          inputMode='decimal'
+          showVoiceInput={false}
+          value={getNumericDraftValue(`${rk}:itemDiscount`, item.discountValue || 0)}
+          onChange={(e) =>
+            handleNumericDraftChange(`${rk}:itemDiscount`, e.target.value, (parsed) =>
+              updateItemDiscount(productId, { value: Math.max(0, parsed) }, item.variantId),
+            )
+          }
+          onFocus={(e) => e.target.select()}
+          onBlur={() => clearNumericDraft(`${rk}:itemDiscount`)}
+          placeholder='0'
+          className='h-7 w-14 rounded-none border-0 text-center text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0'
+          aria-label='Discount'
+        />
+        <button
+          type='button'
+          onClick={() =>
+            updateItemDiscount(productId, { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' }, item.variantId)
+          }
+          title={`Click to switch between ${currencySymbol} and % discount`}
+          className='flex h-7 cursor-pointer select-none items-center border-l bg-muted px-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground active:scale-95'
+        >
+          {item.discountType === 'percentage' ? '%' : currencySymbol}
+        </button>
+      </div>
+    )
+
+    const totalDisplay = (
+      <div className='flex flex-col items-end gap-0'>
+        {itemDiscountAmount > 0 && (
+          <span className='text-[10px] leading-none text-muted-foreground line-through'>{formatMoney(itemGross)}</span>
+        )}
+        <p className='text-sm font-bold tabular-nums'>{formatMoney(itemNet)}</p>
+      </div>
+    )
+
+    const deleteButton = (
+      <Button
+        type='button'
+        size='sm'
+        variant='ghost'
+        className='h-7 w-7 shrink-0 p-0 hover:bg-red-50 dark:hover:bg-red-950/30'
+        onClick={() => removeItem(productId, item.variantId)}
+      >
+        <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
+      </Button>
+    )
+
+    return { productCell, qtyControl, purchasePriceControl, sellingPriceControl, discountControl, totalDisplay, deleteButton }
+  }
+
+  // Empty row with the product picker. Same markup as Purchase Invoice's manual row.
+  const renderManualRow = (index: number) => {
+    const compact = !showProductCatalog
+    return (
+      <div key={`manual-${index}`} className='overflow-hidden rounded-xl border bg-card shadow-sm'>
+        <div className={cn('flex items-center gap-3', compact ? 'p-2' : 'p-3')}>
+          <div className={cn('flex shrink-0 items-center justify-center rounded-lg bg-muted', compact ? 'h-8 w-8' : 'h-10 w-10')}>
+            <Package className={cn('text-muted-foreground/50', compact ? 'h-4 w-4' : 'h-5 w-5')} />
+          </div>
+          <div className='min-w-0 flex-1'>
+            <Popover
+              open={productSelectOpen === `manual-${index}`}
+              onOpenChange={(open) => {
+                setProductSelectOpen(open ? `manual-${index}` : '')
+                setProductSearchQuery('')
+              }}
+            >
+              <PopoverTrigger asChild>
+                <Button variant='outline' className='h-8 w-full justify-start border-dashed text-xs'>
+                  <Search className='mr-2 h-3 w-3 shrink-0' />
+                  Select Product *
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className='w-[calc(100vw-2rem)] max-w-[560px] p-0' align='start'>
+                <Command shouldFilter={false} {...productPickerEnterGuard}>
+                  <div className='relative'>
+                    <CommandInput
+                      placeholder='Search products...'
+                      value={productSearchQuery}
+                      onValueChange={setProductSearchQuery}
+                    />
+                    <div className='absolute right-2 top-1/2 -translate-y-1/2'>
+                      <VoiceInputButton onTranscript={(text) => setProductSearchQuery(text)} size='sm' />
+                    </div>
+                  </div>
+                  <CommandList className='max-h-[300px] overflow-y-auto'>
+                    {productsLoading && filteredCatalogItems.length === 0 ? (
+                      <div className='flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground'>
+                        <Loader2 className='h-6 w-6 animate-spin' />
+                        Loading products...
+                      </div>
+                    ) : filteredCatalogItems.length === 0 ? (
+                      <>
+                        {canCreateProduct ? (
+                          <EntityCreateEmptyPrompt
+                            message='No products found'
+                            hint={inactiveProductMatches.length > 0 ? 'Matching inactive products are listed below' : 'Check the product is active'}
+                            actionLabel='Add product'
+                            onCreate={() => openQuickCreate('product', productSearchQuery, index)}
+                          />
+                        ) : (
+                          <div className='space-y-1 py-6 text-center text-sm text-muted-foreground'>
+                            <p>No products found</p>
+                            <p className='text-xs'>
+                              {inactiveProductMatches.length > 0 ? 'Matching inactive products are listed below' : 'Check the product is active'}
+                            </p>
+                          </div>
+                        )}
+                        <InactiveProductMatches matches={inactiveProductMatches} />
+                      </>
+                    ) : (
+                      <CommandGroup>
+                        {visibleCatalogItems.map((catalogItem) => (
+                          <CommandItem
+                            key={catalogItem.id}
+                            value={`${catalogItem.id}-${catalogItem.name}`}
+                            onSelect={() => handleCatalogItemSelect(index, catalogItem)}
+                            className='flex cursor-pointer items-center gap-3 p-3'
+                          >
+                            {catalogItem.image?.url ? (
+                              <img src={catalogItem.image.url} alt={catalogItem.name} className='h-8 w-8 shrink-0 rounded-lg object-cover' />
+                            ) : (
+                              <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted'>
+                                <Package className='h-4 w-4 text-muted-foreground' />
+                              </div>
+                            )}
+                            <div className='min-w-0 flex-1'>
+                              <div className='flex min-w-0 flex-row flex-wrap items-center gap-x-2 gap-y-0.5'>
+                                <div className='shrink-0 truncate text-sm font-medium'>{catalogItem.name}</div>
+                                {showUrdu && catalogItem.nameUrdu?.trim() ? (
+                                  <span dir='auto' className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(catalogItem.nameUrdu))}>
+                                    {catalogItem.nameUrdu.trim()}
+                                  </span>
+                                ) : null}
+                                {catalogItem.brand?.name && (
+                                  <Badge variant='secondary' className='shrink-0 px-1.5 py-0 text-[10px]'>
+                                    {catalogItem.brand.name}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+                                {catalogItem.barcode && <span>{catalogItem.barcode}</span>}
+                                <span className='text-amber-600'>Purchase Price: {formatMoney(Number(catalogItem.cost || 0))}</span>
+                                <span className={catalogItem.stockQuantity <= 5 ? 'font-medium text-red-500' : 'text-green-600'}>
+                                  Stock: {catalogItem.stockQuantity}
+                                </span>
+                                <WarehouseStockTrigger productId={catalogItem.productId} variantId={catalogItem.variantId} itemName={catalogItem.name} />
+                                {catalogItem.trackBatch && (
+                                  <span className='text-blue-600'>
+                                    {catalogItem.batches?.length || 0} batch{catalogItem.batches?.length === 1 ? '' : 'es'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+                  </CommandList>
+                  {filteredCatalogItems.length > visibleCatalogItems.length ? (
+                    <div className='border-t px-3 py-2 text-center text-xs text-muted-foreground'>
+                      Showing {visibleCatalogItems.length} of {filteredCatalogItems.length} — keep typing to narrow
+                    </div>
+                  ) : null}
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+          <Button
+            type='button'
+            size='sm'
+            variant='ghost'
+            className='h-7 w-7 shrink-0 p-0 hover:bg-red-50 dark:hover:bg-red-950/30'
+            onClick={() =>
+              setDraft((p) => {
+                const items = p.items.filter((_, i) => i !== index)
+                return { ...p, items: items.length > 0 ? items : [createEmptyOrderManualItem()] }
+              })
+            }
+          >
+            <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // Card row — catalog-shown mode, phones and a narrow items area. Mirrors Purchase
+  // Invoice's renderPurchaseItemCard.
+  const renderItemCard = (item: OrderItem, index: number) => {
+    const productId = getProductId(item)
+    if (item.isManualEntry && !productId) return renderManualRow(index)
+    const compact = !showProductCatalog
+    const roomy = !compact || isPhone
+    const { qtyControl, purchasePriceControl, sellingPriceControl, discountControl, totalDisplay, deleteButton } = renderItemParts(item)
+
+    return (
+      <div key={`${rowKey(productId, item.variantId)}-${index}`} className='overflow-hidden rounded-xl border bg-card shadow-sm'>
+        <div className={cn('flex items-start gap-3', roomy ? 'p-3' : 'gap-2 p-2')}>
+          {item.product.image?.url ? (
+            <img
+              src={item.product.image.url}
+              alt={item.product.name}
+              className={cn('shrink-0 rounded-lg object-cover', roomy ? 'mt-0.5 h-10 w-10' : 'h-8 w-8')}
+            />
+          ) : (
+            <div className={cn('flex shrink-0 items-center justify-center rounded-lg bg-muted', roomy ? 'mt-0.5 h-10 w-10' : 'h-8 w-8')}>
+              <Package className={cn('text-muted-foreground/50', roomy ? 'h-5 w-5' : 'h-4 w-4')} />
+            </div>
+          )}
+          <div className={cn('flex-1', compact && !isPhone ? 'min-w-[110px]' : 'min-w-0')}>
+            <BilingualName
+              primary={item.product.name}
+              secondary={item.product.nameUrdu}
+              primaryClassName='font-semibold text-sm'
+              truncate={compact || isPhone}
+            />
+            <div className='mt-1 flex flex-wrap items-center gap-1.5'>
+              {!compact && !isPhone && item.product.barcode && (
+                <span className='text-xs text-muted-foreground'>{item.product.barcode}</span>
+              )}
+              {!compact && !isPhone && (
+                <span className='text-xs text-muted-foreground'>
+                  {formatMoney(item.expectedPrice)} · {item.unit || item.product.unit || 'pcs'}
+                </span>
+              )}
+              {renderStockPill(item.product)}
+            </div>
+          </div>
+          {deleteButton}
+        </div>
+
+        {isPhone ? (
+          <div className='flex flex-wrap items-center gap-3 border-t bg-muted/20 px-3 py-2.5'>
+            <div className='flex shrink-0 items-center gap-1.5'>
+              {qtyControl}
+              <span className='text-xs text-muted-foreground'>{item.unit || item.product.unit || 'pcs'}</span>
+            </div>
+            <span className='select-none text-sm text-muted-foreground/60'>×</span>
+            <div className='flex min-w-0 flex-col gap-0.5'>
+              <span className='text-[10px] leading-none text-muted-foreground'>Purchase Price</span>
+              {purchasePriceControl}
+            </div>
+            <span className='select-none text-sm text-muted-foreground/60'>−</span>
+            <div className='flex flex-col gap-0.5'>
+              <span className='text-[10px] leading-none text-muted-foreground'>Discount</span>
+              {discountControl}
+            </div>
+            <div className='flex flex-col gap-0.5'>
+              <span className='text-[10px] leading-none text-muted-foreground'>Sale Price</span>
+              {sellingPriceControl}
+            </div>
+            <div className='ml-auto flex shrink-0 items-center gap-1.5'>
+              <span className='select-none text-sm text-muted-foreground/60'>=</span>
+              {totalDisplay}
+            </div>
+          </div>
+        ) : (
+          <div className={cn('flex items-center gap-2 overflow-x-auto', !compact && 'border-t bg-muted/20 px-3 py-2.5', compact && 'px-2 pb-2')}>
+            <div className='flex w-[100px] shrink-0 justify-center'>{qtyControl}</div>
+            <div className='flex w-[116px] min-w-0 shrink-0 flex-col items-center'>{purchasePriceControl}</div>
+            <div className='flex w-[116px] shrink-0 justify-center'>{sellingPriceControl}</div>
+            <div className='flex w-[92px] shrink-0 justify-center'>{discountControl}</div>
+            <div className='ml-auto w-[110px] shrink-0'>{totalDisplay}</div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const addEmptyRow = () => {
+    const nextIndex = draft.items.length
+    setDraft((prev) => ({ ...prev, items: [...prev.items, createEmptyOrderManualItem()] }))
+    setProductSelectOpen(`manual-${nextIndex}`)
+  }
+
+  const saveDraftButtonContent = (
+    <>
+      {saving ? <Loader2 className='h-4 w-4 animate-spin' /> : <Save className='h-4 w-4' />}
+      Save draft
+    </>
+  )
+  const sendButtonContent = (
+    <>
+      {saving ? <Loader2 className='h-4 w-4 animate-spin' /> : <Send className='h-4 w-4' />}
+      {sendLabel}
+    </>
+  )
+
+  // Phones only: Save draft / Save & send pinned to the bottom of the screen, same as
+  // Purchase Invoice's fixed mobile bar. Portaled to <body> (see purchase-panel.tsx for why).
+  const mobileActionsBar = (
+    <div className='fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/90 sm:hidden'>
+      <div className='mb-1.5 flex items-center justify-between gap-2'>
+        <span className='text-xs text-muted-foreground'>{filledItems.length} Order Items</span>
+        <span className='text-sm font-bold tabular-nums'>{formatMoney(totalAmount)}</span>
+      </div>
+      <div className='flex items-center gap-2'>
+        <Button
+          type='button'
+          size='lg'
+          variant='outline'
+          disabled={saveDisabled}
+          onClick={() => handleSave('draft')}
+          className='h-10 min-w-0 flex-1 gap-1.5 px-2'
+        >
+          {saveDraftButtonContent}
+        </Button>
+        <Button
+          type='button'
+          size='lg'
+          disabled={saveDisabled}
+          onClick={() => handleSave('sent')}
+          className='h-10 min-w-0 flex-[1.3] gap-1.5 bg-emerald-600 px-2 hover:bg-emerald-700'
+        >
+          {sendButtonContent}
+        </Button>
+      </div>
+    </div>
+  )
 
   return (
     <div
+      ref={panelRootRef}
       className={cn(
         !showProductCatalog
-          ? // Three columns — details / items / summary+actions — mirrors PurchasePanel's
-            // compact-mode grid exactly (see purchase-panel.tsx). Each column is its own
-            // independent top-to-bottom stack, so a column's height is just its own content.
-            'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[320px_minmax(0,1fr)_300px] items-start'
+          ? // Three columns — details / items / summary+charges — same grid as Purchase
+            // Invoice's compact mode (purchase-panel.tsx).
+            'grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-[320px_minmax(0,1fr)_300px]'
           : 'space-y-4',
+        // Room for the fixed mobile bar so it never covers the last card.
+        'max-sm:pb-[calc(7rem+env(safe-area-inset-bottom))]',
       )}
     >
-      {/* Column 1 (compact mode): Order details. Mirrors Purchase Invoice's Purchase
-          Details column exactly (see purchase-panel.tsx) — same card shape and supplier
-          picker, minus the Purchase Type control (an order isn't itself a cash/credit
-          transaction — that only applies once it's received as an actual Purchase). */}
-      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'md:col-start-1 md:row-start-1 xl:row-start-1 xl:col-start-1')}>
+      {/* Column 1: Order Details — same card shape as Purchase Details. */}
+      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'md:col-start-1 md:row-start-1 xl:col-start-1 xl:row-start-1')}>
         <Card>
-          <CardHeader className='pb-3'>
-            <CardTitle className='flex items-center gap-2 text-base'>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2'>
+              {onBack && (
+                <Button type='button' variant='ghost' size='sm' onClick={onBack}>
+                  <ArrowLeft className='h-4 w-4' />
+                </Button>
+              )}
               <ClipboardList className='h-5 w-5' />
-              Order details
+              Order Details
             </CardTitle>
+            <div className='mt-3 flex items-center gap-2'>
+              <span className='text-xs text-muted-foreground'>Order Number</span>
+              <span
+                className='rounded-md border bg-muted/40 px-2 py-1 font-mono text-xs'
+                title={editing ? undefined : 'Assigned when the order is saved'}
+              >
+                {orderNumberLabel || '…'}
+              </span>
+            </div>
           </CardHeader>
           <CardContent className='space-y-4'>
-            <div>
-              <Label className='mb-2'>
-                Supplier <span className='text-red-500'>*</span>
-              </Label>
+            <Label className='mb-2'>
+              Supplier <span className='text-red-500'>*</span>
+            </Label>
+            <div className='flex gap-2'>
               <Popover open={supplierSelectOpen} onOpenChange={setSupplierSelectOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -793,7 +1353,7 @@ export default function PurchaseOrderPanel({
                     role='combobox'
                     aria-expanded={supplierSelectOpen}
                     className={cn(
-                      'w-full justify-between min-h-[2.5rem]',
+                      'h-auto min-h-[2.5rem] flex-1 justify-between py-0',
                       !supplierId && 'border-red-500 bg-red-50 dark:bg-red-950/20',
                     )}
                     onKeyDown={(e) => {
@@ -807,22 +1367,29 @@ export default function PurchaseOrderPanel({
                       }
                     }}
                   >
-                    <div className='flex items-center gap-2 flex-1 min-w-0'>
-                      <Search className='h-4 w-4 shrink-0 text-muted-foreground' />
+                    <div className='flex min-w-0 flex-1 items-center gap-2'>
+                      <Search className='h-4 w-4 shrink-0' />
                       {supplierId ? (
-                        <Badge variant='secondary' className='flex items-center gap-1.5 max-w-full pl-1'>
+                        <Badge variant='secondary' className='flex max-w-full items-center gap-1.5 pl-1'>
                           <ContactPhotoCell
                             picture={draft.supplier.picture}
                             name={draft.supplier.name}
                             className='h-5 w-5 shrink-0 rounded-full'
                           />
-                          <span className='truncate text-xs'>{draft.supplier.name}</span>
+                          <span className='flex min-w-0 flex-row flex-wrap items-center gap-x-1.5 gap-y-0'>
+                            <span className='shrink-0 truncate text-xs' title={draft.supplier.name}>{draft.supplier.name}</span>
+                            {showUrdu && draft.supplier.nameUrdu?.trim() ? (
+                              <span dir='auto' className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(draft.supplier.nameUrdu))}>
+                                {draft.supplier.nameUrdu.trim()}
+                              </span>
+                            ) : null}
+                          </span>
                         </Badge>
                       ) : (
-                        <span className='text-muted-foreground truncate'>Select supplier *</span>
+                        <span className='truncate text-red-500'>Select supplier *</span>
                       )}
                     </div>
-                    <ChevronDown className='h-4 w-4 opacity-50 shrink-0' />
+                    <ChevronDown className='h-4 w-4 shrink-0 opacity-50' />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className='w-[calc(100vw-2rem)] max-w-[400px] p-0' align='start'>
@@ -834,16 +1401,21 @@ export default function PurchaseOrderPanel({
                         onValueChange={setSupplierSearchQuery}
                       />
                       <div className='absolute right-2 top-1/2 -translate-y-1/2'>
-                        <VoiceInputButton
-                          onTranscript={(text) => setSupplierSearchQuery(text)}
-                          size='sm'
-                        />
+                        <VoiceInputButton onTranscript={(text) => setSupplierSearchQuery(text)} size='sm' />
                       </div>
                     </div>
-                    <CommandList className='max-h-[280px] overflow-y-auto'>
-                      {filteredSuppliers.length === 0 ? (
-                        <p className='py-6 text-center text-sm text-muted-foreground'>No suppliers found</p>
+                    {filteredSuppliers.length === 0 ? (
+                      canCreateSupplier ? (
+                        <EntityCreateEmptyPrompt
+                          message='No suppliers found'
+                          actionLabel='Add supplier'
+                          onCreate={() => openQuickCreate('supplier', supplierSearchQuery)}
+                        />
                       ) : (
+                        <CommandEmpty>No suppliers found</CommandEmpty>
+                      )
+                    ) : (
+                      <CommandList className='max-h-[300px] overflow-y-auto'>
                         <CommandGroup>
                           {filteredSuppliers.map((s, index) => {
                             const sid = s._id || (s as { id?: string }).id || `s-${index}`
@@ -851,56 +1423,73 @@ export default function PurchaseOrderPanel({
                             return (
                               <CommandItem
                                 key={sid}
-                                value={`${s.name} ${s.phone || ''} ${sid}`}
+                                value={`${s.name} ${s.phone || ''} ${s.nameUrdu || ''} ${sid}`}
                                 onSelect={() => selectSupplier(s)}
                                 className='flex cursor-pointer items-center gap-3 p-3'
                               >
-                                <ContactPhotoCell picture={s.picture} name={s.name} className='h-8 w-8 shrink-0' />
-                                <div className='min-w-0 flex-1'>
-                                  <p className='truncate font-medium text-sm'>{s.name}</p>
-                                  {s.phone ? (
-                                    <p className='text-xs text-muted-foreground'>{s.phone}</p>
-                                  ) : null}
+                                <ContactPhotoCell picture={s.picture} name={s.name || ''} className='h-8 w-8 shrink-0' />
+                                <div className='flex min-w-0 flex-1 flex-col gap-0.5'>
+                                  <div className='flex min-w-0 flex-row flex-wrap items-center gap-x-2 gap-y-0.5'>
+                                    <span className='shrink-0 truncate font-medium' title={s.name}>{s.name}</span>
+                                    {showUrdu && s.nameUrdu?.trim() ? (
+                                      <span dir='auto' className={cn('min-w-0 truncate text-sm', getUrduSecondaryNameClasses(s.nameUrdu))}>
+                                        {s.nameUrdu.trim()}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {s.phone ? <span className='truncate text-xs text-muted-foreground'>{s.phone}</span> : null}
                                 </div>
-                                {selected ? <Check className='h-4 w-4 text-primary shrink-0' /> : null}
+                                {selected ? <Check className='h-3 w-3 shrink-0 text-primary' /> : null}
                               </CommandItem>
                             )
                           })}
+                          {canCreateSupplier ? (
+                            <CommandItem
+                              onSelect={() => openQuickCreate('supplier', supplierSearchQuery)}
+                              className='flex cursor-pointer items-center gap-2 border-t p-3 text-primary'
+                            >
+                              <Plus className='h-4 w-4' />
+                              <span>Add supplier</span>
+                            </CommandItem>
+                          ) : null}
                         </CommandGroup>
-                      )}
-                    </CommandList>
+                      </CommandList>
+                    )}
                   </Command>
                 </PopoverContent>
               </Popover>
+              {canCreateSupplier ? (
+                <EntityCreateShortcutButton label='Add supplier' onClick={() => openQuickCreate('supplier', supplierSearchQuery)} />
+              ) : null}
             </div>
 
-            <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
-              <div>
-                <Label htmlFor='po-order-date'>Order date *</Label>
-                <Input
-                  ref={orderDateRef}
-                  id='po-order-date'
-                  type='date'
-                  value={draft.orderDate}
-                  onChange={(e) => setDraft((p) => ({ ...p, orderDate: e.target.value }))}
-                  onKeyDown={(e) => onEnterAdvance(e, () => focusField(expectedDateRef.current))}
-                  className='mt-2'
-                />
-              </div>
-              <div>
-                <Label htmlFor='po-expected-date'>Expected delivery</Label>
-                <Input
-                  ref={expectedDateRef}
-                  id='po-expected-date'
-                  type='date'
-                  value={draft.expectedDeliveryDate}
-                  onChange={(e) =>
-                    setDraft((p) => ({ ...p, expectedDeliveryDate: e.target.value }))
-                  }
-                  onKeyDown={(e) => onEnterAdvance(e, openProductSelector)}
-                  className='mt-2'
-                />
-              </div>
+            <div>
+              <Label htmlFor='po-order-date'>
+                Order Date <span className='text-red-500'>*</span>
+              </Label>
+              <DatePicker
+                ref={orderDateRef}
+                id='po-order-date'
+                value={draft.orderDate}
+                onChange={(day) => {
+                  if (!day) return
+                  setDraft((p) => ({ ...p, orderDate: day }))
+                }}
+                onKeyDown={(e) => onEnterAdvance(e, () => focusField(expectedDateRef.current))}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor='po-expected-date'>Expected Delivery</Label>
+              <DatePicker
+                ref={expectedDateRef}
+                id='po-expected-date'
+                value={draft.expectedDeliveryDate}
+                min={draft.orderDate || undefined}
+                clearable
+                onChange={(day) => setDraft((p) => ({ ...p, expectedDeliveryDate: day }))}
+                onKeyDown={(e) => onEnterAdvance(e, openProductSelector)}
+              />
             </div>
 
             <div>
@@ -910,23 +1499,19 @@ export default function PurchaseOrderPanel({
                 rows={2}
                 value={draft.notes}
                 onChange={(e) => setDraft((p) => ({ ...p, notes: e.target.value }))}
-                placeholder='Internal notes...'
-                className='mt-2'
+                placeholder='Add any notes about this order...'
               />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Column 2 (compact mode): at-a-glance stats + Order items. Mirrors Purchase
-          Invoice's Column 2 exactly (see purchase-panel.tsx). */}
-      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'md:col-start-1 md:row-start-2 md:col-span-2 xl:row-start-1 xl:col-span-1 xl:col-start-2')}>
-        {/* At-a-glance totals strip — same numbers as the Summary card below. Hidden once
-            the catalog is showing and below sm (phone widths). */}
+      {/* Column 2: stats strip + Order Items. */}
+      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'md:col-span-2 md:col-start-1 md:row-start-2 xl:col-span-1 xl:col-start-2 xl:row-start-1')}>
         {!showProductCatalog && (
           <div className='hidden grid-cols-4 gap-2 sm:grid'>
             {[
-              { label: 'Items', value: String(draft.items.filter((i) => getProductId(i) && i.product.name).length) },
+              { label: 'Items', value: String(filledItems.length) },
               { label: 'Subtotal', value: formatMoney(subtotal) },
               { label: 'Discount', value: formatMoney(discountAmount + itemDiscountTotal) },
               { label: 'Total', value: formatMoney(totalAmount), highlight: true },
@@ -949,7 +1534,8 @@ export default function PurchaseOrderPanel({
 
         <Card className='min-w-0'>
           <CardHeader className='py-3'>
-            <div className='flex flex-wrap items-center justify-end gap-2'>
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <CardTitle className='text-base'>Order Items ({draft.items.length})</CardTitle>
               <div className='flex flex-wrap items-center gap-2'>
                 {draft.items.length > 0 && (
                   <Button
@@ -966,401 +1552,109 @@ export default function PurchaseOrderPanel({
                     {' '}{draft.discountType === 'percentage' ? currencySymbol : '%'}
                   </Button>
                 )}
-                <Button size='sm' variant='outline' onClick={addNewRowAndOpenProduct} className='gap-1'>
+                {canCreateProduct ? (
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    onClick={() => openQuickCreate('product', productSearchQuery)}
+                    className='flex items-center gap-1'
+                  >
+                    <Plus className='h-4 w-4' />
+                    Add Product
+                  </Button>
+                ) : null}
+                <Button type='button' size='sm' variant='outline' onClick={addEmptyRow} className='flex items-center gap-1'>
                   <Plus className='h-4 w-4' />
-                  Add Product
+                  Add Row
                 </Button>
               </div>
             </div>
           </CardHeader>
-          <CardContent className='flex flex-1 flex-col p-0 lg:min-h-0'>
-            {/* Capped + internally scrollable regardless of layout mode — without a
-                max-h here, the item list grew with the item count and pushed the Save
-                buttons off screen. Mirrors Purchase Invoice's identical fix. */}
+          <CardContent ref={itemsAreaRef} className='flex flex-1 flex-col p-0 lg:min-h-0'>
+            {useCards && !isPhone && filledItems.length > 0 && (
+              <div className={cn(
+                'flex items-center gap-2 overflow-x-auto border-b bg-muted/40 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground',
+                !showProductCatalog ? 'px-2' : 'px-3',
+              )}>
+                <div className='flex w-[100px] shrink-0 justify-center'>Qty</div>
+                <div className='flex w-[116px] shrink-0 justify-center'>Purchase Price</div>
+                <div className='flex w-[116px] shrink-0 justify-center'>Sale Price</div>
+                <div className='flex w-[92px] shrink-0 justify-center'>Discount</div>
+                <div className='ml-auto w-[110px] shrink-0 text-right'>Total</div>
+              </div>
+            )}
             <div
               ref={itemsScrollRef}
-              className='space-y-2 overflow-y-auto max-h-[460px] p-3'
+              className={cn(
+                'overflow-y-auto',
+                itemsListMaxHeight === undefined && 'max-h-[460px]',
+                useCards ? 'space-y-2 p-3' : 'overflow-x-auto',
+              )}
+              style={itemsListMaxHeight !== undefined ? { maxHeight: itemsListMaxHeight } : undefined}
             >
-              {draft.items.map((item, index) => {
-                const productId = getProductId(item)
-                const compact = !showProductCatalog
-
-                if (item.isManualEntry && !productId) {
-                  return (
-                    <div
-                      key={`manual-${index}`}
-                      className='overflow-hidden rounded-xl border bg-card shadow-sm'
-                    >
-                      <div className={cn('flex items-center gap-3', compact ? 'p-2' : 'p-3')}>
-                        <div className={cn('flex shrink-0 items-center justify-center rounded-lg bg-muted', compact ? 'h-8 w-8' : 'h-10 w-10')}>
-                          <Package className={cn('text-muted-foreground/50', compact ? 'h-4 w-4' : 'h-5 w-5')} />
-                        </div>
-                        <div className='min-w-0 flex-1'>
-                          <Popover
-                            open={productSelectOpen === `manual-${index}`}
-                            onOpenChange={(open) => {
-                              setProductSelectOpen(open ? `manual-${index}` : '')
-                              if (!open) setProductSearchQuery('')
-                            }}
-                          >
-                            <PopoverTrigger asChild>
-                              <Button
-                                variant='outline'
-                                className='h-8 w-full justify-start border-dashed text-xs'
-                              >
-                                <Search className='mr-2 h-3 w-3 shrink-0' />
-                                Select product *
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className='w-[calc(100vw-2rem)] max-w-[560px] p-0' align='start'>
-                              <Command shouldFilter={false} {...productPickerEnterGuard}>
-                                <div className='relative'>
-                                  <CommandInput
-                                    placeholder='Search name or barcode...'
-                                    value={productSearchQuery}
-                                    onValueChange={setProductSearchQuery}
-                                  />
-                                  <div className='absolute right-2 top-1/2 -translate-y-1/2'>
-                                    <VoiceInputButton
-                                      onTranscript={(text) => setProductSearchQuery(text)}
-                                      size='sm'
-                                    />
-                                  </div>
-                                </div>
-                                <CommandList className='max-h-[300px] overflow-y-auto'>
-                                  {productsLoading && filteredCatalogItems.length === 0 ? (
-                                    <div className='flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground'>
-                                      <Loader2 className='h-6 w-6 animate-spin' />
-                                      Loading products...
-                                    </div>
-                                  ) : filteredCatalogItems.length === 0 ? (
-                                    <div className='space-y-1 py-6 text-center text-sm text-muted-foreground'>
-                                      <p>No products found</p>
-                                      <p className='text-xs'>Check the product is active</p>
-                                    </div>
-                                  ) : (
-                                    <CommandGroup>
-                                      {visibleCatalogItems.map((catalogItem) => (
-                                        <CommandItem
-                                          key={catalogItem.id}
-                                          value={`${catalogItem.id}-${catalogItem.name}`}
-                                          onSelect={() => handleCatalogItemSelect(index, catalogItem)}
-                                          className='flex cursor-pointer items-center gap-3 p-3'
-                                        >
-                                          {catalogItem.image?.url ? (
-                                            <img
-                                              src={catalogItem.image.url}
-                                              alt={catalogItem.name}
-                                              className='h-8 w-8 shrink-0 rounded-lg object-cover'
-                                            />
-                                          ) : (
-                                            <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted'>
-                                              <Package className='h-4 w-4 text-muted-foreground' />
-                                            </div>
-                                          )}
-                                          <div className='min-w-0 flex-1'>
-                                            <div className='flex min-w-0 flex-row flex-wrap items-center gap-x-2 gap-y-0.5'>
-                                              <div className='shrink-0 truncate text-sm font-medium'>{catalogItem.name}</div>
-                                              {showUrdu && catalogItem.nameUrdu?.trim() ? (
-                                                <span
-                                                  dir='auto'
-                                                  className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(catalogItem.nameUrdu))}
-                                                >
-                                                  {catalogItem.nameUrdu.trim()}
-                                                </span>
-                                              ) : null}
-                                              {catalogItem.brand?.name && (
-                                                <Badge variant='secondary' className='shrink-0 px-1.5 py-0 text-[10px]'>
-                                                  {catalogItem.brand.name}
-                                                </Badge>
-                                              )}
-                                            </div>
-                                            <div className='flex items-center gap-2 text-xs text-muted-foreground'>
-                                              {catalogItem.barcode && <span>{catalogItem.barcode}</span>}
-                                              <span className='text-amber-600'>Purchase Price: {formatMoney(Number(catalogItem.cost || 0))}</span>
-                                              <span className={catalogItem.stockQuantity <= 5 ? 'font-medium text-red-500' : 'text-green-600'}>
-                                                Stock: {catalogItem.stockQuantity}
-                                              </span>
-                                              {catalogItem.trackBatch && (
-                                                <span className='text-blue-600'>
-                                                  {catalogItem.batches?.length || 0} batch{catalogItem.batches?.length === 1 ? '' : 'es'}
-                                                </span>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </CommandItem>
-                                      ))}
-                                    </CommandGroup>
-                                  )}
-                                </CommandList>
-                                {filteredCatalogItems.length > visibleCatalogItems.length ? (
-                                  <div className='border-t px-3 py-2 text-center text-xs text-muted-foreground'>
-                                    Showing {visibleCatalogItems.length} of {filteredCatalogItems.length} — keep typing to narrow
-                                  </div>
-                                ) : null}
-                              </Command>
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                        <Button
-                          size='sm'
-                          variant='ghost'
-                          className='h-7 w-7 shrink-0 p-0'
-                          onClick={() =>
-                            setDraft((p) => ({
-                              ...p,
-                              items: p.items.filter((_, i) => i !== index),
-                            }))
-                          }
-                          disabled={draft.items.length === 1}
-                        >
-                          <Trash2 className='h-3.5 w-3.5 text-red-400' />
-                        </Button>
-                      </div>
-                    </div>
-                  )
-                }
-
-                const rk = rowKey(productId, item.variantId)
-                const deleteButton = (
-                  <Button
-                    size='sm'
-                    variant='ghost'
-                    className='h-7 w-7 shrink-0 p-0'
-                    onClick={() => removeItem(productId, item.variantId)}
-                  >
-                    <Trash2 className='h-3.5 w-3.5 text-red-400' />
-                  </Button>
-                )
-
-                // Line-level discount (supplier discounting this one product) — net is
-                // what actually feeds the order subtotal.
-                const itemGross = item.quantity * item.expectedPrice
-                const itemDiscountAmount = computeDiscountAmount(itemGross, item.discountType, item.discountValue)
-                const itemNet = itemGross - itemDiscountAmount
-
-                return (
-                  <div
-                    key={`${rk}-${index}`}
-                    className='overflow-hidden rounded-xl border bg-card shadow-sm'
-                  >
-                    {/* Product header with image, name, stock, and delete button */}
-                    <div className={cn('flex items-start gap-3 p-3', compact && 'gap-2 p-2')}>
-                      <div className={cn('flex shrink-0 items-center justify-center rounded-lg bg-muted', compact ? 'h-8 w-8' : 'h-10 w-10 mt-0.5')}>
-                        <Package className={cn('text-muted-foreground/50', compact ? 'h-4 w-4' : 'h-5 w-5')} />
-                      </div>
-                      <div className='flex-1 min-w-0'>
-                        <BilingualName
-                          primary={item.product.name}
-                          secondary={item.product.nameUrdu}
-                          primaryClassName='font-semibold text-sm'
-                          truncate={false}
-                        />
-                        <div className='mt-1 flex flex-wrap items-center gap-2'>
-                          {!compact && (
-                            <span className='text-xs text-muted-foreground'>{item.unit || item.product.unit || 'pcs'}</span>
-                          )}
-                          {(() => {
-                            const stock = getDisplayStock(item.product)
-                            return (
-                              <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium ${
-                                stock <= 0 ? 'bg-red-100 text-red-700' :
-                                stock <= 5 ? 'bg-red-50 text-red-500' :
-                                stock <= 20 ? 'bg-amber-50 text-amber-600' :
-                                'bg-green-50 text-green-700'
-                              }`}>
-                                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                                  stock <= 0 ? 'bg-red-500' :
-                                  stock <= 5 ? 'bg-red-400' :
-                                  stock <= 20 ? 'bg-amber-400' :
-                                  'bg-green-500'
-                                }`} />
-                                {stock <= 0 ? 'Out of stock' : `${stock} in stock`}
-                              </span>
-                            )
-                          })()}
-                        </div>
-                      </div>
-                      {!compact && deleteButton}
-                    </div>
-
-                    {/* Input controls in responsive groups */}
-                    <div className='flex flex-col gap-2 border-t bg-muted/20 p-3 lg:gap-3'>
-                      {/* Row 1: Quantity × Purchase Price */}
-                      <div className='flex flex-wrap items-end gap-2 lg:gap-3'>
-                        {/* Quantity Group */}
-                        <div className='flex items-center gap-1.5'>
-                          <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
-                            <Button
-                              type='button'
-                              size='sm'
-                              variant='ghost'
-                              className='h-7 w-7 rounded-none border-r p-0'
-                              onClick={() => updateQuantity(productId, Math.max(1, item.quantity - 1), item.variantId)}
-                            >
-                              <Minus className='h-3.5 w-3.5' />
-                            </Button>
-                            <NumericInput
-                              ref={(el) => {
-                                qtyInputRefs.current[rk] = el
-                              }}
-                              decimals={false}
-                              min={1}
-                              emptyValue={null}
-                              value={item.quantity}
-                              onValueChange={(qty) => updateQuantity(productId, qty, item.variantId)}
-                              onKeyDown={(e) =>
-                                onEnterAdvance(e, () => focusField(costInputRefs.current[rk]))
-                              }
-                              className='h-7 w-16 border-0 text-center text-sm font-semibold focus-visible:ring-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
-                              aria-label='Quantity'
-                            />
-                            <Button
-                              type='button'
-                              size='sm'
-                              variant='ghost'
-                              className='h-7 w-7 rounded-none border-l p-0'
-                              onClick={() => updateQuantity(productId, item.quantity + 1, item.variantId)}
-                            >
-                              <Plus className='h-3.5 w-3.5' />
-                            </Button>
-                          </div>
-                          <span className='text-xs text-muted-foreground whitespace-nowrap'>Qty</span>
-                        </div>
-
-                        {/* Separator */}
-                        <span className='text-xs text-muted-foreground/50'>×</span>
-
-                        {/* Purchase Price Group */}
-                        <div className='flex flex-col gap-0.5'>
-                          <span className='text-[10px] leading-tight text-muted-foreground'>Purchase Price</span>
-                          <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
-                            <span className='flex h-7 items-center border-r bg-muted px-2 text-xs font-medium'>{currencySymbol}</span>
-                            <Input
-                              ref={(el) => {
-                                costInputRefs.current[rk] = el
-                              }}
-                              type='text'
-                              inputMode='decimal'
-                              showVoiceInput={false}
-                              value={getNumericDraftValue(`${rk}:expectedPrice`, item.expectedPrice)}
-                              onChange={(e) =>
-                                handleNumericDraftChange(`${rk}:expectedPrice`, e.target.value, (parsed) =>
-                                  updateExpectedPrice(productId, parsed, item.variantId),
-                                )
-                              }
-                              onKeyDown={(e) => onEnterAdvance(e, addNewRowAndOpenProduct)}
-                              onFocus={(e) => e.target.select()}
-                              onBlur={() => clearNumericDraft(`${rk}:expectedPrice`)}
-                              className='h-7 w-20 border-0 text-sm font-semibold focus-visible:ring-0'
-                              aria-label='Purchase Price'
-                            />
-                          </div>
-                        </div>
-
-                        {/* Separator */}
-                        <span className='text-xs text-muted-foreground/50 lg:flex hidden'>−</span>
-
-                        {/* Discount Group */}
-                        <div className='flex flex-col gap-0.5'>
-                          <span className='text-[10px] leading-tight text-muted-foreground'>Discount</span>
-                          <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
-                            <Input
-                              type='text'
-                              inputMode='decimal'
-                              showVoiceInput={false}
-                              value={getNumericDraftValue(`${rk}:itemDiscount`, item.discountValue || 0)}
-                              onChange={(e) =>
-                                handleNumericDraftChange(`${rk}:itemDiscount`, e.target.value, (parsed) =>
-                                  updateItemDiscount(productId, { value: Math.max(0, parsed) }, item.variantId),
-                                )
-                              }
-                              onFocus={(e) => e.target.select()}
-                              onBlur={() => clearNumericDraft(`${rk}:itemDiscount`)}
-                              placeholder='0'
-                              className='h-7 w-16 border-0 text-sm font-semibold focus-visible:ring-0 text-center'
-                              aria-label='Discount'
-                            />
-                            <button
-                              type='button'
-                              onClick={() =>
-                                updateItemDiscount(
-                                  productId,
-                                  { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' },
-                                  item.variantId,
-                                )
-                              }
-                              title={`Click to switch between ${currencySymbol} and % discount`}
-                              className='flex h-7 items-center border-l bg-muted px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground active:scale-95'
-                            >
-                              {item.discountType === 'percentage' ? '%' : currencySymbol}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Separator */}
-                        <span className='text-xs text-muted-foreground/50 lg:flex hidden'>→</span>
-
-                        {/* Sale Price Group */}
-                        <div className='flex flex-col gap-0.5'>
-                          <span className='text-[10px] font-medium leading-tight text-blue-600'>Sale Price</span>
-                          <div className='flex items-center overflow-hidden rounded-lg border border-blue-200 bg-blue-50/50'>
-                            <span className='flex h-7 items-center border-r border-blue-200 bg-blue-100/60 px-2 text-xs font-medium text-blue-600'>
-                              {currencySymbol}
-                            </span>
-                            <Input
-                              type='text'
-                              inputMode='decimal'
-                              showVoiceInput={false}
-                              value={getNumericDraftValue(`${rk}:expectedSellingPrice`, item.expectedSellingPrice ?? 0)}
-                              onChange={(e) =>
-                                handleNumericDraftChange(`${rk}:expectedSellingPrice`, e.target.value, (parsed) =>
-                                  updateSellingPrice(productId, parsed, item.variantId),
-                                )
-                              }
-                              onKeyDown={(e) => onEnterAdvance(e, addNewRowAndOpenProduct)}
-                              onFocus={(e) => e.target.select()}
-                              onBlur={() => clearNumericDraft(`${rk}:expectedSellingPrice`)}
-                              placeholder='0'
-                              className='h-7 w-20 border-0 bg-transparent text-sm font-semibold text-blue-700 focus-visible:ring-0'
-                              aria-label='Sale Price'
-                            />
-                          </div>
-                        </div>
-
-                        {/* Total Group - Right aligned */}
-                        <div className='ml-auto flex flex-col items-end gap-0'>
-                          {itemDiscountAmount > 0 && (
-                            <span className='text-[10px] leading-tight text-muted-foreground line-through'>
-                              {formatMoney(itemGross)}
-                            </span>
-                          )}
-                          <div className='flex items-center gap-1'>
-                            <span className='text-xs text-muted-foreground/50 hidden lg:inline'>=</span>
-                            <div className='flex flex-col items-end'>
-                              <span className='text-[10px] leading-tight text-muted-foreground'>Total</span>
-                              <p className='text-sm font-bold tabular-nums'>
-                                {formatMoney(itemNet)}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    {compact && (
-                      <div className='flex items-center gap-2 border-t px-3 py-2'>
-                        <div className='flex-1' />
-                        {deleteButton}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+              {draft.items.length === 0 ? (
+                <div className='py-8 text-center text-muted-foreground'>No items added yet</div>
+              ) : useCards ? (
+                draft.items.map((item, index) => renderItemCard(item, index))
+              ) : (
+                <Table className='table-fixed' containerClassName='max-h-none overflow-visible'>
+                  <colgroup>
+                    <col className='w-12' />
+                    <col />
+                    <col className='w-[116px]' />
+                    <col className='w-[120px]' />
+                    <col className='w-[124px]' />
+                    <col className='w-[100px]' />
+                    <col className='w-[124px]' />
+                    <col className='w-10' />
+                  </colgroup>
+                  <TableHeader className='sticky top-0 z-10 bg-muted'>
+                    <TableRow className='hover:bg-transparent'>
+                      <TableHead className='w-12 pl-3 pr-1'>#</TableHead>
+                      <TableHead className='min-w-[140px]'>Product</TableHead>
+                      <TableHead className='w-[116px]'>Qty</TableHead>
+                      <TableHead className='w-[120px]'>Purchase Price</TableHead>
+                      <TableHead className='w-[124px]'>Sale Price</TableHead>
+                      <TableHead className='w-[100px]'>Discount</TableHead>
+                      <TableHead className='w-[124px] text-right'>Total</TableHead>
+                      <TableHead className='w-10 pr-2' />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {draft.items.map((item, index) => {
+                      const productId = getProductId(item)
+                      if (item.isManualEntry && !productId) {
+                        return (
+                          <TableRow key={`manual-${index}`} className='hover:bg-transparent'>
+                            <TableCell colSpan={8} className='p-2'>
+                              {renderManualRow(index)}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      }
+                      const { productCell, qtyControl, purchasePriceControl, sellingPriceControl, discountControl, totalDisplay, deleteButton } = renderItemParts(item)
+                      return (
+                        <Fragment key={`${rowKey(productId, item.variantId)}-${index}`}>
+                          <TableRow>
+                            <TableCell className='py-3 pl-3 pr-1 align-top text-xs tabular-nums text-muted-foreground'>{index + 1}</TableCell>
+                            <TableCell className='whitespace-normal py-2.5 align-top'>{productCell}</TableCell>
+                            <TableCell className='py-3 align-middle'>{qtyControl}</TableCell>
+                            <TableCell className='py-3 align-middle'>{purchasePriceControl}</TableCell>
+                            <TableCell className='py-3 align-middle'>{sellingPriceControl}</TableCell>
+                            <TableCell className='py-3 align-middle'>{discountControl}</TableCell>
+                            <TableCell className='py-3 text-right align-middle'>{totalDisplay}</TableCell>
+                            <TableCell className='overflow-visible px-1 py-3 align-middle'>{deleteButton}</TableCell>
+                          </TableRow>
+                        </Fragment>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              )}
             </div>
 
-            {/* Apply Discount — the one place the overall (whole-order) discount is
-                edited; feeds the Summary card's totals directly. Mirrors Purchase
-                Invoice's items-table footer popover exactly (see purchase-panel.tsx). */}
+            {/* Apply Discount — the whole-order discount, same popover as Purchase Invoice. */}
             <div className='flex flex-wrap items-center gap-2 border-t p-3'>
               <Popover open={applyDiscountOpen} onOpenChange={setApplyDiscountOpen}>
                 <PopoverTrigger asChild>
@@ -1374,7 +1668,7 @@ export default function PurchaseOrderPanel({
                 </PopoverTrigger>
                 <PopoverContent className='w-64 p-3' align='start'>
                   <Label className='mb-2 block text-xs'>Discount</Label>
-                  <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+                  <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
                     <Input
                       type='text'
                       inputMode='decimal'
@@ -1388,13 +1682,13 @@ export default function PurchaseOrderPanel({
                       onFocus={(e) => e.target.select()}
                       onBlur={() => clearNumericDraft('overallDiscount')}
                       placeholder='0'
-                      className='h-9 flex-1 border-0 text-right text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                      className='h-9 flex-1 border-0 text-right text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0'
                     />
                     <button
                       type='button'
                       onClick={() => setDraft((p) => ({ ...p, discountType: p.discountType === 'percentage' ? 'fixed' : 'percentage' }))}
                       title={`Click to switch between ${currencySymbol} and % discount`}
-                      className='px-3 h-9 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
+                      className='flex h-9 cursor-pointer select-none items-center border-l bg-muted px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground active:scale-95'
                     >
                       {draft.discountType === 'percentage' ? '%' : currencySymbol}
                     </button>
@@ -1406,11 +1700,9 @@ export default function PurchaseOrderPanel({
         </Card>
       </div>
 
-      {/* Column 3 (compact mode): Summary + save actions. Mirrors Purchase Invoice's
-          Summary card exactly (see purchase-panel.tsx); Tax/Shipping stay editable here
-          since — unlike Purchase Invoice — there's no Payment & Amount card for them to
-          live in instead, and Purchase Invoice has no tax/shipping fields to mirror. */}
-      <div className={cn('space-y-4', !showProductCatalog && 'md:col-start-2 md:row-start-1 xl:row-start-1 xl:col-start-3')}>
+      {/* Column 3: Summary + Tax & Shipping (the order's equivalent of Purchase Invoice's
+          Summary + Payment & Amount cards). */}
+      <div className={cn('space-y-4', !showProductCatalog && 'md:col-start-2 md:row-start-1 xl:col-start-3 xl:row-start-1')}>
         <Card>
           <CardHeader className='pb-3'>
             <CardTitle className='flex items-center gap-2 text-base'>
@@ -1420,24 +1712,65 @@ export default function PurchaseOrderPanel({
           </CardHeader>
           <CardContent className='space-y-2 pt-0'>
             <div className='flex justify-between gap-6'>
-              <span className='text-muted-foreground'>Subtotal</span>
-              <span className='tabular-nums font-medium'>{formatMoney(grossSubtotal)}</span>
+              <span className='text-muted-foreground'>Subtotal:</span>
+              <span className='font-medium tabular-nums'>{formatMoney(grossSubtotal)}</span>
             </div>
             {itemDiscountTotal > 0 && (
               <div className='flex justify-between gap-6 text-sm text-green-600'>
-                <span>Item Discounts</span>
+                <span>Item Discounts:</span>
                 <span className='tabular-nums'>-{formatMoney(itemDiscountTotal)}</span>
               </div>
             )}
             {discountAmount > 0 && (
               <div className='flex justify-between gap-6 text-red-600'>
-                <span>Discount</span>
+                <span>Discount:</span>
                 <span className='tabular-nums'>-{formatMoney(discountAmount)}</span>
               </div>
             )}
-            <div className='flex items-center justify-between gap-2 text-sm'>
-              <span className='text-muted-foreground'>Tax</span>
+            {draft.tax > 0 && (
+              <div className='flex justify-between gap-6 text-sm'>
+                <span className='text-muted-foreground'>Tax:</span>
+                <span className='tabular-nums'>+{formatMoney(draft.tax)}</span>
+              </div>
+            )}
+            {draft.shippingCost > 0 && (
+              <div className='flex justify-between gap-6 text-sm'>
+                <span className='text-muted-foreground'>Shipping:</span>
+                <span className='tabular-nums'>+{formatMoney(draft.shippingCost)}</span>
+              </div>
+            )}
+            <Separator />
+            <div className='flex justify-between gap-6 text-lg font-bold'>
+              <span>Total:</span>
+              <span className='tabular-nums'>{formatMoney(totalAmount)}</span>
+            </div>
+            {(itemDiscountTotal + discountAmount) > 0 && (
+              <div className='flex justify-between gap-6 text-xs font-medium text-green-600'>
+                <span>You Saved:</span>
+                <span className='tabular-nums'>{formatMoney(itemDiscountTotal + discountAmount)}</span>
+              </div>
+            )}
+            <Separator />
+            <div className='flex flex-wrap items-center gap-1.5'>
+              <Badge className={STATUS_STYLES[orderStatus]}>{STATUS_LABELS[orderStatus]}</Badge>
+              <Badge variant='secondary' className='gap-1 tabular-nums'>Total Items: {filledItems.length}</Badge>
+              <Badge variant='secondary' className='gap-1 tabular-nums'>Total Quantity: {totalQuantity}</Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className='pb-3'>
+            <CardTitle className='flex items-center gap-2 text-base'>
+              <Truck className='h-4 w-4 text-muted-foreground' />
+              Tax & Shipping
+            </CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-4 p-4 pt-0'>
+            <div>
+              <Label htmlFor='po-tax' className='mb-2 block'>Tax:</Label>
               <Input
+                id='po-tax'
                 type='text'
                 inputMode='decimal'
                 showVoiceInput={false}
@@ -1449,13 +1782,14 @@ export default function PurchaseOrderPanel({
                 }
                 onFocus={(e) => e.target.select()}
                 onBlur={() => clearNumericDraft('tax')}
-                placeholder='0'
-                className='h-8 w-24 text-right'
+                placeholder='0.00'
+                className='w-full'
               />
             </div>
-            <div className='flex items-center justify-between gap-2 text-sm'>
-              <span className='text-muted-foreground'>Shipping</span>
+            <div>
+              <Label htmlFor='po-shipping' className='mb-2 block'>Shipping:</Label>
               <Input
+                id='po-shipping'
                 type='text'
                 inputMode='decimal'
                 showVoiceInput={false}
@@ -1467,34 +1801,26 @@ export default function PurchaseOrderPanel({
                 }
                 onFocus={(e) => e.target.select()}
                 onBlur={() => clearNumericDraft('shippingCost')}
-                placeholder='0'
-                className='h-8 w-24 text-right'
+                placeholder='0.00'
+                className='w-full'
               />
             </div>
-            <Separator />
-            <div className='flex justify-between text-lg font-bold'>
-              <span>Total</span>
-              <span className='text-primary tabular-nums'>{formatMoney(totalAmount)}</span>
-            </div>
-            {(itemDiscountTotal + discountAmount) > 0 && (
-              <div className='flex justify-between text-xs font-medium text-green-600'>
-                <span>You Saved</span>
-                <span className='tabular-nums'>{formatMoney(itemDiscountTotal + discountAmount)}</span>
-              </div>
-            )}
 
-            {/* Save buttons — compact mode (catalog hidden): the header-portaled bar
-                below already covers these actions, so this duplicate stays hidden.
-                Mirrors Purchase Invoice's identical Payment & Amount card footer. */}
+            {/* Catalog-shown mode: the save buttons live here (the header bar takes over
+                when the catalog is hidden), like Purchase Invoice's Payment card. */}
             {showProductCatalog && (
-              <div className='flex flex-col gap-2 pt-2'>
-                <Button variant='outline' disabled={saving} onClick={() => handleSave('draft')}>
-                  <Save className='mr-2 h-4 w-4' />
-                  Save draft (Ctrl+D)
+              <div className='grid grid-cols-1 gap-3 max-sm:hidden'>
+                <Button type='button' size='lg' variant='outline' className='w-full gap-2' disabled={saveDisabled} onClick={() => handleSave('draft')}>
+                  {saveDraftButtonContent} (Ctrl+D)
                 </Button>
-                <Button disabled={saving} onClick={() => handleSave('sent')}>
-                  <Send className='mr-2 h-4 w-4' />
-                  {editing && editing.status !== 'draft' ? 'Save' : 'Save & send'} (Ctrl+S)
+                <Button
+                  type='button'
+                  size='lg'
+                  className='w-full gap-2 bg-emerald-600 hover:bg-emerald-700'
+                  disabled={saveDisabled}
+                  onClick={() => handleSave('sent')}
+                >
+                  {sendButtonContent} (Ctrl+Enter)
                 </Button>
               </div>
             )}
@@ -1502,46 +1828,47 @@ export default function PurchaseOrderPanel({
         </Card>
       </div>
 
-      {/* Fast-ordering buttons bar — catalog hidden means the panel is a 3-column
-          layout; the primary actions are always reachable without scrolling. Portaled
-          into a slot the page places in its header (see purchase-order-form.tsx). Falls
-          back to a floating bottom bar (with item count/total for context) until that
-          slot exists. Mirrors PurchasePanel's identical bar (see purchase-panel.tsx). */}
+      {/* Catalog-hidden mode: Save draft / Save & send portaled into the page header,
+          exactly like Purchase Invoice's Preview / Save / Save & Print bar. */}
       {!showProductCatalog && (() => {
         const bar = (
           <div className='flex flex-wrap items-center gap-2'>
+            <Button type='button' size='sm' variant='outline' disabled={saveDisabled} onClick={() => handleSave('draft')} className='gap-1.5'>
+              {saveDraftButtonContent}
+            </Button>
             <Button
               type='button'
-              variant='outline'
               size='sm'
-              disabled={saving}
-              onClick={() => handleSave('draft')}
-              className='gap-1.5'
+              disabled={saveDisabled}
+              onClick={() => handleSave('sent')}
+              className='gap-1.5 bg-emerald-600 hover:bg-emerald-700'
             >
-              <Save className='h-4 w-4' />
-              Save draft
-            </Button>
-            <Button type='button' size='sm' disabled={saving} onClick={() => handleSave('sent')} className='gap-1.5'>
-              <Send className='h-4 w-4' />
-              {editing && editing.status !== 'draft' ? 'Save' : 'Save & send'}
+              {sendButtonContent}
             </Button>
           </div>
         )
         if (stickyActionsContainer) return createPortal(bar, stickyActionsContainer)
-        // No header slot yet — fall back to a floating bottom bar (with item count/total
-        // for context, since it's not sitting next to the page title in this fallback).
         return (
-          <div className='sticky bottom-3 z-20 md:col-start-1 md:col-span-2 xl:col-start-1 xl:col-span-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90'>
+          <div className='sticky bottom-3 z-20 col-span-full flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90 max-sm:hidden'>
             <div className='flex items-baseline gap-2 pl-1'>
-              <span className='text-xs text-muted-foreground'>
-                {draft.items.filter((i) => getProductId(i) && i.product.name).length} items
-              </span>
+              <span className='text-xs text-muted-foreground'>{filledItems.length} Order Items</span>
               <span className='text-lg font-bold tabular-nums'>{formatMoney(totalAmount)}</span>
             </div>
             {bar}
           </div>
         )
       })()}
+
+      <EntityQuickCreateDialogs
+        state={quickCreate}
+        onClose={() => {
+          setQuickCreate(null)
+          setQuickCreateProductIndex(null)
+        }}
+        onCreated={handleQuickCreated}
+      />
+
+      {createPortal(mobileActionsBar, document.body)}
     </div>
   )
 }

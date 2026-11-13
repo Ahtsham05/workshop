@@ -3,6 +3,8 @@ import { useGetUsersQuery } from '@/stores/users.api'
 import { useCanViewCreatedBy } from '@/components/created-by-cell'
 import { useGetMyBranchesQuery } from '@/stores/branch.api'
 import { useGetAllCustomersQuery } from '@/stores/customer.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { usesPaymentMethodCards } from '@/lib/payment-modes'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -64,6 +66,14 @@ const PAYMENT_STATUS_OPTIONS = [
   { value: 'partial', label: 'Partially paid' },
   { value: 'paid', label: 'Paid' },
   { value: 'overpaid', label: 'Overpaid' },
+]
+
+const PAYMENT_MODE_OPTIONS = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'card', label: 'Credit Card' },
+  { value: 'ach', label: 'ACH' },
+  { value: 'check', label: 'Check' },
+  { value: 'bank', label: 'Bank / other account' },
 ]
 
 const DUE_STATUS_OPTIONS = [
@@ -208,6 +218,17 @@ export function InvoiceFiltersToolbar({
     [customersData]
   )
 
+  // Credit Card / ACH / Check only exist as tenders for wholesale + distributor businesses.
+  const { data: orgData } = useGetMyOrganizationQuery()
+  const showTenderModes = usesPaymentMethodCards(orgData?.businessType)
+  const paymentModeOptions = useMemo(
+    () =>
+      showTenderModes
+        ? PAYMENT_MODE_OPTIONS
+        : PAYMENT_MODE_OPTIONS.filter((option) => option.value === 'cash' || option.value === 'bank'),
+    [showTenderModes]
+  )
+
   /** Applied filters, as removable pills — the "what am I actually looking at" line. */
   const activePills = useMemo(() => {
     const pills: { key: string; label: string; clear: () => void }[] = []
@@ -216,6 +237,8 @@ export function InvoiceFiltersToolbar({
 
     if (filters.customer.length)
       pills.push({ key: 'customer', label: `Customer: ${labelFor(customerOptions, filters.customer)}`, clear: () => onPatchImmediate({ customer: [] }) })
+    if (filters.paymentMode?.length)
+      pills.push({ key: 'paymentMode', label: `Paid by: ${labelFor(PAYMENT_MODE_OPTIONS, filters.paymentMode)}`, clear: () => onPatchImmediate({ paymentMode: [] }) })
     if (filters.paymentStatus.length)
       pills.push({ key: 'paymentStatus', label: `Payment: ${labelFor(PAYMENT_STATUS_OPTIONS, filters.paymentStatus)}`, clear: () => onPatchImmediate({ paymentStatus: [] }) })
     if (filters.dueStatus.length)
@@ -497,6 +520,14 @@ export function InvoiceFiltersToolbar({
                 options={customerOptions}
                 selected={draft.customer}
                 onChange={(values) => onPatchDraft({ customer: values })}
+              />
+              <MultiSelectFilter
+                label={t('Payment Method')}
+                placeholder={t('Any method')}
+                options={paymentModeOptions}
+                selected={draft.paymentMode || []}
+                onChange={(values) => onPatchDraft({ paymentMode: values })}
+                searchable={false}
               />
               <MultiSelectFilter
                 label={t('Payment Status')}

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { usesPaymentMethodCards } from '@/lib/payment-modes'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
+import { requiresRegisteredCustomer } from '@/lib/business-types'
 import { toast } from 'sonner'
 import { useSelector } from 'react-redux'
 import { Link } from '@tanstack/react-router'
@@ -81,6 +83,10 @@ export default function FastBillingPage() {
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  // Wholesale / distribution: no walk-in sales — every bill needs a registered customer.
+  const customerRequired = requiresRegisteredCustomer(orgData?.businessType || user?.businessType)
+  // Wholesale / distribution: "Pay Via" as Cash · Credit Card · ACH · Check cards (+ reference #).
+  const paymentCards = usesPaymentMethodCards(orgData?.businessType || user?.businessType)
 
   const [cart, setCart] = useState<CartLine[]>([])
   // Latest cart for stable callbacks (addToCart) that must not re-create on every change.
@@ -95,6 +101,7 @@ export default function FastBillingPage() {
   const [saleType, setSaleType] = useState<SaleType>('cash')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [walletType, setWalletType] = useState('')
+  const [paymentReference, setPaymentReference] = useState('')
   const [splitPaymentMethod, setSplitPaymentMethod] = useState<'cash' | 'wallet' | undefined>(undefined)
   const [splitWalletType, setSplitWalletType] = useState('')
   const [splitPaidAmount, setSplitPaidAmount] = useState(0)
@@ -166,6 +173,7 @@ export default function FastBillingPage() {
   const handlePaymentMethodChange = useCallback((method: PaymentMethod, nextWalletType?: string) => {
     setPaymentMethod(method)
     setWalletType(method === 'wallet' ? (nextWalletType || '') : '')
+    setPaymentReference('')
     // The split leg's bucket is derived from this field — stale once it changes.
     setSplitPaymentMethod(undefined)
     setSplitWalletType('')
@@ -565,6 +573,7 @@ export default function FastBillingPage() {
     setSaleType('cash')
     setPaymentMethod('cash')
     setWalletType('')
+    setPaymentReference('')
     setSplitPaymentMethod(undefined)
     setSplitWalletType('')
     setSplitPaidAmount(0)
@@ -634,6 +643,11 @@ export default function FastBillingPage() {
       toast.error('You do not have permission to create invoices')
       return
     }
+    if (customerRequired && !customer) {
+      toast.error('Please select a customer')
+      setCustomerPickerOpen(true)
+      return
+    }
 
     if (paymentMethod === 'wallet' && !walletType) {
       toast.error('Please select a bank account for the payment')
@@ -665,6 +679,7 @@ export default function FastBillingPage() {
         saleType,
         paymentMethod,
         walletType,
+        paymentReference,
         splitPaymentMethod,
         splitWalletType,
         splitPaidAmount,
@@ -739,6 +754,7 @@ export default function FastBillingPage() {
     saleType,
     paymentMethod,
     walletType,
+    paymentReference,
     splitPaymentMethod,
     splitWalletType,
     splitPaidAmount,
@@ -750,6 +766,7 @@ export default function FastBillingPage() {
     orgData,
     branchData,
     canCreateInvoices,
+    customerRequired,
     handleCreditError,
   ])
 
@@ -973,6 +990,10 @@ export default function FastBillingPage() {
               onCustomerChange={setCustomer}
               walkInCustomerName={walkInCustomerName}
               onWalkInCustomerNameChange={setWalkInCustomerName}
+              customerRequired={customerRequired}
+              paymentCards={paymentCards}
+              paymentReference={paymentReference}
+              onPaymentReferenceChange={setPaymentReference}
               paidAmount={paidAmount}
               onPaidAmountChange={setPaidAmount}
               itemCount={cart.length}
@@ -992,6 +1013,7 @@ export default function FastBillingPage() {
         onClose={closeAddDialog}
         onConfirm={confirmAddDialog}
         onAfterClose={focusScanInput}
+        customer={customer}
       />
 
       {(() => {

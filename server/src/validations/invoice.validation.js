@@ -102,6 +102,9 @@ const createInvoice = {
     roundingAdjustment: Joi.number().default(0),
     splitPayment: Joi.array().items(splitPayment).optional(),
     paymentMethod: Joi.string().valid('cash', 'wallet', 'bank', 'card').optional(),
+    // Check # / ACH reference / card last-4 or auth code (payment-method cards, wholesale +
+    // distributor). paymentMode itself is derived server-side from the receiving account.
+    paymentReference: Joi.string().trim().max(60).allow('', null).optional(),
     walletType: Joi.string().trim().when('paymentMethod', {
       is: 'wallet',
       then: Joi.required(),
@@ -165,6 +168,8 @@ const invoiceListQuery = Joi.object().keys({
   search: Joi.string().allow(''),
   searchBy: Joi.string().valid('all', 'invoice', 'customer', 'product', 'billNumber', 'notes'),
   type: Joi.string().allow(''),
+  // How it was paid — comma-separated cash / card / ach / check / bank.
+  paymentMode: Joi.string().allow(''),
   paymentStatus: Joi.string().allow(''),
   dueStatus: Joi.string().allow(''),
   createdBy: Joi.string().allow(''),
@@ -272,6 +277,9 @@ const updateInvoice = {
     roundingAdjustment: Joi.number().optional(),
     splitPayment: Joi.array().items(splitPayment).optional(),
     paymentMethod: Joi.string().valid('cash', 'wallet', 'bank', 'card').optional(),
+    // Check # / ACH reference / card last-4 or auth code (payment-method cards, wholesale +
+    // distributor). paymentMode itself is derived server-side from the receiving account.
+    paymentReference: Joi.string().trim().max(60).allow('', null).optional(),
     walletType: Joi.string().trim().when('paymentMethod', {
       is: 'wallet',
       then: Joi.required(),
@@ -402,6 +410,9 @@ const convertQuotation = {
     paidAmount: Joi.number().min(0).optional(),
     dueDate: Joi.date().optional(),
     paymentMethod: Joi.string().valid('cash', 'wallet', 'bank', 'card').optional(),
+    // Check # / ACH reference / card last-4 or auth code (payment-method cards, wholesale +
+    // distributor). paymentMode itself is derived server-side from the receiving account.
+    paymentReference: Joi.string().trim().max(60).allow('', null).optional(),
     walletType: Joi.string().trim().when('paymentMethod', {
       is: 'wallet',
       then: Joi.required(),

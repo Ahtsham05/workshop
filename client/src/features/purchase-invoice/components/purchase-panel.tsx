@@ -1,4 +1,6 @@
 import { Fragment, useCallback, useState, useEffect, useRef, useMemo } from 'react'
+import { defaultPayFromAccount, usesPaymentMethodCards } from '@/lib/payment-modes'
+import { SupplierPaymentCards } from '@/components/payment-method-cards'
 import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 import { WarehouseStockTrigger } from '@/components/warehouse-stock-trigger'
 import { createPortal } from 'react-dom'
@@ -115,6 +117,14 @@ import { toast } from 'sonner'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
 import { createEmptyPurchaseManualItem, type Purchase, type PurchaseAttachment, type PurchaseItem, type Supplier } from '../index'
+import { CustomerRateHistoryPanel } from '@/features/invoice/components/customer-rate-history-panel'
+import { useRateHistoryPrefetch } from '@/features/invoice/components/customer-rate-history-cache'
+import {
+  RATE_HISTORY_ANCHOR_ATTR,
+  RATE_HISTORY_AUTO_OPEN_MIN_WIDTH,
+  readRateHistoryAutoOpen,
+  writeRateHistoryAutoOpen,
+} from '@/features/invoice/components/customer-rate-history-prefs'
 import { computeDiscountAmount, type DiscountType } from '../utils/discount'
 import { getProductUnitOptions, getUnitAdjustedPrice, resolveUnitConversion } from '@/lib/inventory-unit-conversions'
 import { isWholesaleRetailBusiness, isMobileShopBusiness } from '@/lib/business-types'
@@ -693,9 +703,12 @@ export default function PurchasePanel({
   const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
   const printOrientation: PrintOrientation = branchData?.printSettings?.printOrientation ?? 'portrait'
   const { data: walletsData } = useGetWalletsQuery()
-  const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
+  const wallets = useMemo(() => walletsData?.results?.filter((w) => w.isActive) ?? [], [walletsData])
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
   const isMobileShop = isMobileShopBusiness(orgData?.businessType || user?.businessType)
+  // Wholesale / distribution: Payment Method as Cash · Credit Card · ACH · Check cards, plus
+  // the account it was paid from and a check # / reference.
+  const paymentCards = usesPaymentMethodCards(orgData?.businessType || user?.businessType)
   const [buyUsedPhoneOpen, setBuyUsedPhoneOpen] = useState(false)
   // Purchase Type (Cash = settled now vs Credit = may owe a balance) is a separate concern
   // from Payment Method (which real account absorbs whatever's paid right now) — a Credit
@@ -1199,6 +1212,16 @@ export default function PurchasePanel({
       const splitPaidAmount = splitPaymentMethod ? Math.max(0, Number(purchase.splitPaidAmount || 0)) : 0
       const totalPaidAmount = (purchase.paidAmount || 0) + splitPaidAmount
 
+      // Payment-method cards have no "Paid from" box: the account is picked automatically. Items
+      // are often added after the card is clicked, so on a new purchase pick again against the
+      // final amount — the bank account if it covers it, else the Credit Card / ACH / Check one.
+      const primaryPaid = purchaseType === 'cash' && !splitPaymentMethod ? totals.total : purchase.paidAmount || 0
+      const tenderMode = purchase.paymentMode
+      const payWalletType =
+        paymentCards && !isEditing && paymentMethod === 'wallet' && tenderMode && tenderMode !== 'cash'
+          ? defaultPayFromAccount(wallets, tenderMode, primaryPaid) || purchase.walletType
+          : purchase.walletType
+
       // Map to backend format
       const purchaseData = {
         supplier: supplierId,
@@ -1244,7 +1267,10 @@ export default function PurchasePanel({
         balance: resolvePurchaseInvoiceBalance(totals.total, totalPaidAmount),
         type: purchaseType,
         paymentMethod: paymentMethod,
-        walletType: paymentMethod === 'wallet' ? purchase.walletType : undefined,
+        walletType: paymentMethod === 'wallet' ? payWalletType : undefined,
+        // Tender: sent only when the cards chose one — otherwise the server takes it from the account.
+        paymentMode: paymentMethod === 'wallet' && paymentCards ? purchase.paymentMode || undefined : undefined,
+        paymentReference: paymentMethod === 'wallet' ? (purchase.paymentReference || '').trim() : '',
         splitPaymentMethod: splitPaymentMethod,
         splitWalletType: splitPaymentMethod === 'wallet' ? purchase.splitWalletType : undefined,
         splitPaidAmount: splitPaidAmount,
@@ -1374,6 +1400,8 @@ export default function PurchasePanel({
       online,
       dispatch,
       confirmNotDuplicate,
+      paymentCards,
+      wallets,
     ]
   )
 
@@ -1396,6 +1424,42 @@ export default function PurchasePanel({
     return { key: item.variantId || productId, productId, variantId: item.variantId }
   })
   const { getComparison: getPriceComparison } = usePurchasePriceComparison(priceComparisonItems, currentSupplierId)
+
+  // Cost-history box (customer-rate-history-panel.tsx, purchase mode): clicking a row's
+  // Purchase Price shows what we paid THIS supplier for that product before. Every line's
+  // history is prefetched in one batch, so the click itself sends no request.
+  const [costHistoryIndex, setCostHistoryIndex] = useState<number | null>(null)
+  const [costHistoryAutoOpen, setCostHistoryAutoOpen] = useState(readRateHistoryAutoOpen)
+  const openCostHistory = (index: number) => {
+    if (!currentSupplierId) return
+    if (!costHistoryAutoOpen || window.innerWidth < RATE_HISTORY_AUTO_OPEN_MIN_WIDTH) return
+    setCostHistoryIndex((prev) => (prev === index ? prev : index))
+  }
+  const costHistoryLines = useMemo(
+    () =>
+      filledPurchaseItems.map((item) => ({
+        productId: String(item.product.id || (item.product as any)?._id || ''),
+        variantId: item.variantId,
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filledPurchaseItems.map((item) => `${item.product.id || (item.product as any)?._id}|${item.variantId || ''}`).join(',')],
+  )
+  const editingPurchaseKey: string | undefined = isEditing ? editingPurchase?._id || editingPurchase?.id : undefined
+  useRateHistoryPrefetch({
+    kind: 'purchase',
+    partyId: currentSupplierId ? String(currentSupplierId) : null,
+    lines: costHistoryLines,
+    excludeId: editingPurchaseKey,
+    enabled: Boolean(currentSupplierId),
+  })
+  const costHistoryItem = costHistoryIndex !== null ? purchase.items[costHistoryIndex] : undefined
+  const costHistoryProductId = costHistoryItem
+    ? String(costHistoryItem.product?.id || (costHistoryItem.product as any)?._id || '')
+    : ''
+  // Row removed, emptied, or supplier cleared → close.
+  useEffect(() => {
+    if (costHistoryIndex !== null && (!currentSupplierId || !costHistoryProductId)) setCostHistoryIndex(null)
+  }, [costHistoryIndex, currentSupplierId, costHistoryProductId])
 
   // Products whose price moved enough to flag in the Summary card's compact warning —
   // recomputed from whatever's already cached, never triggers a fetch of its own.
@@ -1934,6 +1998,8 @@ export default function PurchasePanel({
         <span className='px-1.5 h-7 flex items-center text-[11px] text-muted-foreground bg-muted border-r font-medium select-none'>{currencySymbol}</span>
         <Input
           ref={setItemFieldRef(index, 'purchasePrice')}
+          {...{ [RATE_HISTORY_ANCHOR_ATTR]: '' }}
+          onClick={() => openCostHistory(index)}
           type='text'
           inputMode='decimal'
           showVoiceInput={false}
@@ -1944,7 +2010,10 @@ export default function PurchasePanel({
             )
           }
           onKeyDown={(e) => handlePurchasePriceKeyDown(e, index)}
-          onFocus={(e) => e.target.select()}
+          onFocus={(e) => {
+            e.target.select()
+            openCostHistory(index)
+          }}
           onBlur={() => clearNumericDraft(`${index}:purchasePrice`)}
           className='h-7 w-20 border-0 rounded-none text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
         />
@@ -2903,6 +2972,38 @@ export default function PurchasePanel({
           </CardTitle>
         </CardHeader>
         <CardContent className='p-4 pt-0 space-y-4'>
+          {paymentCards ? (
+            <SupplierPaymentCards
+              label={t('Payment Method') || 'Payment Method'}
+              wallets={wallets}
+              paymentMethod={purchase.paymentMethod}
+              walletType={purchase.walletType}
+              paymentMode={purchase.paymentMode}
+              reference={purchase.paymentReference}
+              amount={
+                purchase.type === 'cash' && !purchase.splitPaymentMethod ? calculateTotals().total : purchase.paidAmount || 0
+              }
+              onChange={(selection) =>
+                setPurchase((prev) => {
+                  const sameTender = prev.paymentMode === selection.paymentMode
+                  const sameBucket = (prev.paymentMethod === 'wallet') === (selection.paymentMethod === 'wallet')
+                  return {
+                    ...prev,
+                    paymentMethod: selection.paymentMethod,
+                    walletType: selection.walletType,
+                    paymentMode: selection.paymentMode,
+                    // A reference belongs to one tender — a new card starts blank.
+                    paymentReference: sameTender ? prev.paymentReference : undefined,
+                    // The split leg is the opposite bucket — only stale when the bucket flips.
+                    ...(sameBucket
+                      ? {}
+                      : { splitPaymentMethod: undefined, splitWalletType: undefined, splitPaidAmount: 0 }),
+                  }
+                })
+              }
+              onReferenceChange={(paymentReference) => setPurchase((prev) => ({ ...prev, paymentReference }))}
+            />
+          ) : (
           <div>
             <Label htmlFor="payment-method" className="mb-2">{t('Payment Method') || 'Payment Method'}</Label>
             <Select
@@ -2942,6 +3043,7 @@ export default function PurchasePanel({
               </p>
             )}
           </div>
+          )}
 
           {/* Paid Amount Input */}
           <div className="space-y-2">
@@ -3180,6 +3282,47 @@ export default function PurchasePanel({
           />
         )
       })()}
+
+      {costHistoryItem && costHistoryProductId && currentSupplierId ? (
+        <CustomerRateHistoryPanel
+          kind='purchase'
+          open
+          onOpenChange={(next) => !next && setCostHistoryIndex(null)}
+          anchor={itemFieldRefs.current[`${costHistoryIndex}:purchasePrice`] ?? null}
+          customer={{
+            id: String(currentSupplierId),
+            name: purchase.supplier?.name || '',
+            nameUrdu: (purchase.supplier as any)?.nameUrdu,
+            phone: (purchase.supplier as any)?.phone,
+            picture: (purchase.supplier as any)?.picture,
+          }}
+          customerBalance={supplierBalance}
+          loadingBalance={loadingBalance}
+          line={{
+            productId: costHistoryProductId,
+            variantId: costHistoryItem.variantId,
+            name: costHistoryItem.product.name,
+            nameUrdu: costHistoryItem.product.nameUrdu,
+            quantity: costHistoryItem.quantity,
+            unit: costHistoryItem.unit,
+            conversionFactor: costHistoryItem.conversionFactor,
+            unitPrice: costHistoryItem.purchasePrice,
+            cost: 0,
+          }}
+          showCost={false}
+          excludeInvoiceId={editingPurchaseKey}
+          onApplyRate={(rate) => updatePurchasePrice(costHistoryProductId, rate, costHistoryItem.variantId)}
+          autoOpen={costHistoryAutoOpen}
+          onAutoOpenChange={(value) => {
+            setCostHistoryAutoOpen(value)
+            writeRateHistoryAutoOpen(value)
+          }}
+          onReturnFocus={() => {
+            const input = itemFieldRefs.current[`${costHistoryIndex}:purchasePrice`]
+            if (input) requestAnimationFrame(() => { input.focus(); input.select() })
+          }}
+        />
+      ) : null}
 
       <EntityQuickCreateDialogs
         state={quickCreate}

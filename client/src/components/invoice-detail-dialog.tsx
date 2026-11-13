@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { formatPaymentMethod } from '@/lib/payment-modes'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import {
@@ -78,10 +79,9 @@ const refOf = (value: unknown): Record<string, any> | undefined =>
 
 const userName = (value: unknown) => refOf(value)?.name || refOf(value)?.email || ''
 
+/** Primary tender with its reference — "Cash", "Check #10234", "Credit Card · Card 4242". */
 function paymentMethodLabel(invoice: any) {
-  const method = String(invoice.paymentMethod || 'cash')
-  if (method === 'wallet' && invoice.walletType) return invoice.walletType
-  return method.charAt(0).toUpperCase() + method.slice(1)
+  return formatPaymentMethod({ ...invoice, type: undefined, splitPaymentMethod: undefined }) || 'Cash'
 }
 
 function customerAddress(customer: Record<string, any> | undefined) {

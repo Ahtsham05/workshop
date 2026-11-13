@@ -13,6 +13,8 @@ type BuildPayloadArgs = {
   saleType: SaleType
   paymentMethod: PaymentMethod
   walletType: string
+  /** Check # / ACH reference / card last-4 (payment-method cards, wholesale + distributor). */
+  paymentReference?: string
   // Optional second payment leg — e.g. paid partly cash, partly via a bank account.
   // Always the opposite bucket from `paymentMethod` (enforced by the UI), see
   // components/split-payment-fields.tsx.
@@ -57,6 +59,7 @@ export function buildInvoicePayload({
   saleType,
   paymentMethod,
   walletType,
+  paymentReference,
   splitPaymentMethod,
   splitWalletType,
   splitPaidAmount,
@@ -114,6 +117,7 @@ export function buildInvoicePayload({
     type: saleType === 'credit' ? 'credit' : 'cash',
     paymentMethod,
     walletType: paymentMethod === 'wallet' ? (walletType || '') : undefined,
+    paymentReference: paymentMethod === 'wallet' ? (paymentReference || '').trim() : '',
     splitPaymentMethod,
     splitWalletType: splitPaymentMethod === 'wallet' ? (splitWalletType || '') : undefined,
     splitPaidAmount: splitAmount,

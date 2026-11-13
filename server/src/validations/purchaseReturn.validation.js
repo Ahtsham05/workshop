@@ -10,6 +10,9 @@ const createPurchaseReturn = {
       .items(
         Joi.object().keys({
           productId: Joi.string().custom(objectId).required(),
+          // Real variant being returned (picked from the catalog); the service falls back to
+          // the linked purchase line's variant when absent.
+          variantId: Joi.string().custom(objectId).optional().allow(null, ''),
           name: Joi.string().required(),
           quantity: Joi.number().integer().min(1).required(),
           unit: Joi.string().allow('').optional(),

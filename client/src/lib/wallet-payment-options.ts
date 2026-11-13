@@ -16,6 +16,8 @@ export interface WalletLike {
   balance?: number
   isActive?: boolean
   accountType?: 'cash' | 'bank' | 'mobile_wallet'
+  /** Receiving account for a payment-method card (Credit Card / ACH / Check). */
+  paymentMode?: 'card' | 'ach' | 'check'
 }
 
 export interface MergedPaymentOption {

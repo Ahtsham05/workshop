@@ -46,6 +46,16 @@ router
   .route('/possible-duplicates')
   .get(auth('createPurchases', 'editPurchases'), validate(purchaseValidation.getPossibleDuplicatePurchases), purchaseController.getPossibleDuplicatePurchases);
 
+// What we paid this supplier for many products before (New Purchase rate-history box).
+// POST to one fixed URL so the browser's CORS preflight is cached, not repeated per product.
+router
+  .route('/cost-history')
+  .post(
+    auth('viewPurchases'),
+    validate(purchaseValidation.getSupplierCostHistoryBatch),
+    purchaseController.getSupplierCostHistoryBatch
+  );
+
 // Invoice-wise + item-wise history for the New Purchase screen's side panel.
 router
   .route('/history')

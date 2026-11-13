@@ -96,13 +96,13 @@ export function RecentActivities({ dateRange }: Props) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className='space-y-3'>
+        <div className='@container space-y-3'>
           {activities && activities.length > 0 ? (
             activities.map((activity) => (
               <div
                 key={activity.id}
                 className={cn(
-                  'flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors',
+                  'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-2.5 @md:flex-nowrap @md:p-3 transition-colors',
                   activity.type === 'invoice' &&
                     activity.status === 'cash' &&
                     'border-emerald-200/80 bg-gradient-to-r from-emerald-50/90 to-card dark:border-emerald-900/40 dark:from-emerald-950/35',
@@ -121,7 +121,7 @@ export function RecentActivities({ dateRange }: Props) {
                   ) && 'hover:bg-muted/50',
                 )}
               >
-                <div className='flex items-center gap-3'>
+                <div className='flex min-w-0 flex-1 items-center gap-3'>
                   <div
                     className={cn(
                       'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
@@ -136,8 +136,8 @@ export function RecentActivities({ dateRange }: Props) {
                   >
                     {getIcon(activity)}
                   </div>
-                  <div>
-                    <p className='text-sm font-medium'>{activity.description}</p>
+                  <div className='min-w-0 flex-1'>
+                    <p className='text-sm font-medium leading-snug line-clamp-2 break-words'>{activity.description}</p>
                     <p className='text-xs text-muted-foreground'>
                       {activity.timestamp
                         ? (() => { try { return formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true }) } catch { return '—' } })()
@@ -145,9 +145,9 @@ export function RecentActivities({ dateRange }: Props) {
                     </p>
                   </div>
                 </div>
-                <div className='flex flex-col items-end gap-1'>
-                  <div className='flex items-center gap-2'>
-                    <span className='text-sm font-semibold'>
+                <div className='flex shrink-0 flex-col items-end gap-1 text-right @md:max-w-[55%] @md:shrink'>
+                  <div className='flex flex-col items-end gap-1 @md:flex-row @md:flex-wrap @md:items-center @md:justify-end @md:gap-x-2'>
+                    <span className='text-sm font-semibold tabular-nums whitespace-nowrap'>
                       {formatMoney(activity.amount ?? 0)}
                     </span>
                     <Badge
@@ -168,12 +168,20 @@ export function RecentActivities({ dateRange }: Props) {
                   {(activity.type === 'invoice' || activity.type === 'purchase') &&
                     activity.paidAmount != null &&
                     activity.balance != null && (
-                      <p className='text-[11px] text-muted-foreground tabular-nums'>
+                      <p className='hidden text-[11px] text-muted-foreground tabular-nums @md:block'>
                         {t('Paid')}: {formatMoney(activity.paidAmount)} · {t('Balance')}:{' '}
                         {formatMoney(activity.balance)}
                       </p>
                     )}
                 </div>
+                {(activity.type === 'invoice' || activity.type === 'purchase') &&
+                  activity.paidAmount != null &&
+                  activity.balance != null && (
+                    <div className='flex basis-full justify-between gap-2 border-t border-current/10 pt-2 text-[11px] text-muted-foreground tabular-nums @md:hidden'>
+                      <span>{t('Paid')}: {formatMoney(activity.paidAmount)}</span>
+                      <span>{t('Balance')}: {formatMoney(activity.balance)}</span>
+                    </div>
+                  )}
               </div>
             ))
           ) : (

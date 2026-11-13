@@ -132,6 +132,7 @@ const INVOICE_LIST_OPTIONS = [
   'searchBy',
   'customerId',
   'type',
+  'paymentMode',
   'paymentStatus',
   'dueStatus',
   'createdBy',

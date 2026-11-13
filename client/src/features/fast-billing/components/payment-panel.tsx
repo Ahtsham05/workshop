@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { PaymentMethodCards } from '@/components/payment-method-cards'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -98,6 +99,12 @@ type Props = {
   onCustomerPickerOpenChange?: (open: boolean) => void
   /** Called (instead of returning focus to the picker button) after a customer is chosen or the picker is dismissed with Esc. */
   onCustomerPickerDone?: () => void
+  /** Wholesale / distribution: no Walk-in option — a registered customer must be picked before Charge. */
+  customerRequired?: boolean
+  /** Wholesale / distribution: Pay Via as Cash · Credit Card · ACH · Check cards with a reference #. */
+  paymentCards?: boolean
+  paymentReference?: string
+  onPaymentReferenceChange?: (reference: string) => void
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -136,6 +143,10 @@ export function PaymentPanel({
   customerPickerOpen: customerPickerOpenProp,
   onCustomerPickerOpenChange,
   onCustomerPickerDone,
+  customerRequired = false,
+  paymentCards = false,
+  paymentReference = '',
+  onPaymentReferenceChange,
 }: Props) {
   const formatMoney = useFormatMoney()
   const currencyMeta = useCurrencyMeta()
@@ -169,19 +180,25 @@ export function PaymentPanel({
   )
 
   const changeDue = saleType === 'cash' && !splitPaymentMethod ? Math.max(0, paidAmount - total) : 0
-  const canCharge = itemCount > 0 && !charging && (saleType !== 'credit' || !!customer)
+  const canCharge =
+    itemCount > 0 && !charging && (saleType !== 'credit' || !!customer) && (!customerRequired || !!customer)
 
   return (
     <div className='flex flex-col gap-3.5'>
       <div className='space-y-1.5'>
-        <SectionLabel>Customer</SectionLabel>
+        <SectionLabel>
+          Customer{customerRequired && <span className='text-red-500'> *</span>}
+        </SectionLabel>
         <div className='flex items-center gap-2 max-sm:flex-wrap'>
           <Popover open={customerPickerOpen} onOpenChange={setCustomerPickerOpen}>
             <PopoverTrigger asChild>
               <Button
                 variant='outline'
                 role='combobox'
-                className='h-10 flex-1 justify-between border-border/80 bg-background font-normal shadow-sm'
+                className={cn(
+                  'h-10 flex-1 justify-between border-border/80 bg-background font-normal shadow-sm',
+                  customerRequired && !customer && 'border-red-500 bg-red-50 dark:bg-red-950/30',
+                )}
               >
                 <span className='flex min-w-0 items-center gap-2'>
                   {customer ? (
@@ -191,8 +208,12 @@ export function PaymentPanel({
                       <User className='h-3.5 w-3.5 text-muted-foreground' />
                     </span>
                   )}
-                  <span className='truncate text-sm font-medium'>
-                    {customer ? customer.name : walkInCustomerName || 'Walk-in Customer'}
+                  <span className={cn('truncate text-sm font-medium', customerRequired && !customer && 'text-red-500')}>
+                    {customer
+                      ? customer.name
+                      : customerRequired
+                        ? 'Select customer *'
+                        : walkInCustomerName || 'Walk-in Customer'}
                   </span>
                 </span>
                 <ChevronsUpDown className='h-3.5 w-3.5 shrink-0 opacity-50' />
@@ -219,6 +240,7 @@ export function PaymentPanel({
                   onValueChange={setCustomerSearch}
                 />
                 <CommandList className='max-h-64'>
+                  {!customerRequired && (
                   <CommandGroup>
                     <CommandItem
                       onSelect={() => {
@@ -236,6 +258,7 @@ export function PaymentPanel({
                       {!customer && <Check className='h-4 w-4 shrink-0 text-primary' />}
                     </CommandItem>
                   </CommandGroup>
+                  )}
                   {filteredCustomers.length === 0 ? (
                     <CommandEmpty>No customers found</CommandEmpty>
                   ) : (
@@ -272,7 +295,7 @@ export function PaymentPanel({
               </Command>
             </PopoverContent>
           </Popover>
-          {!customer && (
+          {!customer && !customerRequired && (
             <Input
               placeholder='Walk-in name (optional)'
               value={walkInCustomerName}
@@ -328,6 +351,19 @@ export function PaymentPanel({
       </div>
 
       <div className='space-y-1.5 border-t border-border/60 pt-3'>
+        {paymentCards ? (
+          <PaymentMethodCards
+            label='Pay Via'
+            compact
+            wallets={wallets}
+            paymentMethod={paymentMethod}
+            walletType={walletType}
+            reference={paymentReference}
+            onSelect={(selection) => onPaymentMethodChange(selection.paymentMethod, selection.walletType)}
+            onReferenceChange={(value) => onPaymentReferenceChange?.(value)}
+          />
+        ) : (
+        <>
         <SectionLabel>Pay Via</SectionLabel>
         <Select
           value={paymentMethod === 'wallet' && walletType ? toWalletOptionValue(walletType) : 'cash'}
@@ -352,6 +388,8 @@ export function PaymentPanel({
         </Select>
         {wallets.length === 0 && (
           <p className='text-xs text-muted-foreground'>No bank accounts configured — add one from the Bank Accounts page.</p>
+        )}
+        </>
         )}
 
         <p className='mt-2 text-xs text-muted-foreground'>

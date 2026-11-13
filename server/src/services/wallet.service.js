@@ -1,5 +1,6 @@
 const httpStatus = require('http-status');
-const { Wallet, LoadPurchase, LoadTransaction, CashWithdrawal, SimSale, WalletTransfer } = require('../models');
+const { Wallet, LoadPurchase, LoadTransaction, CashWithdrawal, SimSale, WalletTransfer, Organization } = require('../models');
+const { normalizeBusinessType } = require('../config/businessTypes');
 const ApiError = require('../utils/ApiError');
 const accountsSystemService = require('./accountsSystem.service');
 const cashBookService = require('./cashBook.service');
@@ -186,7 +187,10 @@ const adjustWalletBalance = async ({ organizationId, branchId, type, amount, ope
 
   const nextBalance = operation === 'deduct' ? baseBalance - numericAmount : baseBalance + numericAmount;
 
-  if (nextBalance < 0) {
+  // Payment-method accounts (Credit Card / ACH / Check) may go below zero: paying a supplier by
+  // card is money owed on the card, and checks / ACH written out before customer money is moved
+  // in simply leave the clearing account negative until a transfer squares it.
+  if (nextBalance < 0 && !wallet.paymentMode) {
     throw new ApiError(httpStatus.BAD_REQUEST, `${type} wallet balance is insufficient`);
   }
 
@@ -236,6 +240,69 @@ const ensureDefaultCashWallet = async ({ organizationId, branchId, userId }) => 
     updatedBy: userId,
   });
   accountsSystemService.ensureWalletAccount({ organizationId, branchId, createdBy: userId }, wallet).catch(() => {});
+};
+
+/**
+ * Payment-method cards (wholesale + distributor invoices): Cash plus one receiving account per
+ * non-cash tender. Each is a normal bank-type account, so card / ACH / check takings keep their
+ * own running balance (like "undeposited funds") and move to the real bank with a transfer.
+ */
+const PAYMENT_METHOD_ACCOUNT_BUSINESS_TYPES = ['wholesale', 'distributor'];
+const DEFAULT_PAYMENT_METHOD_WALLETS = [
+  { paymentMode: 'card', type: 'Credit Card' },
+  { paymentMode: 'ach', type: 'ACH' },
+  { paymentMode: 'check', type: 'Check' },
+];
+
+const usesPaymentMethodAccounts = (businessType) =>
+  PAYMENT_METHOD_ACCOUNT_BUSINESS_TYPES.includes(normalizeBusinessType(businessType));
+
+/**
+ * Seed the Credit Card / ACH / Check accounts for a wholesale or distributor branch. Looked up by
+ * `paymentMode`, not name, so a renamed or deactivated account is respected (a deactivated one
+ * simply hides its card); only a mode with no account at all is (re)created. A same-named
+ * account that already exists (e.g. a "Check" wallet made by hand) is adopted instead of
+ * duplicated.
+ */
+const ensureDefaultPaymentMethodWallets = async ({ organizationId, branchId, userId, businessType }) => {
+  if (!organizationId || !branchId) return;
+  let type = businessType;
+  // Same resolution as checkBusinessType.js: trust the value on the request, and only look the
+  // organization up when it's missing.
+  const resolved = normalizeBusinessType(type);
+  if (!resolved || resolved === 'other') {
+    const org = await Organization.findById(organizationId).select('businessType').lean();
+    type = org?.businessType;
+  }
+  if (!usesPaymentMethodAccounts(type)) return;
+
+  const existing = await Wallet.find({ organizationId, branchId }).select('type paymentMode').lean();
+  const haveModes = new Set(existing.map((w) => w.paymentMode).filter(Boolean));
+
+  for (const def of DEFAULT_PAYMENT_METHOD_WALLETS) {
+    if (haveModes.has(def.paymentMode)) continue;
+    const sameName = existing.find((w) => !w.paymentMode && String(w.type).trim().toLowerCase() === def.type.toLowerCase());
+    if (sameName) {
+      await Wallet.updateOne({ _id: sameName._id }, { $set: { paymentMode: def.paymentMode, updatedBy: userId } });
+      continue;
+    }
+    try {
+      const wallet = await Wallet.create({
+        organizationId,
+        branchId,
+        type: def.type,
+        accountType: 'bank',
+        paymentMode: def.paymentMode,
+        balance: 0,
+        createdBy: userId,
+        updatedBy: userId,
+      });
+      accountsSystemService.ensureWalletAccount({ organizationId, branchId, createdBy: userId }, wallet).catch(() => {});
+    } catch (err) {
+      // Two tabs listing wallets at once can race here — the other request already made it.
+      if (err?.code !== 11000) throw err;
+    }
+  }
 };
 
 /** Overlay the live Cash Book balance onto every cash-type wallet in `wallets` (in place). */
@@ -314,6 +381,8 @@ const deactivateWallet = async ({ walletId, organizationId, branchId, userId }) 
 module.exports = {
   ensureWallet,
   ensureDefaultCashWallet,
+  ensureDefaultPaymentMethodWallets,
+  usesPaymentMethodAccounts,
   createOrUpdateWallet,
   adjustWalletBalance,
   queryWallets,

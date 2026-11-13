@@ -4,6 +4,7 @@ const catchAsync = require('../utils/catchAsync');
 const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn, Organization, Expense, PersonalLedger, Inventory, StockAdjustment, CustomerPayment, SupplierPayment } = require('../models');
 const { applyBranchFilter } = require('../utils/branchFilter');
 const { mobileDashboardService, cashBookService } = require('../services');
+const dashboardInsightsService = require('../services/dashboardInsights.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 const { resolveDashboardDateRange, buildDateMatch } = require('../utils/dashboardDateRange');
@@ -1611,7 +1612,34 @@ const getBrandProducts = catchAsync(async (req, res) => {
   res.status(httpStatus.OK).send(products);
 });
 
+/**
+ * Monthly (or daily, for 30 days) Profit & Loss, sales and expense-category figures for the
+ * dashboard's trend widgets — see services/dashboardInsights.service.js.
+ * @route GET /v1/dashboard/trends?range=30d|90d|180d|365d|ytd
+ */
+const getTrends = catchAsync(async (req, res) => {
+  const result = await dashboardInsightsService.getTrends({
+    scope: buildAggregateScope(req),
+    range: req.query.range,
+  });
+  res.status(httpStatus.OK).send(result);
+});
+
+/**
+ * Receivables & payables (due status + aging) and money in/out by month (4 past, 2 expected).
+ * @route GET /v1/dashboard/money-overview
+ */
+const getMoneyOverview = catchAsync(async (req, res) => {
+  const result = await dashboardInsightsService.getMoneyOverview({
+    organizationId: req.organizationId || req.user.organizationId,
+    branchId: req.branchId,
+  });
+  res.status(httpStatus.OK).send(result);
+});
+
 module.exports = {
+  getTrends,
+  getMoneyOverview,
   getDashboardStats,
   getRevenueData,
   getTopProducts,

@@ -1,4 +1,5 @@
 import { format } from 'date-fns'
+import { formatPaymentMethod } from '@/lib/payment-modes'
 import type { PurchaseExportRow } from '@/stores/purchase.api'
 import { SETTLEMENT_STATUS_META, DUE_STATUS_META, type DueStatus, type SettlementStatus } from './purchase-settlement'
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
@@ -11,6 +12,8 @@ const EXPORT_COLUMNS: { header: string; value: (row: PurchaseExportRow) => strin
   { header: 'Purchase Date', value: (row) => (row.purchaseDate ? format(new Date(row.purchaseDate), 'yyyy-MM-dd') : '') },
   { header: 'Due Date', value: (row) => (row.dueDate ? format(new Date(row.dueDate), 'yyyy-MM-dd') : '') },
   { header: 'Payment Type', value: (row) => (row.type === 'credit' ? 'Credit' : row.paymentType || 'Cash') },
+  { header: 'Payment Method', value: (row) => (Number(row.settledAmount || 0) > 0 ? formatPaymentMethod(row, { withReference: false }) : '') },
+  { header: 'Payment Ref #', value: (row) => row.paymentReference || '' },
   { header: 'Invoice Total', value: (row) => Number(row.totalAmount || 0).toFixed(2) },
   { header: 'Paid', value: (row) => Number(row.settledAmount || 0).toFixed(2) },
   { header: 'Remaining', value: (row) => Number(row.remainingAmount || 0).toFixed(2) },

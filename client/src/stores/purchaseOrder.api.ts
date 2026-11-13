@@ -173,10 +173,17 @@ export const purchaseOrderApi = createApi({
       providesTags: ['PurchaseOrderStats'],
     }),
 
+    // Preview of the number the next new order will get (read-only peek, no increment).
+    getNextPurchaseOrderNumber: builder.query<{ orderNumber: string }, void>({
+      query: () => '/next-number',
+      providesTags: [{ type: 'PurchaseOrder', id: 'NEXT_NUMBER' }],
+    }),
+
     createPurchaseOrder: builder.mutation<PurchaseOrder, Partial<PurchaseOrder>>({
       query: (body) => ({ url: '', method: 'POST', body }),
       invalidatesTags: [
         { type: 'PurchaseOrder', id: 'LIST' },
+        { type: 'PurchaseOrder', id: 'NEXT_NUMBER' },
         'PurchaseOrderStats',
       ],
     }),
@@ -278,6 +285,7 @@ export const {
   useGetPurchaseOrdersQuery,
   useGetPurchaseOrderQuery,
   useGetPurchaseOrderStatsQuery,
+  useGetNextPurchaseOrderNumberQuery,
   useCreatePurchaseOrderMutation,
   useUpdatePurchaseOrderMutation,
   useDeletePurchaseOrderMutation,

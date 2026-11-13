@@ -55,35 +55,38 @@ export function TopCustomers({ dateRange }: Props) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className='space-y-3'>
+        <div className='@container space-y-3'>
           {topCustomers && topCustomers.length > 0 ? (
             topCustomers.map((customer) => (
               <div
                 key={customer.id}
-                className='flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors'
+                className='flex items-center gap-2 @xs:gap-3 p-2.5 @xs:p-3 rounded-lg border hover:bg-muted/50 transition-colors'
               >
-                <div className='flex items-center gap-3'>
-                  <div className='flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 text-white font-bold text-sm'>
+                <div className='flex min-w-0 flex-1 items-center gap-2 @xs:gap-3'>
+                  <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white font-bold text-sm'>
                     {customer.name.charAt(0).toUpperCase()}
                   </div>
                   <div className='flex-1 min-w-0'>
-                    <p className='text-sm font-medium truncate'>{customer.name}</p>
-                    <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+                    <p className='text-sm font-medium leading-snug line-clamp-2 break-words' title={customer.name}>{customer.name}</p>
+                    <div className='flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground'>
                       {customer.phone && (
                         <>
-                          <Phone className='h-3 w-3' />
-                          <span>{customer.phone}</span>
+                          <Phone className='h-3 w-3 shrink-0' />
+                          <span className='truncate'>{customer.phone}</span>
                         </>
                       )}
                     </div>
+                    <p className='text-xs text-muted-foreground @xs:hidden'>
+                      {formatDistanceToNow(new Date(customer.lastPurchase), { addSuffix: true })}
+                    </p>
                   </div>
                 </div>
-                <div className='text-right'>
-                  <p className='text-sm font-semibold'>{formatMoney(customer.totalAmount)}</p>
+                <div className='shrink-0 text-right'>
+                  <p className='text-sm font-semibold tabular-nums whitespace-nowrap'>{formatMoney(customer.totalAmount)}</p>
                   <p className='text-xs text-muted-foreground'>
-                    {customer.totalPurchases} {t('purchases')}
+                    {customer.totalPurchases} {customer.totalPurchases === 1 ? t('purchase') : t('purchases')}
                   </p>
-                  <p className='text-xs text-muted-foreground'>
+                  <p className='hidden text-xs text-muted-foreground @xs:block'>
                     {formatDistanceToNow(new Date(customer.lastPurchase), { addSuffix: true })}
                   </p>
                 </div>

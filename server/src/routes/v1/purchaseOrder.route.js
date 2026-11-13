@@ -14,6 +14,10 @@ router
   .get(checkPermission('viewPurchaseOrders', 'viewPurchases'), purchaseOrderController.getStats);
 
 router
+  .route('/next-number')
+  .get(checkPermission('createPurchaseOrders', 'createPurchases'), purchaseOrderController.getNextOrderNumber);
+
+router
   .route('/')
   .post(
     checkPermission('createPurchaseOrders', 'createPurchases'),

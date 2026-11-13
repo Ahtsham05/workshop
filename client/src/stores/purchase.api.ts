@@ -6,6 +6,21 @@ import { purchaseCatalogApi } from './purchaseCatalog.api'
 import { batchApi } from './batch.api'
 import { invalidateWalletCaches } from './wallet-cache-invalidation'
 import type { PossibleDuplicate, RecordNavigationParams, RecordNavigationResult, TransactionHistoryResult } from './transactionHistory.types'
+import type { CustomerProductHistory, CustomerRateHistoryBatchResult } from './invoice.api'
+
+export interface SupplierProductCostHistoryArgs {
+  supplierId: string
+  productId: string
+  variantId?: string
+  excludePurchaseId?: string
+}
+
+export interface SupplierCostHistoryBatchArgs {
+  supplierId: string
+  items: Array<{ productId: string; variantId?: string }>
+  excludePurchaseId?: string
+  limit?: number
+}
 
 /** Purchase mutations live in separate RTK Query slices from imeiApi/purchaseCatalogApi/
  *  batchApi/the wallet-cache slices, so receiving/editing/deleting a purchase doesn't
@@ -130,6 +145,22 @@ export const purchaseApi = createApi({
     getPurchaseHistory: builder.query<TransactionHistoryResult, Record<string, unknown>>({
       query: (params = {}) => ({ url: '/history', params }),
       providesTags: ['Purchase'],
+    }),
+
+    // What we paid this supplier for one product before — a CACHE ENTRY only: it is filled
+    // by getSupplierCostHistoryBatch (see customer-rate-history-cache.ts), never fetched on
+    // its own. A saved purchase invalidates 'Purchase', which drops these so they reload.
+    getSupplierProductCostHistory: builder.query<CustomerProductHistory, SupplierProductCostHistoryArgs>({
+      queryFn: () => ({ error: { status: 'CUSTOM_ERROR', error: 'Filled by getSupplierCostHistoryBatch' } as FetchBaseQueryError }),
+      providesTags: ['Purchase'],
+      keepUnusedDataFor: 900,
+    }),
+
+    // Many products' past costs from one supplier in ONE request. POST to one fixed URL so
+    // the browser caches its CORS preflight instead of repeating it per product.
+    getSupplierCostHistoryBatch: builder.query<CustomerRateHistoryBatchResult, SupplierCostHistoryBatchArgs>({
+      query: (body) => ({ url: '/cost-history', method: 'POST', body }),
+      keepUnusedDataFor: 0,
     }),
 
     // Previous/next full-record stepping on New Purchase (see record-navigator.tsx).
@@ -257,6 +288,13 @@ export interface PurchaseExportRow {
   dueDate?: string | null
   type?: 'cash' | 'credit'
   paymentType?: string
+  paymentMethod?: string
+  walletType?: string
+  paymentMode?: string
+  paymentReference?: string
+  splitPaymentMethod?: string
+  splitWalletType?: string
+  splitPaidAmount?: number
   totalAmount: number
   settledAmount: number
   remainingAmount: number

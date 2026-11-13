@@ -69,12 +69,14 @@ import { Route as AuthenticatedRemindersIndexImport } from './routes/_authentica
 import { Route as AuthenticatedPurchaseReturnsIndexImport } from './routes/_authenticated/purchase-returns/index'
 import { Route as AuthenticatedPurchaseOrdersIndexImport } from './routes/_authenticated/purchase-orders/index'
 import { Route as AuthenticatedPurchaseInvoiceIndexImport } from './routes/_authenticated/purchase-invoice/index'
+import { Route as AuthenticatedPurchaseHistoryIndexImport } from './routes/_authenticated/purchase-history/index'
 import { Route as AuthenticatedProductsIndexImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedPartnersIndexImport } from './routes/_authenticated/partners/index'
 import { Route as AuthenticatedNotesIndexImport } from './routes/_authenticated/notes/index'
 import { Route as AuthenticatedManufacturingIndexImport } from './routes/_authenticated/manufacturing/index'
 import { Route as AuthenticatedLeadsIndexImport } from './routes/_authenticated/leads/index'
 import { Route as AuthenticatedInvoiceIndexImport } from './routes/_authenticated/invoice/index'
+import { Route as AuthenticatedInvoiceHistoryIndexImport } from './routes/_authenticated/invoice-history/index'
 import { Route as AuthenticatedHrIndexImport } from './routes/_authenticated/hr/index'
 import { Route as AuthenticatedHelpCenterIndexImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedFastBillingIndexImport } from './routes/_authenticated/fast-billing/index'
@@ -117,6 +119,7 @@ import { Route as AuthenticatedSettingsExchangeRatesImport } from './routes/_aut
 import { Route as AuthenticatedSettingsDocumentNumberingImport } from './routes/_authenticated/settings/document-numbering'
 import { Route as AuthenticatedSettingsDisplayImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsDemoDataImport } from './routes/_authenticated/settings/demo-data'
+import { Route as AuthenticatedSettingsDashboardImport } from './routes/_authenticated/settings/dashboard'
 import { Route as AuthenticatedSettingsCurrencyImport } from './routes/_authenticated/settings/currency'
 import { Route as AuthenticatedSettingsCreditControlImport } from './routes/_authenticated/settings/credit-control'
 import { Route as AuthenticatedSettingsCacheImport } from './routes/_authenticated/settings/cache'
@@ -609,6 +612,13 @@ const AuthenticatedPurchaseInvoiceIndexRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
+const AuthenticatedPurchaseHistoryIndexRoute =
+  AuthenticatedPurchaseHistoryIndexImport.update({
+    id: '/purchase-history/',
+    path: '/purchase-history/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
 const AuthenticatedProductsIndexRoute = AuthenticatedProductsIndexImport.update(
   {
     id: '/products/',
@@ -649,6 +659,13 @@ const AuthenticatedInvoiceIndexRoute = AuthenticatedInvoiceIndexImport.update({
   path: '/invoice/',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+
+const AuthenticatedInvoiceHistoryIndexRoute =
+  AuthenticatedInvoiceHistoryIndexImport.update({
+    id: '/invoice-history/',
+    path: '/invoice-history/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 const AuthenticatedHrIndexRoute = AuthenticatedHrIndexImport.update({
   id: '/hr/',
@@ -934,6 +951,13 @@ const AuthenticatedSettingsDemoDataRoute =
   AuthenticatedSettingsDemoDataImport.update({
     id: '/demo-data',
     path: '/demo-data',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsDashboardRoute =
+  AuthenticatedSettingsDashboardImport.update({
+    id: '/dashboard',
+    path: '/dashboard',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
@@ -2260,6 +2284,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsCurrencyImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/dashboard': {
+      id: '/_authenticated/settings/dashboard'
+      path: '/dashboard'
+      fullPath: '/settings/dashboard'
+      preLoaderRoute: typeof AuthenticatedSettingsDashboardImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/demo-data': {
       id: '/_authenticated/settings/demo-data'
       path: '/demo-data'
@@ -2554,6 +2585,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/invoice-history/': {
+      id: '/_authenticated/invoice-history/'
+      path: '/invoice-history'
+      fullPath: '/invoice-history'
+      preLoaderRoute: typeof AuthenticatedInvoiceHistoryIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/invoice/': {
       id: '/_authenticated/invoice/'
       path: '/invoice'
@@ -2594,6 +2632,13 @@ declare module '@tanstack/react-router' {
       path: '/products'
       fullPath: '/products'
       preLoaderRoute: typeof AuthenticatedProductsIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/purchase-history/': {
+      id: '/_authenticated/purchase-history/'
+      path: '/purchase-history'
+      fullPath: '/purchase-history'
+      preLoaderRoute: typeof AuthenticatedPurchaseHistoryIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/purchase-invoice/': {
@@ -3332,6 +3377,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsCacheRoute: typeof AuthenticatedSettingsCacheRoute
   AuthenticatedSettingsCreditControlRoute: typeof AuthenticatedSettingsCreditControlRoute
   AuthenticatedSettingsCurrencyRoute: typeof AuthenticatedSettingsCurrencyRoute
+  AuthenticatedSettingsDashboardRoute: typeof AuthenticatedSettingsDashboardRoute
   AuthenticatedSettingsDemoDataRoute: typeof AuthenticatedSettingsDemoDataRoute
   AuthenticatedSettingsDisplayRoute: typeof AuthenticatedSettingsDisplayRoute
   AuthenticatedSettingsDocumentNumberingRoute: typeof AuthenticatedSettingsDocumentNumberingRoute
@@ -3370,6 +3416,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsCreditControlRoute:
       AuthenticatedSettingsCreditControlRoute,
     AuthenticatedSettingsCurrencyRoute: AuthenticatedSettingsCurrencyRoute,
+    AuthenticatedSettingsDashboardRoute: AuthenticatedSettingsDashboardRoute,
     AuthenticatedSettingsDemoDataRoute: AuthenticatedSettingsDemoDataRoute,
     AuthenticatedSettingsDisplayRoute: AuthenticatedSettingsDisplayRoute,
     AuthenticatedSettingsDocumentNumberingRoute:
@@ -3645,11 +3692,13 @@ interface AuthenticatedRouteChildren {
   AuthenticatedFastBillingIndexRoute: typeof AuthenticatedFastBillingIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
   AuthenticatedHrIndexRoute: typeof AuthenticatedHrIndexRoute
+  AuthenticatedInvoiceHistoryIndexRoute: typeof AuthenticatedInvoiceHistoryIndexRoute
   AuthenticatedInvoiceIndexRoute: typeof AuthenticatedInvoiceIndexRoute
   AuthenticatedLeadsIndexRoute: typeof AuthenticatedLeadsIndexRoute
   AuthenticatedNotesIndexRoute: typeof AuthenticatedNotesIndexRoute
   AuthenticatedPartnersIndexRoute: typeof AuthenticatedPartnersIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
+  AuthenticatedPurchaseHistoryIndexRoute: typeof AuthenticatedPurchaseHistoryIndexRoute
   AuthenticatedPurchaseInvoiceIndexRoute: typeof AuthenticatedPurchaseInvoiceIndexRoute
   AuthenticatedPurchaseOrdersIndexRoute: typeof AuthenticatedPurchaseOrdersIndexRoute
   AuthenticatedPurchaseReturnsIndexRoute: typeof AuthenticatedPurchaseReturnsIndexRoute
@@ -3753,11 +3802,14 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedFastBillingIndexRoute: AuthenticatedFastBillingIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
   AuthenticatedHrIndexRoute: AuthenticatedHrIndexRoute,
+  AuthenticatedInvoiceHistoryIndexRoute: AuthenticatedInvoiceHistoryIndexRoute,
   AuthenticatedInvoiceIndexRoute: AuthenticatedInvoiceIndexRoute,
   AuthenticatedLeadsIndexRoute: AuthenticatedLeadsIndexRoute,
   AuthenticatedNotesIndexRoute: AuthenticatedNotesIndexRoute,
   AuthenticatedPartnersIndexRoute: AuthenticatedPartnersIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
+  AuthenticatedPurchaseHistoryIndexRoute:
+    AuthenticatedPurchaseHistoryIndexRoute,
   AuthenticatedPurchaseInvoiceIndexRoute:
     AuthenticatedPurchaseInvoiceIndexRoute,
   AuthenticatedPurchaseOrdersIndexRoute: AuthenticatedPurchaseOrdersIndexRoute,
@@ -3876,6 +3928,7 @@ export interface FileRoutesByFullPath {
   '/settings/cache': typeof AuthenticatedSettingsCacheRoute
   '/settings/credit-control': typeof AuthenticatedSettingsCreditControlRoute
   '/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
+  '/settings/dashboard': typeof AuthenticatedSettingsDashboardRoute
   '/settings/demo-data': typeof AuthenticatedSettingsDemoDataRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/document-numbering': typeof AuthenticatedSettingsDocumentNumberingRoute
@@ -3918,12 +3971,14 @@ export interface FileRoutesByFullPath {
   '/fast-billing': typeof AuthenticatedFastBillingIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/hr': typeof AuthenticatedHrIndexRoute
+  '/invoice-history': typeof AuthenticatedInvoiceHistoryIndexRoute
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/leads': typeof AuthenticatedLeadsIndexRoute
   '/manufacturing/': typeof AuthenticatedManufacturingIndexRoute
   '/notes': typeof AuthenticatedNotesIndexRoute
   '/partners': typeof AuthenticatedPartnersIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
+  '/purchase-history': typeof AuthenticatedPurchaseHistoryIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/purchase-orders': typeof AuthenticatedPurchaseOrdersIndexRoute
   '/purchase-returns': typeof AuthenticatedPurchaseReturnsIndexRoute
@@ -4090,6 +4145,7 @@ export interface FileRoutesByTo {
   '/settings/cache': typeof AuthenticatedSettingsCacheRoute
   '/settings/credit-control': typeof AuthenticatedSettingsCreditControlRoute
   '/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
+  '/settings/dashboard': typeof AuthenticatedSettingsDashboardRoute
   '/settings/demo-data': typeof AuthenticatedSettingsDemoDataRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/document-numbering': typeof AuthenticatedSettingsDocumentNumberingRoute
@@ -4132,12 +4188,14 @@ export interface FileRoutesByTo {
   '/fast-billing': typeof AuthenticatedFastBillingIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/hr': typeof AuthenticatedHrIndexRoute
+  '/invoice-history': typeof AuthenticatedInvoiceHistoryIndexRoute
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/leads': typeof AuthenticatedLeadsIndexRoute
   '/manufacturing': typeof AuthenticatedManufacturingIndexRoute
   '/notes': typeof AuthenticatedNotesIndexRoute
   '/partners': typeof AuthenticatedPartnersIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
+  '/purchase-history': typeof AuthenticatedPurchaseHistoryIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/purchase-orders': typeof AuthenticatedPurchaseOrdersIndexRoute
   '/purchase-returns': typeof AuthenticatedPurchaseReturnsIndexRoute
@@ -4309,6 +4367,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/cache': typeof AuthenticatedSettingsCacheRoute
   '/_authenticated/settings/credit-control': typeof AuthenticatedSettingsCreditControlRoute
   '/_authenticated/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
+  '/_authenticated/settings/dashboard': typeof AuthenticatedSettingsDashboardRoute
   '/_authenticated/settings/demo-data': typeof AuthenticatedSettingsDemoDataRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/_authenticated/settings/document-numbering': typeof AuthenticatedSettingsDocumentNumberingRoute
@@ -4351,12 +4410,14 @@ export interface FileRoutesById {
   '/_authenticated/fast-billing/': typeof AuthenticatedFastBillingIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/_authenticated/hr/': typeof AuthenticatedHrIndexRoute
+  '/_authenticated/invoice-history/': typeof AuthenticatedInvoiceHistoryIndexRoute
   '/_authenticated/invoice/': typeof AuthenticatedInvoiceIndexRoute
   '/_authenticated/leads/': typeof AuthenticatedLeadsIndexRoute
   '/_authenticated/manufacturing/': typeof AuthenticatedManufacturingIndexRoute
   '/_authenticated/notes/': typeof AuthenticatedNotesIndexRoute
   '/_authenticated/partners/': typeof AuthenticatedPartnersIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
+  '/_authenticated/purchase-history/': typeof AuthenticatedPurchaseHistoryIndexRoute
   '/_authenticated/purchase-invoice/': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/_authenticated/purchase-orders/': typeof AuthenticatedPurchaseOrdersIndexRoute
   '/_authenticated/purchase-returns/': typeof AuthenticatedPurchaseReturnsIndexRoute
@@ -4530,6 +4591,7 @@ export interface FileRouteTypes {
     | '/settings/cache'
     | '/settings/credit-control'
     | '/settings/currency'
+    | '/settings/dashboard'
     | '/settings/demo-data'
     | '/settings/display'
     | '/settings/document-numbering'
@@ -4572,12 +4634,14 @@ export interface FileRouteTypes {
     | '/fast-billing'
     | '/help-center'
     | '/hr'
+    | '/invoice-history'
     | '/invoice'
     | '/leads'
     | '/manufacturing/'
     | '/notes'
     | '/partners'
     | '/products'
+    | '/purchase-history'
     | '/purchase-invoice'
     | '/purchase-orders'
     | '/purchase-returns'
@@ -4743,6 +4807,7 @@ export interface FileRouteTypes {
     | '/settings/cache'
     | '/settings/credit-control'
     | '/settings/currency'
+    | '/settings/dashboard'
     | '/settings/demo-data'
     | '/settings/display'
     | '/settings/document-numbering'
@@ -4785,12 +4850,14 @@ export interface FileRouteTypes {
     | '/fast-billing'
     | '/help-center'
     | '/hr'
+    | '/invoice-history'
     | '/invoice'
     | '/leads'
     | '/manufacturing'
     | '/notes'
     | '/partners'
     | '/products'
+    | '/purchase-history'
     | '/purchase-invoice'
     | '/purchase-orders'
     | '/purchase-returns'
@@ -4960,6 +5027,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/cache'
     | '/_authenticated/settings/credit-control'
     | '/_authenticated/settings/currency'
+    | '/_authenticated/settings/dashboard'
     | '/_authenticated/settings/demo-data'
     | '/_authenticated/settings/display'
     | '/_authenticated/settings/document-numbering'
@@ -5002,12 +5070,14 @@ export interface FileRouteTypes {
     | '/_authenticated/fast-billing/'
     | '/_authenticated/help-center/'
     | '/_authenticated/hr/'
+    | '/_authenticated/invoice-history/'
     | '/_authenticated/invoice/'
     | '/_authenticated/leads/'
     | '/_authenticated/manufacturing/'
     | '/_authenticated/notes/'
     | '/_authenticated/partners/'
     | '/_authenticated/products/'
+    | '/_authenticated/purchase-history/'
     | '/_authenticated/purchase-invoice/'
     | '/_authenticated/purchase-orders/'
     | '/_authenticated/purchase-returns/'
@@ -5223,11 +5293,13 @@ export const routeTree = rootRoute
         "/_authenticated/fast-billing/",
         "/_authenticated/help-center/",
         "/_authenticated/hr/",
+        "/_authenticated/invoice-history/",
         "/_authenticated/invoice/",
         "/_authenticated/leads/",
         "/_authenticated/notes/",
         "/_authenticated/partners/",
         "/_authenticated/products/",
+        "/_authenticated/purchase-history/",
         "/_authenticated/purchase-invoice/",
         "/_authenticated/purchase-orders/",
         "/_authenticated/purchase-returns/",
@@ -5305,6 +5377,7 @@ export const routeTree = rootRoute
         "/_authenticated/settings/cache",
         "/_authenticated/settings/credit-control",
         "/_authenticated/settings/currency",
+        "/_authenticated/settings/dashboard",
         "/_authenticated/settings/demo-data",
         "/_authenticated/settings/display",
         "/_authenticated/settings/document-numbering",
@@ -5668,6 +5741,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/settings/currency.tsx",
       "parent": "/_authenticated/settings"
     },
+    "/_authenticated/settings/dashboard": {
+      "filePath": "_authenticated/settings/dashboard.tsx",
+      "parent": "/_authenticated/settings"
+    },
     "/_authenticated/settings/demo-data": {
       "filePath": "_authenticated/settings/demo-data.tsx",
       "parent": "/_authenticated/settings"
@@ -5836,6 +5913,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/hr/index.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/invoice-history/": {
+      "filePath": "_authenticated/invoice-history/index.tsx",
+      "parent": "/_authenticated"
+    },
     "/_authenticated/invoice/": {
       "filePath": "_authenticated/invoice/index.tsx",
       "parent": "/_authenticated"
@@ -5858,6 +5939,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/products/": {
       "filePath": "_authenticated/products/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/purchase-history/": {
+      "filePath": "_authenticated/purchase-history/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/purchase-invoice/": {

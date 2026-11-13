@@ -16,12 +16,24 @@ import { useUpdateDashboardLayoutMutation } from '@/stores/user-preferences.api'
 export interface DashboardLayout {
   sections: string[]
   cards: string[]
+  /** Settings → Dashboard: sections, widgets and cards switched off (new items show by default). */
+  hidden: string[]
 }
 
-export const DASHBOARD_SECTIONS = ['quick-links', 'kpis', 'charts', 'top-lists', 'activities', 'upcoming'] as const
+export const DASHBOARD_SECTIONS = [
+  'quick-links',
+  'kpis',
+  'finance',
+  'sales-expenses',
+  'money',
+  'charts',
+  'top-lists',
+  'activities',
+  'upcoming',
+] as const
 export type DashboardSectionId = (typeof DASHBOARD_SECTIONS)[number]
 
-const EMPTY: DashboardLayout = { sections: [], cards: [] }
+const EMPTY_ORDER: Pick<DashboardLayout, 'sections' | 'cards'> = { sections: [], cards: [] }
 
 const cleanIds = (value: unknown, max: number): string[] =>
   Array.isArray(value)
@@ -30,7 +42,7 @@ const cleanIds = (value: unknown, max: number): string[] =>
 
 export function normalizeDashboardLayout(value: unknown): DashboardLayout {
   const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
-  return { sections: cleanIds(v.sections, 20), cards: cleanIds(v.cards, 100) }
+  return { sections: cleanIds(v.sections, 20), cards: cleanIds(v.cards, 100), hidden: cleanIds(v.hidden, 150) }
 }
 
 /** Puts `ids` in the saved order; ids the saved order doesn't know keep their standard place at the end. */
@@ -70,7 +82,23 @@ export function useDashboardLayout() {
     [dispatch, save]
   )
 
-  const reset = useCallback(() => update(EMPTY), [update])
+  // Reset layout (Arrange) puts the standard ORDER back; what is switched off stays off.
+  const reset = useCallback(() => update(EMPTY_ORDER), [update])
   const isCustomised = layout.sections.length > 0 || layout.cards.length > 0
-  return { layout, update, reset, isCustomised }
+
+  const hiddenSet = useMemo(() => new Set(layout.hidden), [layout.hidden])
+  const isOn = useCallback((id: string) => !hiddenSet.has(id), [hiddenSet])
+  /** Switches one or more items on/off in a single save. */
+  const setOn = useCallback(
+    (ids: string | string[], on: boolean) => {
+      const list = Array.isArray(ids) ? ids : [ids]
+      const next = new Set(latest.current.hidden)
+      list.forEach((id) => (on ? next.delete(id) : next.add(id)))
+      update({ hidden: [...next] })
+    },
+    [update]
+  )
+  const showEverything = useCallback(() => update({ hidden: [] }), [update])
+
+  return { layout, update, reset, isCustomised, isOn, setOn, showEverything, hiddenCount: layout.hidden.length }
 }

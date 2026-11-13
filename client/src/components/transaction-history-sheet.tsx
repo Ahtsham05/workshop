@@ -1,25 +1,36 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react'
+import { formatPaymentMethod, PAYMENT_MODE_BADGE, type PaymentMode } from '@/lib/payment-modes'
 import {
   AlertCircle,
   CalendarRange,
+  CircleAlert,
+  CircleCheck,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
   FileClock,
+  FileSpreadsheet,
   ListOrdered,
   Loader2,
+  Maximize2,
   Package,
   ReceiptText,
   RefreshCw,
   Search,
   UserRound,
+  Users,
+  Wallet,
   X,
 } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { useDispatch, useSelector } from 'react-redux'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Input } from '@/components/ui/input'
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -34,6 +45,11 @@ import { formatAppDate } from '@/lib/date-format'
 import { cn } from '@/lib/utils'
 import { useGetPurchaseHistoryQuery } from '@/stores/purchase.api'
 import { useGetInvoiceHistoryQuery } from '@/stores/invoice.api'
+import { useGetAllCustomersQuery } from '@/stores/customer.api'
+import { fetchAllSuppliers } from '@/stores/supplier.slice'
+import type { AppDispatch, RootState } from '@/stores/store'
+import { normalizeSuppliersList } from '@/features/purchase-invoice/utils/catalog-helpers'
+import { useIsPageHidden } from '@/hooks/use-hidden-modules'
 import type { TransactionHistoryEntry, TransactionHistoryItem } from '@/stores/transactionHistory.types'
 
 /**
@@ -53,8 +69,27 @@ type HistoryView = 'invoice' | 'item'
 const VIEW_STORAGE_KEY = (mode: TransactionHistoryMode) => `transactionHistoryView:${mode}`
 const DEFAULT_RANGE_DAYS = 30
 const ROW_LIMIT = 500
+/** The full page asks for more (the server allows up to 2000). */
+const PAGE_ROW_LIMIT = 2000
 /** Rows rendered up front; more mount as the list scrolls (no virtualizer in this app). */
 const RENDER_CHUNK = 120
+
+
+/** "Check #10234", "Credit Card + Cash", account name, or "cash" — one label for list, sheet and export. */
+function historyPaymentLabel(entry: TransactionHistoryEntry): string {
+  const split = entry.splitWalletType
+  return (
+    formatPaymentMethod({
+      paymentMode: entry.paymentMode,
+      paymentMethod: entry.paymentMethod,
+      walletType: entry.walletType,
+      paymentReference: entry.paymentReference,
+      splitPaymentMethod: split ? (split === 'cash' ? 'cash' : 'wallet') : undefined,
+      splitWalletType: split && split !== 'cash' ? split : undefined,
+      splitPaidAmount: entry.splitPaidAmount,
+    }) || (entry.paymentMethod === 'wallet' && entry.walletType ? entry.walletType : entry.paymentMethod)
+  )
+}
 
 function readStoredView(mode: TransactionHistoryMode): HistoryView {
   try {
@@ -214,6 +249,14 @@ interface ItemRow {
 
 type NavRow = { kind: 'invoice'; key: string; entry: TransactionHistoryEntry } | ({ kind: 'item' } & ItemRow)
 
+export type TransactionHistoryVariant = 'sheet' | 'page'
+
+/** The full-page routes of each history — linked from the panel, sidebar and quick links. */
+export const TRANSACTION_HISTORY_PAGE: Record<TransactionHistoryMode, '/invoice-history' | '/purchase-history'> = {
+  sale: '/invoice-history',
+  purchase: '/purchase-history',
+}
+
 interface TransactionHistorySheetProps {
   mode: TransactionHistoryMode
   open: boolean
@@ -223,37 +266,86 @@ interface TransactionHistorySheetProps {
 }
 
 export function TransactionHistorySheet({ mode, open, onOpenChange, currentParty }: TransactionHistorySheetProps) {
+  const searchRef = useRef<HTMLInputElement | null>(null)
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side='right'
+        className='w-full gap-0 p-0 sm:max-w-3xl xl:max-w-4xl'
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          searchRef.current?.focus()
+        }}
+      >
+        <TransactionHistoryBrowser mode={mode} variant='sheet' active={open} currentParty={currentParty} searchRef={searchRef} />
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+interface TransactionHistoryBrowserProps {
+  mode: TransactionHistoryMode
+  /** 'sheet' = the side panel on New Invoice / New Purchase; 'page' = /invoice-history, /purchase-history. */
+  variant: TransactionHistoryVariant
+  /** Fetch only while shown (the sheet stays mounted while closed). */
+  active: boolean
+  currentParty?: { id: string; name: string } | null
+  searchRef?: RefObject<HTMLInputElement | null>
+}
+
+/**
+ * The history itself — filters, invoice-wise / item-wise list, totals and the full-details
+ * dialogs. One engine for the side panel and the full pages so both always match; the page
+ * adds summary cards, a customer/supplier picker, Excel export and a bigger row limit.
+ */
+export function TransactionHistoryBrowser({ mode, variant, active, currentParty, searchRef: externalSearchRef }: TransactionHistoryBrowserProps) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
   const isPurchase = mode === 'purchase'
+  const isPage = variant === 'page'
   const partyLabel = isPurchase ? t('Supplier') : t('Customer')
+  const rowLimit = isPage ? PAGE_ROW_LIMIT : ROW_LIMIT
+  const historyPageHidden = useIsPageHidden(TRANSACTION_HISTORY_PAGE[mode])
 
   const [today, setToday] = useState(getBusinessToday)
   const [range, setRange] = useState(() => presetRange('last30', getBusinessToday()))
   const [view, setView] = useState<HistoryView>(() => readStoredView(mode))
   const [typeFilter, setTypeFilter] = useState('all')
   const [partyOnly, setPartyOnly] = useState(false)
+  const [pickedPartyId, setPickedPartyId] = useState('')
   const [searchText, setSearchText] = useState('')
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [activeIndex, setActiveIndex] = useState(0)
   const [renderCount, setRenderCount] = useState(RENDER_CHUNK)
   const [detailId, setDetailId] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
   const listRef = useRef<HTMLDivElement | null>(null)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
-  const searchRef = useRef<HTMLInputElement | null>(null)
+  const ownSearchRef = useRef<HTMLInputElement | null>(null)
+  const searchRef = externalSearchRef ?? ownSearchRef
 
   // A panel left open across midnight should still call the new day "today".
   useEffect(() => {
-    if (open) setToday(getBusinessToday())
-  }, [open])
+    if (active) setToday(getBusinessToday())
+  }, [active])
+
+  // The page opens ready to type (desktop only — on a phone it would pop the keyboard up).
+  useEffect(() => {
+    if (!isPage) return
+    try {
+      if (window.matchMedia('(min-width: 640px)').matches) searchRef.current?.focus()
+    } catch {
+      // matchMedia unavailable — just don't focus.
+    }
+  }, [isPage, searchRef])
 
   useEffect(() => {
     const id = window.setTimeout(() => setSearch(searchText.trim()), 300)
     return () => window.clearTimeout(id)
   }, [searchText])
 
-  const partyFilterId = partyOnly && currentParty?.id ? currentParty.id : ''
+  const partyFilterId = isPage ? pickedPartyId : partyOnly && currentParty?.id ? currentParty.id : ''
   // The party chip is only meaningful while that party is still on the form.
   useEffect(() => {
     if (!currentParty?.id) setPartyOnly(false)
@@ -264,7 +356,7 @@ export function TransactionHistorySheet({ mode, open, onOpenChange, currentParty
     const next: Record<string, unknown> = {
       startDate: range.from,
       endDate: range.to,
-      limit: ROW_LIMIT,
+      limit: rowLimit,
     }
     if (search) {
       next.search = search
@@ -278,10 +370,10 @@ export function TransactionHistorySheet({ mode, open, onOpenChange, currentParty
       if (partyFilterId) next.customerId = partyFilterId
     }
     return next
-  }, [mode, isPurchase, typeFilter, range.from, range.to, search, partyFilterId])
+  }, [mode, isPurchase, typeFilter, range.from, range.to, search, partyFilterId, rowLimit])
 
-  const purchaseQuery = useGetPurchaseHistoryQuery(params, { skip: !open || !isPurchase, refetchOnMountOrArgChange: 30 })
-  const saleQuery = useGetInvoiceHistoryQuery(params, { skip: !open || isPurchase, refetchOnMountOrArgChange: 30 })
+  const purchaseQuery = useGetPurchaseHistoryQuery(params, { skip: !active || !isPurchase, refetchOnMountOrArgChange: 30 })
+  const saleQuery = useGetInvoiceHistoryQuery(params, { skip: !active || isPurchase, refetchOnMountOrArgChange: 30 })
   const query = isPurchase ? purchaseQuery : saleQuery
   const entries = useMemo(() => query.data?.results ?? [], [query.data])
   const truncated = Boolean(query.data?.truncated)
@@ -335,24 +427,33 @@ export function TransactionHistorySheet({ mode, open, onOpenChange, currentParty
     return totals
   }, [view, entries, itemRows])
 
+  /** Document-level totals (the page's summary cards — the same whichever tab is open). */
+  const documentTotals = useMemo(
+    () =>
+      entries.reduce(
+        (acc, entry) => {
+          const isQuote = entry.type === 'quotation'
+          return {
+            count: acc.count + 1,
+            qty: acc.qty + entry.totalQuantity,
+            amount: acc.amount + entry.total,
+            paid: acc.paid + (isQuote ? 0 : entry.paid),
+            remaining: acc.remaining + (isQuote ? 0 : Math.max(0, entry.remaining)),
+            parties: entry.partyId ? acc.parties.add(entry.partyId) : acc.parties,
+          }
+        },
+        { count: 0, qty: 0, amount: 0, paid: 0, remaining: 0, parties: new Set<string>() },
+      ),
+    [entries],
+  )
+
   const summary = useMemo(() => {
-    if (view === 'invoice') {
-      return entries.reduce(
-        (acc, entry) => ({
-          count: acc.count + 1,
-          qty: acc.qty + entry.totalQuantity,
-          amount: acc.amount + entry.total,
-          paid: acc.paid + entry.paid,
-          remaining: acc.remaining + Math.max(0, entry.remaining),
-        }),
-        { count: 0, qty: 0, amount: 0, paid: 0, remaining: 0 },
-      )
-    }
+    if (view === 'invoice') return documentTotals
     return itemRows.reduce(
       (acc, row) => ({ ...acc, count: acc.count + 1, qty: acc.qty + row.item.quantity, amount: acc.amount + row.item.total }),
       { count: 0, qty: 0, amount: 0, paid: 0, remaining: 0 },
     )
-  }, [view, entries, itemRows])
+  }, [view, documentTotals, itemRows])
 
   // New data or a new view starts back at the top.
   useEffect(() => {
@@ -509,375 +610,655 @@ export function TransactionHistorySheet({ mode, open, onOpenChange, currentParty
     listRef.current?.focus({ preventScroll: true })
   }
 
+  const handleExport = async () => {
+    if (exporting || navRows.length === 0) return
+    setExporting(true)
+    try {
+      await exportHistoryToExcel({ mode, view, entries, itemRows, range, partyLabel })
+    } catch {
+      toast.error(t('Export failed'))
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const visibleRows = navRows.slice(0, renderCount)
   const typeOptions = TYPE_OPTIONS[mode]
   const errorMessage =
     query.error && typeof query.error === 'object' && 'data' in query.error
       ? ((query.error.data as { message?: string } | undefined)?.message ?? null)
       : null
+  const hasFilters = Boolean(search || typeFilter !== 'all' || partyFilterId)
+  const clearFilters = () => {
+    setSearchText('')
+    setTypeFilter('all')
+    setPickedPartyId('')
+    setPartyOnly(false)
+  }
 
-  return (
-    <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent
-          side='right'
-          className='w-full gap-0 p-0 sm:max-w-3xl xl:max-w-4xl'
-          onOpenAutoFocus={(event) => {
-            event.preventDefault()
-            searchRef.current?.focus()
+  // ── Pieces shared by both layouts ──
+
+  const filters = (
+    /* Filters — desktop: one row (◀ from–to ▶ · preset · refresh). Phones: the two
+       dates get a full row of their own (they're unreadable squeezed beside the
+       arrows), and ◀ preset ▶ · refresh drop to the row below via flex `order`. */
+    <div className='space-y-2.5 border-b bg-muted/30 px-4 py-3'>
+      <div className='flex flex-wrap items-center gap-2'>
+        <div className='flex min-w-0 items-center gap-1 max-sm:contents'>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type='button'
+                variant='outline'
+                size='icon'
+                className='h-9 w-9 shrink-0 max-sm:order-3'
+                onClick={() => stepRange(-1)}
+                aria-label={t('Previous period')}
+              >
+                <ChevronLeft className='h-4 w-4' />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t('Previous period')}</TooltipContent>
+          </Tooltip>
+          <DatePicker
+            value={range.from}
+            onChange={(value) => value && applyRange(value, range.to < value ? value : range.to)}
+            max={today}
+            aria-label={t('From date')}
+            className='h-9 w-[8.5rem] max-sm:order-1 max-sm:w-auto max-sm:min-w-0 max-sm:flex-1'
+          />
+          <span className='px-0.5 text-xs text-muted-foreground max-sm:order-1'>{t('to')}</span>
+          <DatePicker
+            value={range.to}
+            onChange={(value) => value && applyRange(range.from > value ? value : range.from, value)}
+            max={today}
+            aria-label={t('To date')}
+            className='h-9 w-[8.5rem] max-sm:order-1 max-sm:w-auto max-sm:min-w-0 max-sm:flex-1'
+          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type='button'
+                variant='outline'
+                size='icon'
+                className='h-9 w-9 shrink-0 max-sm:order-3'
+                onClick={() => stepRange(1)}
+                disabled={range.to >= today}
+                aria-label={t('Next period')}
+              >
+                <ChevronRight className='h-4 w-4' />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t('Next period')}</TooltipContent>
+          </Tooltip>
+        </div>
+        <div className='hidden max-sm:order-2 max-sm:block max-sm:basis-full' aria-hidden />
+        <Select
+          value={activePreset ?? 'custom'}
+          onValueChange={(value) => {
+            if (value === 'custom') return
+            const next = presetRange(value as PresetId, today)
+            applyRange(next.from, next.to)
           }}
         >
-          <SheetHeader className='border-b px-4 pt-4 pb-3 pr-12'>
-            <SheetTitle className='flex items-center gap-2 text-base'>
-              <FileClock className='h-4 w-4 text-muted-foreground' aria-hidden />
-              {isPurchase ? t('Recent purchases') : t('Recent sales')}
-            </SheetTitle>
-            <SheetDescription className='text-xs'>
-              {formatAppDate(range.from)} – {formatAppDate(range.to)} · {span} {span === 1 ? 'day' : 'days'}
-            </SheetDescription>
-          </SheetHeader>
-
-          {/* Filters — desktop: one row (◀ from–to ▶ · preset · refresh). Phones: the two
-              dates get a full row of their own (they're unreadable squeezed beside the
-              arrows), and ◀ preset ▶ · refresh drop to the row below via flex `order`. */}
-          <div className='space-y-2.5 border-b bg-muted/30 px-4 py-3'>
-            <div className='flex flex-wrap items-center gap-2'>
-              <div className='flex min-w-0 items-center gap-1 max-sm:contents'>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type='button'
-                      variant='outline'
-                      size='icon'
-                      className='h-9 w-9 shrink-0 max-sm:order-3'
-                      onClick={() => stepRange(-1)}
-                      aria-label={t('Previous period')}
-                    >
-                      <ChevronLeft className='h-4 w-4' />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{t('Previous period')}</TooltipContent>
-                </Tooltip>
-                <DatePicker
-                  value={range.from}
-                  onChange={(value) => value && applyRange(value, range.to < value ? value : range.to)}
-                  max={today}
-                  aria-label={t('From date')}
-                  className='h-9 w-[8.5rem] max-sm:order-1 max-sm:w-auto max-sm:min-w-0 max-sm:flex-1'
-                />
-                <span className='px-0.5 text-xs text-muted-foreground max-sm:order-1'>{t('to')}</span>
-                <DatePicker
-                  value={range.to}
-                  onChange={(value) => value && applyRange(range.from > value ? value : range.from, value)}
-                  max={today}
-                  aria-label={t('To date')}
-                  className='h-9 w-[8.5rem] max-sm:order-1 max-sm:w-auto max-sm:min-w-0 max-sm:flex-1'
-                />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type='button'
-                      variant='outline'
-                      size='icon'
-                      className='h-9 w-9 shrink-0 max-sm:order-3'
-                      onClick={() => stepRange(1)}
-                      disabled={range.to >= today}
-                      aria-label={t('Next period')}
-                    >
-                      <ChevronRight className='h-4 w-4' />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{t('Next period')}</TooltipContent>
-                </Tooltip>
-              </div>
-              <div className='hidden max-sm:order-2 max-sm:block max-sm:basis-full' aria-hidden />
-              <Select
-                value={activePreset ?? 'custom'}
-                onValueChange={(value) => {
-                  if (value === 'custom') return
-                  const next = presetRange(value as PresetId, today)
-                  applyRange(next.from, next.to)
-                }}
-              >
-                <SelectTrigger className='h-9 w-[9.5rem] gap-2 max-sm:order-3' aria-label={t('Date range')}>
-                  <CalendarRange className='h-4 w-4 shrink-0 text-muted-foreground' aria-hidden />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRESETS.map((preset) => (
-                    <SelectItem key={preset.id} value={preset.id}>
-                      {t(preset.label)}
-                    </SelectItem>
-                  ))}
-                  {!activePreset && <SelectItem value='custom'>{t('Custom range')}</SelectItem>}
-                </SelectContent>
-              </Select>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type='button'
-                    variant='outline'
-                    size='icon'
-                    className='ml-auto h-9 w-9 shrink-0 max-sm:order-3'
-                    onClick={() => query.refetch()}
-                    disabled={query.isFetching}
-                    aria-label={t('Refresh')}
-                  >
-                    <RefreshCw className={cn('h-4 w-4', query.isFetching && 'animate-spin')} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t('Refresh')}</TooltipContent>
-              </Tooltip>
-            </div>
-
-            <div className='flex flex-wrap items-center gap-2'>
-              <div className='relative min-w-[12rem] flex-1'>
-                <Search className='pointer-events-none absolute top-1/2 left-2.5 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
-                <Input
-                  ref={searchRef}
-                  value={searchText}
-                  onChange={(event) => setSearchText(event.target.value)}
-                  onKeyDown={handleSearchKeyDown}
-                  placeholder={isPurchase ? t('Search product, barcode, supplier, invoice no…') : t('Search product, barcode, customer, invoice no…')}
-                  className='h-9 bg-background pr-16 pl-8'
-                  aria-label={t('Search history')}
-                />
-                {searchText && (
-                  <button
-                    type='button'
-                    onClick={() => {
-                      setSearchText('')
-                      searchRef.current?.focus()
-                    }}
-                    className='absolute top-1/2 right-9 z-10 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground'
-                    aria-label={t('Clear search')}
-                  >
-                    <X className='h-3.5 w-3.5' />
-                  </button>
-                )}
-              </div>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className='h-9 w-[9.5rem] bg-background' aria-label={t('Type')}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {typeOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {t(option.label)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {currentParty?.id && (
-                <Button
-                  type='button'
-                  variant={partyOnly ? 'default' : 'outline'}
-                  size='sm'
-                  className='h-9 max-w-[14rem] gap-1.5'
-                  onClick={() => setPartyOnly((value) => !value)}
-                  aria-pressed={partyOnly}
-                  title={`${t('Only')} ${currentParty.name}`}
-                >
-                  <UserRound className='h-3.5 w-3.5 shrink-0' />
-                  <span className='truncate'>
-                    {t('Only')} {currentParty.name}
-                  </span>
-                </Button>
-              )}
-            </div>
-          </div>
-
-          <Tabs value={view} onValueChange={handleViewChange} className='min-h-0 flex-1 gap-0'>
-            <div className='flex items-center justify-between gap-2 border-b px-4 py-2'>
-              <TabsList className='h-9'>
-                <TabsTrigger value='invoice' className='gap-1.5 px-3'>
-                  <ReceiptText className='h-3.5 w-3.5' aria-hidden />
-                  {t('Invoice wise')}
-                </TabsTrigger>
-                <TabsTrigger value='item' className='gap-1.5 px-3'>
-                  <ListOrdered className='h-3.5 w-3.5' aria-hidden />
-                  {t('Item wise')}
-                </TabsTrigger>
-              </TabsList>
-              <span className='hidden text-[11px] text-muted-foreground md:inline'>
-                {t('↑↓ move · Enter open')}
-                {view === 'invoice' ? ` · → ${t('expand')}` : ''}
-              </span>
-            </div>
-
-            {/* Column headings (desktop) */}
-            {navRows.length > 0 && (
-              <div
-                className={cn(
-                  'hidden border-b bg-muted/50 px-4 py-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase sm:grid sm:items-center sm:gap-x-3',
-                  view === 'invoice' ? INVOICE_GRID : ITEM_GRID,
-                )}
-              >
-                {view === 'invoice' ? (
-                  <>
-                    <span />
-                    <span>{t('Invoice')}</span>
-                    <span>{partyLabel}</span>
-                    <span className='text-right'>{t('Qty')}</span>
-                    <span>{t('Status')}</span>
-                    <span className='text-right'>{t('Total')}</span>
-                  </>
-                ) : (
-                  <>
-                    <span>{t('Invoice')}</span>
-                    <span>{t('Product')}</span>
-                    <span>{partyLabel}</span>
-                    <span className='text-right'>{t('Qty')}</span>
-                    <span className='text-right'>{t('Price')}</span>
-                    <span className='text-right'>{t('Total')}</span>
-                  </>
-                )}
-              </div>
-            )}
-
-            <div
-              ref={listRef}
-              tabIndex={navRows.length > 0 ? 0 : -1}
-              onKeyDown={handleListKeyDown}
-              role='listbox'
-              aria-label={isPurchase ? t('Recent purchases') : t('Recent sales')}
-              aria-activedescendant={navRows[activeIndex] ? `history-row-${activeIndex}` : undefined}
-              className={cn(
-                'min-h-0 flex-1 overflow-y-auto outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-inset',
-                showingStale && 'opacity-60',
-              )}
+          <SelectTrigger className='h-9 w-[9.5rem] gap-2 bg-background max-sm:order-3' aria-label={t('Date range')}>
+            <CalendarRange className='h-4 w-4 shrink-0 text-muted-foreground' aria-hidden />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PRESETS.map((preset) => (
+              <SelectItem key={preset.id} value={preset.id}>
+                {t(preset.label)}
+              </SelectItem>
+            ))}
+            {!activePreset && <SelectItem value='custom'>{t('Custom range')}</SelectItem>}
+          </SelectContent>
+        </Select>
+        <div className='ml-auto flex shrink-0 items-center gap-2 max-sm:order-3'>
+          {isPage && (
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              className='h-9 gap-1.5'
+              onClick={() => void handleExport()}
+              disabled={exporting || navRows.length === 0}
             >
-              {query.isLoading ? (
-                <div className='space-y-2 p-4'>
-                  {Array.from({ length: 8 }).map((_, index) => (
-                    <Skeleton key={index} className='h-12 w-full' />
-                  ))}
-                </div>
-              ) : query.isError ? (
-                <div className='flex flex-col items-center gap-3 px-6 py-16 text-center'>
-                  <AlertCircle className='h-8 w-8 text-destructive' />
-                  <p className='text-sm font-medium'>{t("Couldn't load the history")}</p>
-                  {errorMessage && <p className='text-xs text-muted-foreground'>{errorMessage}</p>}
-                  <Button type='button' size='sm' variant='outline' onClick={() => query.refetch()}>
-                    {t('Try again')}
-                  </Button>
-                </div>
-              ) : navRows.length === 0 ? (
-                <div className='flex flex-col items-center gap-2 px-6 py-16 text-center'>
-                  <Package className='h-8 w-8 text-muted-foreground/60' />
-                  <p className='text-sm font-medium'>
-                    {search
-                      ? t('Nothing matches your search')
-                      : isPurchase
-                        ? t('No purchases in this period')
-                        : t('No sales in this period')}
-                  </p>
-                  <p className='text-xs text-muted-foreground'>{t('Try a wider date range or a different filter.')}</p>
-                </div>
-              ) : (
-                <>
-                  {visibleRows.map((row, index) => {
-                    const dayKey = dayKeyOf(row.entry.date)
-                    const previous = index > 0 ? visibleRows[index - 1] : null
-                    const showDayHeader = !previous || dayKeyOf(previous.entry.date) !== dayKey
-                    const day = dayTotals.get(dayKey)
-                    const active = index === activeIndex
-                    return (
-                      <Fragment key={row.key}>
-                        {showDayHeader && (
-                          <div className='flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-1.5 text-xs'>
-                            <span className='font-semibold text-foreground'>{dayLabel(dayKey, today, t)}</span>
-                            {day && (
-                              <span className='text-muted-foreground tabular-nums'>
-                                {day.count} {view === 'invoice' ? (day.count === 1 ? 'invoice' : 'invoices') : day.count === 1 ? 'line' : 'lines'}
-                                {' · '}
-                                <span className='font-medium text-foreground'>{formatMoney(day.amount)}</span>
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {row.kind === 'invoice' ? (
-                          <InvoiceRow
-                            index={index}
-                            entry={row.entry}
-                            active={active}
-                            expanded={expanded.has(row.entry.id)}
-                            tokens={tokens}
-                            isPurchase={isPurchase}
-                            onSelect={() => selectRow(index)}
-                            onToggle={() => toggleExpanded(row.entry.id)}
-                            onOpen={() => setDetailId(row.entry.id)}
-                          />
-                        ) : (
-                          <ItemLine
-                            index={index}
-                            row={row}
-                            active={active}
-                            tokens={tokens}
-                            isPurchase={isPurchase}
-                            onSelect={() => selectRow(index)}
-                            onOpen={() => setDetailId(row.entry.id)}
-                          />
-                        )}
-                      </Fragment>
-                    )
-                  })}
-                  {renderCount < navRows.length && (
-                    <div ref={sentinelRef} className='flex justify-center py-4 text-xs text-muted-foreground'>
-                      <Loader2 className='mr-2 h-3.5 w-3.5 animate-spin' /> {t('Loading more…')}
+              {exporting ? <Loader2 className='h-4 w-4 animate-spin' /> : <FileSpreadsheet className='h-4 w-4' />}
+              <span className='max-sm:hidden'>{t('Export Excel')}</span>
+            </Button>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type='button'
+                variant='outline'
+                size='icon'
+                className='h-9 w-9 shrink-0'
+                onClick={() => query.refetch()}
+                disabled={query.isFetching || !active}
+                aria-label={t('Refresh')}
+              >
+                <RefreshCw className={cn('h-4 w-4', query.isFetching && 'animate-spin')} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t('Refresh')}</TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+
+      <div className='flex flex-wrap items-center gap-2'>
+        <div className='relative min-w-[12rem] flex-1 max-sm:basis-full'>
+          <Search className='pointer-events-none absolute top-1/2 left-2.5 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
+          <Input
+            ref={searchRef}
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            placeholder={isPurchase ? t('Search product, barcode, supplier, invoice no…') : t('Search product, barcode, customer, invoice no…')}
+            className='h-9 bg-background pr-16 pl-8'
+            aria-label={t('Search history')}
+          />
+          {searchText && (
+            <button
+              type='button'
+              onClick={() => {
+                setSearchText('')
+                searchRef.current?.focus()
+              }}
+              className='absolute top-1/2 right-9 z-10 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground'
+              aria-label={t('Clear search')}
+            >
+              <X className='h-3.5 w-3.5' />
+            </button>
+          )}
+        </div>
+        {isPage && (
+          <PartyFilterSelect
+            mode={mode}
+            value={pickedPartyId}
+            onChange={setPickedPartyId}
+            className='w-[13rem] max-sm:w-auto max-sm:min-w-0 max-sm:flex-1'
+          />
+        )}
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className='h-9 w-[9.5rem] bg-background' aria-label={t('Type')}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {typeOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {t(option.label)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {!isPage && currentParty?.id && (
+          <Button
+            type='button'
+            variant={partyOnly ? 'default' : 'outline'}
+            size='sm'
+            className='h-9 max-w-[14rem] gap-1.5'
+            onClick={() => setPartyOnly((value) => !value)}
+            aria-pressed={partyOnly}
+            title={`${t('Only')} ${currentParty.name}`}
+          >
+            <UserRound className='h-3.5 w-3.5 shrink-0' />
+            <span className='truncate'>
+              {t('Only')} {currentParty.name}
+            </span>
+          </Button>
+        )}
+        {isPage && hasFilters && (
+          <Button type='button' variant='ghost' size='sm' className='h-9 gap-1.5 text-muted-foreground' onClick={clearFilters}>
+            <X className='h-3.5 w-3.5' />
+            {t('Clear filters')}
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+
+  const list = (
+    <Tabs value={view} onValueChange={handleViewChange} className={cn('min-h-0 flex-1 gap-0', isPage && 'max-sm:flex-none')}>
+      <div className='flex items-center justify-between gap-2 border-b px-4 py-2'>
+        <TabsList className='h-9'>
+          <TabsTrigger value='invoice' className='gap-1.5 px-3'>
+            <ReceiptText className='h-3.5 w-3.5' aria-hidden />
+            {t('Invoice wise')}
+          </TabsTrigger>
+          <TabsTrigger value='item' className='gap-1.5 px-3'>
+            <ListOrdered className='h-3.5 w-3.5' aria-hidden />
+            {t('Item wise')}
+          </TabsTrigger>
+        </TabsList>
+        <span className='hidden text-[11px] text-muted-foreground md:inline'>
+          {t('↑↓ move · Enter open')}
+          {view === 'invoice' ? ` · → ${t('expand')}` : ''}
+        </span>
+      </div>
+
+      {/* Column headings (desktop) */}
+      {navRows.length > 0 && (
+        <div
+          className={cn(
+            'hidden border-b bg-muted/50 px-4 py-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase sm:grid sm:items-center sm:gap-x-3',
+            view === 'invoice' ? INVOICE_GRID : ITEM_GRID,
+          )}
+        >
+          {view === 'invoice' ? (
+            <>
+              <span />
+              <span>{t('Invoice')}</span>
+              <span>{partyLabel}</span>
+              <span className='text-right'>{t('Qty')}</span>
+              <span>{t('Status')}</span>
+              <span className='text-right'>{t('Total')}</span>
+            </>
+          ) : (
+            <>
+              <span>{t('Invoice')}</span>
+              <span>{t('Product')}</span>
+              <span>{partyLabel}</span>
+              <span className='text-right'>{t('Qty')}</span>
+              <span className='text-right'>{t('Price')}</span>
+              <span className='text-right'>{t('Total')}</span>
+            </>
+          )}
+        </div>
+      )}
+
+      <div
+        ref={listRef}
+        tabIndex={navRows.length > 0 ? 0 : -1}
+        onKeyDown={handleListKeyDown}
+        role='listbox'
+        aria-label={isPurchase ? t('Purchase history') : t('Invoice history')}
+        aria-activedescendant={navRows[activeIndex] ? `history-row-${activeIndex}` : undefined}
+        className={cn(
+          'min-h-0 flex-1 overflow-y-auto outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-inset',
+          // Phone page: the filters wrap tall, so the card grows and the list keeps a usable height.
+          isPage && 'max-sm:h-[70dvh] max-sm:flex-none',
+          showingStale && 'opacity-60',
+        )}
+      >
+        {query.isLoading || (!query.data && !query.isError) ? (
+          <div className='space-y-2 p-4'>
+            {Array.from({ length: 8 }).map((_, index) => (
+              <Skeleton key={index} className='h-12 w-full' />
+            ))}
+          </div>
+        ) : query.isError ? (
+          <div className='flex flex-col items-center gap-3 px-6 py-16 text-center'>
+            <AlertCircle className='h-8 w-8 text-destructive' />
+            <p className='text-sm font-medium'>{t("Couldn't load the history")}</p>
+            {errorMessage && <p className='text-xs text-muted-foreground'>{errorMessage}</p>}
+            <Button type='button' size='sm' variant='outline' onClick={() => query.refetch()}>
+              {t('Try again')}
+            </Button>
+          </div>
+        ) : navRows.length === 0 ? (
+          <div className='flex flex-col items-center gap-2 px-6 py-16 text-center'>
+            <Package className='h-8 w-8 text-muted-foreground/60' />
+            <p className='text-sm font-medium'>
+              {search ? t('Nothing matches your search') : isPurchase ? t('No purchases in this period') : t('No sales in this period')}
+            </p>
+            <p className='text-xs text-muted-foreground'>{t('Try a wider date range or a different filter.')}</p>
+          </div>
+        ) : (
+          <>
+            {visibleRows.map((row, index) => {
+              const dayKey = dayKeyOf(row.entry.date)
+              const previous = index > 0 ? visibleRows[index - 1] : null
+              const showDayHeader = !previous || dayKeyOf(previous.entry.date) !== dayKey
+              const day = dayTotals.get(dayKey)
+              const isActive = index === activeIndex
+              return (
+                <Fragment key={row.key}>
+                  {showDayHeader && (
+                    <div className='flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-1.5 text-xs'>
+                      <span className='font-semibold text-foreground'>{dayLabel(dayKey, today, t)}</span>
+                      {day && (
+                        <span className='text-muted-foreground tabular-nums'>
+                          {day.count} {view === 'invoice' ? (day.count === 1 ? 'invoice' : 'invoices') : day.count === 1 ? 'line' : 'lines'}
+                          {' · '}
+                          <span className='font-medium text-foreground'>{formatMoney(day.amount)}</span>
+                        </span>
+                      )}
                     </div>
                   )}
-                  {truncated && renderCount >= navRows.length && (
-                    <p className='px-4 py-3 text-center text-xs text-muted-foreground'>
-                      {t('Showing the latest')} {ROW_LIMIT} {isPurchase ? t('purchases') : t('invoices')}. {t('Narrow the date range to see older ones.')}
-                    </p>
+                  {row.kind === 'invoice' ? (
+                    <InvoiceRow
+                      index={index}
+                      entry={row.entry}
+                      active={isActive}
+                      expanded={expanded.has(row.entry.id)}
+                      tokens={tokens}
+                      isPurchase={isPurchase}
+                      onSelect={() => selectRow(index)}
+                      onToggle={() => toggleExpanded(row.entry.id)}
+                      onOpen={() => setDetailId(row.entry.id)}
+                    />
+                  ) : (
+                    <ItemLine
+                      index={index}
+                      row={row}
+                      active={isActive}
+                      tokens={tokens}
+                      isPurchase={isPurchase}
+                      onSelect={() => selectRow(index)}
+                      onOpen={() => setDetailId(row.entry.id)}
+                    />
                   )}
-                </>
-              )}
-            </div>
-          </Tabs>
-
-          {/* Totals */}
-          {navRows.length > 0 && (
-            <div className='flex border-t bg-muted/30 text-xs [&>*+*]:border-l'>
-              <SummaryCell
-                label={view === 'invoice' ? (isPurchase ? t('Purchases') : t('Invoices')) : t('Lines')}
-                value={`${summary.count}${truncated ? '+' : ''}`}
-              />
-              <SummaryCell label={t('Total qty')} value={formatQty(summary.qty)} />
-              <SummaryCell label={t('Total amount')} value={formatMoney(summary.amount)} strong />
-              {view === 'invoice' && (
-                <>
-                  <SummaryCell label={t('Paid')} value={formatMoney(summary.paid)} className='max-sm:hidden' />
-                  <SummaryCell
-                    label={t('Outstanding')}
-                    value={formatMoney(summary.remaining)}
-                    className={cn('max-sm:hidden', summary.remaining > 0 && '[&_strong]:text-rose-600 dark:[&_strong]:text-rose-400')}
-                  />
-                </>
-              )}
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
-
-      {isPurchase ? (
-        <PurchaseViewDrawer
-          purchaseId={detailId}
-          open={Boolean(detailId)}
-          onOpenChange={(next) => !next && setDetailId(null)}
-          onCloseAutoFocus={returnFocusToList}
-        />
-      ) : (
-        <InvoiceDetailDialog
-          invoiceId={detailId ?? undefined}
-          open={Boolean(detailId)}
-          onOpenChange={(next) => !next && setDetailId(null)}
-          onCloseAutoFocus={returnFocusToList}
-        />
-      )}
-    </>
+                </Fragment>
+              )
+            })}
+            {renderCount < navRows.length && (
+              <div ref={sentinelRef} className='flex justify-center py-4 text-xs text-muted-foreground'>
+                <Loader2 className='mr-2 h-3.5 w-3.5 animate-spin' /> {t('Loading more…')}
+              </div>
+            )}
+            {truncated && renderCount >= navRows.length && (
+              <p className='px-4 py-3 text-center text-xs text-muted-foreground'>
+                {t('Showing the latest')} {rowLimit} {isPurchase ? t('purchases') : t('invoices')}. {t('Narrow the date range to see older ones.')}
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    </Tabs>
   )
+
+  const totals =
+    navRows.length > 0 ? (
+      <div className='flex border-t bg-muted/30 text-xs [&>*+*]:border-l'>
+        <SummaryCell
+          label={view === 'invoice' ? (isPurchase ? t('Purchases') : t('Invoices')) : t('Lines')}
+          value={`${summary.count}${truncated ? '+' : ''}`}
+        />
+        <SummaryCell label={t('Total qty')} value={formatQty(summary.qty)} />
+        <SummaryCell label={t('Total amount')} value={formatMoney(summary.amount)} strong />
+        {view === 'invoice' && (
+          <>
+            <SummaryCell label={t('Paid')} value={formatMoney(summary.paid)} className='max-sm:hidden' />
+            <SummaryCell
+              label={t('Outstanding')}
+              value={formatMoney(summary.remaining)}
+              className={cn('max-sm:hidden', summary.remaining > 0 && '[&_strong]:text-rose-600 dark:[&_strong]:text-rose-400')}
+            />
+          </>
+        )}
+      </div>
+    ) : null
+
+  const detailDialogs = isPurchase ? (
+    <PurchaseViewDrawer
+      purchaseId={detailId}
+      open={Boolean(detailId)}
+      onOpenChange={(next) => !next && setDetailId(null)}
+      onCloseAutoFocus={returnFocusToList}
+    />
+  ) : (
+    <InvoiceDetailDialog
+      invoiceId={detailId ?? undefined}
+      open={Boolean(detailId)}
+      onOpenChange={(next) => !next && setDetailId(null)}
+      onCloseAutoFocus={returnFocusToList}
+    />
+  )
+
+  if (!isPage) {
+    return (
+      <>
+        <SheetHeader className='border-b px-4 pt-4 pb-3 pr-12'>
+          <div className='flex items-start justify-between gap-3'>
+            <div className='min-w-0 space-y-1'>
+              <SheetTitle className='flex items-center gap-2 text-base'>
+                <FileClock className='h-4 w-4 text-muted-foreground' aria-hidden />
+                {isPurchase ? t('Recent purchases') : t('Recent sales')}
+              </SheetTitle>
+              <SheetDescription className='text-xs'>
+                {formatAppDate(range.from)} – {formatAppDate(range.to)} · {span} {span === 1 ? 'day' : 'days'}
+              </SheetDescription>
+            </div>
+            {!historyPageHidden && (
+              <Button asChild variant='ghost' size='sm' className='h-8 shrink-0 gap-1.5 text-xs'>
+                {/* New tab: this panel sits on a half-filled invoice that must not be left. */}
+                <Link to={TRANSACTION_HISTORY_PAGE[mode]} search={{ tab: 'history' }} target='_blank' rel='noopener'>
+                  <Maximize2 className='h-3.5 w-3.5' />
+                  <span className='max-sm:hidden'>{t('Open full page')}</span>
+                </Link>
+              </Button>
+            )}
+          </div>
+        </SheetHeader>
+        {filters}
+        {list}
+        {totals}
+        {detailDialogs}
+      </>
+    )
+  }
+
+  const loadingCards = !query.data
+  return (
+    <div className='space-y-4'>
+      <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6'>
+        <StatCard
+          icon={ReceiptText}
+          tone='sky'
+          label={isPurchase ? t('Purchases') : t('Invoices')}
+          value={`${documentTotals.count}${truncated ? '+' : ''}`}
+          hint={`${span} ${span === 1 ? 'day' : 'days'}`}
+          loading={loadingCards}
+        />
+        <StatCard
+          icon={Wallet}
+          tone='violet'
+          label={isPurchase ? t('Total purchases') : t('Total sales')}
+          value={formatMoney(documentTotals.amount)}
+          hint={documentTotals.count ? `${t('Avg')} ${formatMoney(documentTotals.amount / documentTotals.count)}` : undefined}
+          loading={loadingCards}
+        />
+        <StatCard
+          icon={CircleCheck}
+          tone='emerald'
+          label={isPurchase ? t('Paid') : t('Received')}
+          value={formatMoney(documentTotals.paid)}
+          loading={loadingCards}
+        />
+        <StatCard
+          icon={CircleAlert}
+          tone='rose'
+          label={isPurchase ? t('Payable') : t('Outstanding')}
+          value={formatMoney(documentTotals.remaining)}
+          valueClassName={documentTotals.remaining > 0 ? 'text-rose-600 dark:text-rose-400' : undefined}
+          loading={loadingCards}
+        />
+        <StatCard
+          icon={Package}
+          tone='amber'
+          label={t('Total qty')}
+          value={formatQty(documentTotals.qty)}
+          hint={`${itemRows.length} ${itemRows.length === 1 ? 'line' : 'lines'}`}
+          loading={loadingCards}
+        />
+        <StatCard
+          icon={Users}
+          tone='slate'
+          label={isPurchase ? t('Suppliers') : t('Customers')}
+          value={String(documentTotals.parties.size)}
+          loading={loadingCards}
+        />
+      </div>
+
+      <div className='flex h-[max(30rem,calc(100dvh_-_14rem))] min-w-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm max-sm:h-auto'>
+        {filters}
+        {list}
+        {totals}
+      </div>
+      {detailDialogs}
+    </div>
+  )
+}
+
+const STAT_TONES = {
+  sky: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  violet: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  emerald: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  rose: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+  amber: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  slate: 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
+} as const
+
+function StatCard({
+  icon: Icon,
+  tone,
+  label,
+  value,
+  hint,
+  loading,
+  valueClassName,
+}: {
+  icon: typeof Package
+  tone: keyof typeof STAT_TONES
+  label: string
+  value: string
+  hint?: string
+  loading?: boolean
+  valueClassName?: string
+}) {
+  return (
+    <div className='flex min-w-0 items-center gap-3 rounded-xl border bg-card p-3 shadow-sm sm:p-4'>
+      <span className={cn('inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg sm:h-10 sm:w-10 xl:hidden 2xl:inline-flex', STAT_TONES[tone])}>
+        <Icon className='h-4 w-4 sm:h-5 sm:w-5' aria-hidden />
+      </span>
+      <div className='min-w-0'>
+        <p className='truncate text-xs text-muted-foreground'>{label}</p>
+        {loading ? (
+          <Skeleton className='mt-1 h-6 w-20' />
+        ) : (
+          <p className={cn('truncate text-lg font-bold tabular-nums sm:text-xl xl:text-lg 2xl:text-xl', valueClassName)} title={value}>{value}</p>
+        )}
+        {hint && !loading && <p className='truncate text-[11px] text-muted-foreground'>{hint}</p>}
+      </div>
+    </div>
+  )
+}
+
+/** Customer (sales) / supplier (purchases) picker for the full page — the list loads on first use. */
+function PartyFilterSelect({
+  mode,
+  value,
+  onChange,
+  className,
+}: {
+  mode: TransactionHistoryMode
+  value: string
+  onChange: (value: string) => void
+  className?: string
+}) {
+  const { t } = useLanguage()
+  const isPurchase = mode === 'purchase'
+  const dispatch = useDispatch<AppDispatch>()
+  const { data: customersData, isFetching: customersLoading } = useGetAllCustomersQuery(undefined, { skip: isPurchase })
+  const suppliersData = useSelector((state: RootState) => state.supplier.data)
+  const suppliers = useMemo(() => normalizeSuppliersList(suppliersData), [suppliersData])
+  const supplierCount = suppliers.length
+  const suppliersLoading = useSelector((state: RootState) =>
+    Boolean((state.supplier as { loadings?: Record<string, boolean> }).loadings?.fetchAllSuppliers),
+  )
+
+  useEffect(() => {
+    if (isPurchase && supplierCount === 0) void dispatch(fetchAllSuppliers({}))
+  }, [isPurchase, supplierCount, dispatch])
+
+  const options = useMemo<SearchableSelectOption[]>(() => {
+    // GET /customers/all sends a plain array; the paged shape is handled too.
+    const rows: Array<{ _id?: string; id?: string; name?: string; phone?: string; picture?: unknown }> = isPurchase
+      ? (suppliers as never[])
+      : ((Array.isArray(customersData) ? customersData : (customersData as { results?: never[] } | undefined)?.results) ?? [])
+    return rows
+      .filter((row) => row && (row._id || row.id))
+      .map((row) => ({
+        value: String(row._id || row.id),
+        label: row.name || '—',
+        sublabel: row.phone || undefined,
+      }))
+  }, [isPurchase, suppliers, customersData])
+
+  const loading = (isPurchase ? suppliersLoading : customersLoading) && options.length === 0
+  return (
+    <SearchableSelect
+      options={options}
+      value={value}
+      onValueChange={onChange}
+      placeholder={loading ? t('Loading…') : isPurchase ? t('All suppliers') : t('All customers')}
+      searchPlaceholder={isPurchase ? t('Search suppliers...') : t('Search customers...')}
+      emptyText={isPurchase ? t('No suppliers found.') : t('No customers found.')}
+      className={cn('h-9 bg-background', className)}
+      popoverClassName='w-[320px]'
+    />
+  )
+}
+
+async function exportHistoryToExcel({
+  mode,
+  view,
+  entries,
+  itemRows,
+  range,
+  partyLabel,
+}: {
+  mode: TransactionHistoryMode
+  view: HistoryView
+  entries: TransactionHistoryEntry[]
+  itemRows: ItemRow[]
+  range: { from: string; to: string }
+  partyLabel: string
+}) {
+  const XLSX = await import('xlsx')
+  const isPurchase = mode === 'purchase'
+  const rows =
+    view === 'invoice'
+      ? entries.map((entry) => ({
+          Date: formatAppDate(dayKeyOf(entry.date)),
+          Time: formatTime(entry.date),
+          [isPurchase ? 'Purchase #' : 'Invoice #']: entry.invoiceNumber,
+          [isPurchase ? 'Supplier bill #' : 'Reference']: entry.referenceNumber || '',
+          [partyLabel]: entry.partyName || '',
+          Type: entry.type === 'pending-converted' ? 'converted' : entry.type,
+          Status: entry.type === 'quotation' ? '' : (entry.settlementStatus ?? ''),
+          Lines: entry.items.length,
+          Quantity: entry.totalQuantity,
+          Discount: entry.discount,
+          Tax: entry.tax,
+          Total: entry.total,
+          Paid: entry.type === 'quotation' ? 0 : entry.paid,
+          Outstanding: entry.type === 'quotation' ? 0 : Math.max(0, entry.remaining),
+          Payment: historyPaymentLabel(entry),
+          'Created by': entry.createdByName || '',
+          Notes: entry.notes || '',
+        }))
+      : itemRows.map(({ entry, item }) => ({
+          Date: formatAppDate(dayKeyOf(entry.date)),
+          [isPurchase ? 'Purchase #' : 'Invoice #']: entry.invoiceNumber,
+          [partyLabel]: entry.partyName || '',
+          Product: item.name,
+          'Barcode / SKU': item.barcode || item.sku || '',
+          Batch: item.batchNumber || '',
+          Quantity: item.quantity,
+          Unit: item.unit || '',
+          Price: item.price,
+          ...(isPurchase ? { 'Sale price': item.salePrice ?? '' } : {}),
+          Discount: item.discountAmount,
+          Total: item.total,
+        }))
+  const sheet = XLSX.utils.json_to_sheet(rows)
+  const book = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(book, sheet, view === 'invoice' ? 'Invoice wise' : 'Item wise')
+  const name = `${isPurchase ? 'purchase' : 'invoice'}-history-${view === 'invoice' ? 'invoices' : 'items'}-${range.from}-to-${range.to}.xlsx`
+  XLSX.writeFile(book, name)
 }
 
 const INVOICE_GRID = 'sm:grid-cols-[1rem_minmax(0,1fr)_minmax(0,1.3fr)_3.5rem_8.25rem_minmax(6.5rem,auto)]'
@@ -983,6 +1364,16 @@ function InvoiceRow({ index, entry, active, expanded, tokens, isPurchase, onSele
         </span>
         <div className='flex flex-wrap items-center gap-1 max-sm:col-start-3 max-sm:row-start-2 max-sm:justify-end'>
           <TypeBadge type={entry.type} />
+          {/* Card / ACH / Check / account sales get their tender chip; plain cash stays quiet. */}
+          {entry.paymentMode && entry.paymentMode !== 'cash' && entry.paymentMode in PAYMENT_MODE_BADGE && (
+            <Badge
+              variant='outline'
+              className={cn('h-5 max-w-[9rem] truncate px-1.5 text-[10px] font-medium', PAYMENT_MODE_BADGE[entry.paymentMode as PaymentMode])}
+              title={historyPaymentLabel(entry)}
+            >
+              {historyPaymentLabel(entry)}
+            </Badge>
+          )}
           {entry.type !== 'quotation' && entry.settlementStatus !== 'paid' && <SettlementBadge status={entry.settlementStatus} />}
         </div>
         <span className='text-right font-semibold tabular-nums max-sm:col-start-3 max-sm:row-start-1'>{formatMoney(entry.total)}</span>
@@ -1007,7 +1398,7 @@ function InvoiceDetails({
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
   const hasDiscount = entry.items.some((item) => item.discountAmount > 0)
-  const paymentLabel = entry.paymentMethod === 'wallet' && entry.walletType ? entry.walletType : t(entry.paymentMethod)
+  const paymentLabel = historyPaymentLabel(entry) || t(entry.paymentMethod)
   return (
     <div className='space-y-3 px-4 pt-1 pb-3 sm:pl-11'>
       <div className='overflow-hidden rounded-md border bg-background'>

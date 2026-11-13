@@ -78,6 +78,7 @@ const PURCHASE_LIST_OPTIONS = [
   'supplier',
   'paymentStatus',
   'paymentType',
+  'paymentMode',
   'invoiceStatus',
   'dueStatus',
   'createdBy',
@@ -140,6 +141,14 @@ const getPossibleDuplicatePurchases = catchAsync(async (req, res) => {
 });
 
 /** Invoice-wise + item-wise purchase history for the New Purchase side panel. */
+// What we paid this supplier for many products before (New Purchase rate-history box).
+const getSupplierCostHistoryBatch = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const { supplierId, items, excludePurchaseId, limit } = req.body;
+  res.send(await purchaseService.getSupplierCostHistoryBatch(filter, { supplierId, items, excludePurchaseId, limit }));
+});
+
 const getPurchaseHistory = catchAsync(async (req, res) => {
   const filter = {};
   applyBranchFilter(filter, req);
@@ -317,6 +326,7 @@ module.exports = {
   getPurchasesSummary,
   exportPurchases,
   getPurchaseHistory,
+  getSupplierCostHistoryBatch,
   addPurchaseComment,
   deletePurchaseComment,
   getPurchase,

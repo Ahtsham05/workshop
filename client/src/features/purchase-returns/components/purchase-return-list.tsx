@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { WarehouseTag } from '@/components/warehouse-tag'
 import { toast } from 'sonner'
-import { Plus, Search, Eye, Trash2, CheckCircle, XCircle, ArrowRightLeft, Receipt, Wallet, PackageCheck } from 'lucide-react'
+import { Plus, Search, Eye, Trash2, CheckCircle, XCircle, ArrowRightLeft, Receipt, Wallet, PackageCheck, Printer } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -51,6 +51,7 @@ import { usePermissions } from '@/context/permission-context'
 import { useFormatMoney } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
 import { formatAppDate } from '@/lib/date-format'
+import { usePurchaseReturnPrinter } from '../lib/use-purchase-return-printer'
 
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -87,6 +88,7 @@ export default function PurchaseReturnList({ onCreateNew, onConvertSalesReturn }
   const [statusFilter, setStatusFilter] = useState('all')
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedReturn, setSelectedReturn] = useState<PurchaseReturn | null>(null)
+  const printReturn = usePurchaseReturnPrinter()
   const [deleteTarget, setDeleteTarget] = useState<PurchaseReturn | null>(null)
 
   // ── Pending customer returns ──────────────────────────────────────────
@@ -569,8 +571,39 @@ export default function PurchaseReturnList({ onCreateNew, onConvertSalesReturn }
                   ))}
                 </TableBody>
               </Table>
-              <div className='text-right font-semibold'>
-                Total: {formatMoney(selectedReturn.totalAmount)}
+              <div className='flex items-center justify-between gap-3'>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  className='gap-1.5'
+                  onClick={() => {
+                    const sup = selectedReturn.supplierId as any
+                    const pur = selectedReturn.purchaseId as any
+                    printReturn({
+                      returnNumber: selectedReturn.returnNumber,
+                      date: selectedReturn.date,
+                      supplierName: (typeof sup === 'object' && sup?.name) || 'Supplier',
+                      supplierPhone: typeof sup === 'object' ? sup?.phone : undefined,
+                      purchaseNumber: typeof pur === 'object' ? pur?.invoiceNumber : undefined,
+                      vendorBillNumber: typeof pur === 'object' ? pur?.vendorBillNumber : undefined,
+                      refundMethod: selectedReturn.refundMethod,
+                      reason: selectedReturn.reason,
+                      notes: selectedReturn.damageDescription,
+                      items: selectedReturn.items.map((item: any) => ({
+                        name: item.name,
+                        quantity: item.quantity,
+                        unit: item.unit,
+                        costPrice: item.costPrice ?? 0,
+                        total: item.total ?? 0,
+                      })),
+                      totalAmount: selectedReturn.totalAmount,
+                    })
+                  }}
+                >
+                  <Printer className='h-4 w-4' />
+                  Print
+                </Button>
+                <span className='font-semibold'>Total: {formatMoney(selectedReturn.totalAmount)}</span>
               </div>
             </div>
           )}

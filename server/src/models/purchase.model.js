@@ -146,6 +146,13 @@ const PurchaseSchema = new mongoose.Schema({
   // account in the same transaction. Always the opposite "bucket" from `paymentMethod` (cash
   // vs wallet) so the two legs land in different ledgers (Cash Book vs Wallet Entry) and never
   // collide on the same reference key.
+  // How the supplier was paid, as a tender (wholesale + distributor payment cards): cash /
+  // card / ach / check / bank. Chosen on purpose on a purchase — unlike a sale, the account the
+  // money left (walletType) is often a different thing (a check written from the bank account).
+  // Falls back to the account's own Wallet.paymentMode (or 'bank') when a client doesn't send it.
+  paymentMode: { type: String, enum: ['cash', 'card', 'ach', 'check', 'bank'] },
+  // Check number / ACH reference / card last-4 or auth code for that tender.
+  paymentReference: { type: String, trim: true, maxlength: 60 },
   splitPaymentMethod: { type: String, enum: ['cash', 'wallet'] },
   splitWalletType: { type: String, trim: true },
   splitPaidAmount: { type: Number, default: 0, min: 0 },
@@ -206,6 +213,32 @@ PurchaseSchema.index({ organizationId: 1, branchId: 1, supplier: 1, purchaseDate
 // generateNextNumber and assertManualNumberAvailable add back org-wide uniqueness in JS for
 // docTypes still configured for org-wide numbering (this codebase's default).
 PurchaseSchema.index({ organizationId: 1, branchId: 1, invoiceNumber: 1 }, { unique: true });
+
+/**
+ * paymentMode: cash when paid from cash; otherwise the tender the user picked (card / ach /
+ * check / bank) — kept as long as it still applies — or, when none was sent (older clients,
+ * imports), the paying account's own Wallet.paymentMode, else 'bank'.
+ */
+PurchaseSchema.pre('save', async function derivePurchasePaymentMode() {
+  const touched =
+    this.isNew || this.isModified('paymentMethod') || this.isModified('walletType') || this.isModified('paymentMode');
+  if (!touched) return;
+
+  if (String(this.paymentMethod || 'cash') !== 'wallet' || !this.walletType) {
+    this.paymentMode = 'cash';
+  } else {
+    const explicit = this.isModified('paymentMode') && this.paymentMode && this.paymentMode !== 'cash';
+    if (!explicit) {
+      const wallet = await mongoose
+        .model('Wallet')
+        .findOne({ organizationId: this.organizationId, branchId: this.branchId, type: String(this.walletType).trim() })
+        .select('paymentMode')
+        .lean();
+      this.paymentMode = wallet?.paymentMode || 'bank';
+    }
+  }
+  if (this.paymentMode === 'cash' || !this.paymentReference) this.paymentReference = undefined;
+});
 
 const Purchase = mongoose.model('Purchase', PurchaseSchema);
 

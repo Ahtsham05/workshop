@@ -12,17 +12,12 @@ import {
   Phone,
   X,
 } from 'lucide-react'
-import {
-  invoiceApi,
-  useGetCustomerProductHistoryQuery,
-  type CustomerProductRateLine,
-} from '@/stores/invoice.api'
+import { type CustomerProductRateLine } from '@/stores/invoice.api'
 import { formatAppDate } from '@/lib/date-format'
 import { useFormatMoney } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
 import { getTextClasses } from '@/utils/urdu-text-utils'
 import { useLanguage } from '@/context/language-context'
-import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -32,10 +27,11 @@ import {
 } from '@/components/ui/tooltip'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { InvoiceDetailDialog } from '@/components/invoice-detail-dialog'
+import { PurchaseViewDrawer } from '@/features/purchase-invoice/components/purchase-view-drawer'
 import {
-  buildRateHistoryArgs,
-  rateHistoryKey,
-  useRateHistoryPrefetching,
+  useRateHistory,
+  type RateHistoryKind,
+  type RateHistoryRef,
 } from './customer-rate-history-cache'
 import {
   RATE_HISTORY_ANCHOR_ATTR,
@@ -68,9 +64,13 @@ interface CustomerRateHistoryPanelProps {
   onOpenChange: (open: boolean) => void
   /** The rate field the box hangs from — it moves with it from row to row. */
   anchor: HTMLElement | null
+  /** Where the box opens: under the field (rows), or beside it (a dialog's field). */
+  side?: 'bottom' | 'right'
+  /** Gap from the field — a dialog's field passes its padding so the box clears the dialog. */
+  sideOffset?: number
   customer: RateHistoryCustomer
-  /** Positive = they owe us (Dr), negative = we owe them (Cr). */
-  customerBalance: number
+  /** Positive = they owe us (Dr), negative = we owe them (Cr). Omitted → not shown. */
+  customerBalance?: number
   loadingBalance?: boolean
   line: RateHistoryLine
   /** Catalog sale price for this product/variant, when known. */
@@ -79,6 +79,9 @@ interface CustomerRateHistoryPanelProps {
   showCost: boolean
   /** The invoice being edited — kept out of its own history. */
   excludeInvoiceId?: string
+  /** 'sale' = what this customer paid (default); 'purchase' = what we paid this supplier
+   *  (`customer` is then the supplier, `customerBalance` the supplier balance: + = payable). */
+  kind?: RateHistoryKind
   onApplyRate: (rate: number) => void
   autoOpen: boolean
   onAutoOpenChange: (value: boolean) => void
@@ -126,6 +129,8 @@ export function CustomerRateHistoryPanel({
   open,
   onOpenChange,
   anchor,
+  side = 'bottom',
+  sideOffset = 6,
   customer,
   customerBalance,
   loadingBalance,
@@ -133,6 +138,7 @@ export function CustomerRateHistoryPanel({
   listPrice,
   showCost,
   excludeInvoiceId,
+  kind = 'sale',
   onApplyRate,
   autoOpen,
   onAutoOpenChange,
@@ -145,31 +151,59 @@ export function CustomerRateHistoryPanel({
   const anchorRef = useRef<HTMLElement | null>(anchor)
   anchorRef.current = anchor
 
-  const args = useMemo(
-    () =>
-      buildRateHistoryArgs(
-        customer.id,
-        line.productId,
-        line.variantId,
-        excludeInvoiceId
-      ),
-    [customer.id, line.productId, line.variantId, excludeInvoiceId]
+  const ref: RateHistoryRef = useMemo(
+    () => ({
+      kind,
+      partyId: customer.id,
+      productId: line.productId,
+      variantId: line.variantId,
+      excludeId: excludeInvoiceId,
+    }),
+    [kind, customer.id, line.productId, line.variantId, excludeInvoiceId]
   )
-  const argsKey = rateHistoryKey(args)
-  // Cached (prefetched) history shows at once, with no request and no debounce.
-  const cached =
-    invoiceApi.endpoints.getCustomerProductHistory.useQueryState(args)
-  // Not cached: wait for the prefetch batch if it is fetching this product; otherwise ask
-  // once — after a short pause, so hopping across rows only asks for the row you stop on.
-  const prefetching = useRateHistoryPrefetching(argsKey)
-  const settledKey = useDebouncedValue(argsKey, 150)
-  const settled = settledKey === argsKey
-  const { isFetching, isError, refetch } = useGetCustomerProductHistoryQuery(
-    args,
-    { skip: !open || prefetching || (!cached.data && !settled) }
-  )
-  // Never show the previous product's rows under this product's name while the new one loads.
-  const history = cached.data
+  const isSale = kind === 'sale'
+  const copy = isSale
+    ? {
+        thisDoc: t('This sale'),
+        previous: t('Previous sales'),
+        lastRate: t('Last rate'),
+        vsLast: t('vs last rate'),
+        times: (n: number) => t('Bought {{n}} times', { n }),
+        firstTime: t('First time selling this to {{name}}', {
+          name: customer.name,
+        }),
+        noEarlier: t('No earlier invoice has this product.'),
+        changeTitle: t('Change from the sale before'),
+        openDoc: t('View invoice'),
+        autoOpen: t('Open when I click the rate'),
+        newTabHref: (id: string) =>
+          `/invoice-history?viewId=${encodeURIComponent(id)}`,
+      }
+    : {
+        thisDoc: t('This purchase'),
+        previous: t('Previous purchases'),
+        lastRate: t('Last cost'),
+        vsLast: t('vs last cost'),
+        times: (n: number) => t('Purchased {{n}} times', { n }),
+        firstTime: t('First time buying this from {{name}}', {
+          name: customer.name,
+        }),
+        noEarlier: t('No earlier purchase has this product.'),
+        changeTitle: t('Change from the purchase before'),
+        openDoc: t('View purchase'),
+        autoOpen: t('Open when I click the cost'),
+        newTabHref: (id: string) =>
+          `/purchase-history?viewId=${encodeURIComponent(id)}`,
+      }
+  // A higher price is good news on a sale and bad news on a purchase.
+  const isGoodChange = (change: number) => (isSale ? change > 0 : change < 0)
+  // Cached (prefetched) history shows at once; otherwise asked for once via the batch URL.
+  const {
+    data: history,
+    loading: isFetching,
+    error: isError,
+    retry: refetch,
+  } = useRateHistory(ref, open)
 
   const currentUnit = line.unit || 'pcs'
   const currentFactor =
@@ -222,10 +256,11 @@ export function CustomerRateHistoryPanel({
     onReturnFocus()
   }
 
+  const balance = customerBalance ?? 0
   const balanceTone =
-    customerBalance > 0
+    balance > 0
       ? 'text-red-600 dark:text-red-400'
-      : customerBalance < 0
+      : balance < 0
         ? 'text-emerald-600 dark:text-emerald-400'
         : 'text-muted-foreground'
 
@@ -240,9 +275,9 @@ export function CustomerRateHistoryPanel({
       />
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
-          side='bottom'
+          side={side}
           align='start'
-          sideOffset={6}
+          sideOffset={sideOffset}
           collisionPadding={12}
           avoidCollisions
           hideWhenDetached
@@ -261,7 +296,7 @@ export function CustomerRateHistoryPanel({
           style={{
             width: `min(${RATE_HISTORY_PANEL_WIDTH}px, calc(100vw - 24px))`,
           }}
-          className='bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1 z-50 flex max-h-[min(520px,var(--radix-popover-content-available-height))] origin-(--radix-popover-content-transform-origin) flex-col overflow-hidden rounded-xl border shadow-2xl ring-1 ring-black/5 outline-none dark:ring-white/10'
+          className='bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1 data-[side=right]:slide-in-from-left-1 data-[side=left]:slide-in-from-right-1 z-50 flex max-h-[min(520px,var(--radix-popover-content-available-height))] origin-(--radix-popover-content-transform-origin) flex-col overflow-hidden rounded-xl border shadow-2xl ring-1 ring-black/5 outline-none dark:ring-white/10'
         >
           {/* Header: product + customer (name, phone, balance) */}
           <div className='flex items-start gap-3 border-b px-3.5 py-2.5'>
@@ -299,23 +334,32 @@ export function CustomerRateHistoryPanel({
                     {customer.phone}
                   </span>
                 ) : null}
-                <span>
-                  {t('Balance')}{' '}
-                  {loadingBalance ? (
-                    <Loader2 className='inline h-3 w-3 animate-spin' />
-                  ) : (
-                    <span
-                      className={cn('font-semibold tabular-nums', balanceTone)}
-                    >
-                      {formatMoney(Math.abs(customerBalance))}
-                      {customerBalance > 0
-                        ? ' Dr'
-                        : customerBalance < 0
-                          ? ' Cr'
-                          : ''}
-                    </span>
-                  )}
-                </span>
+                {customerBalance !== undefined || loadingBalance ? (
+                  <span>
+                    {t('Balance')}{' '}
+                    {loadingBalance ? (
+                      <Loader2 className='inline h-3 w-3 animate-spin' />
+                    ) : (
+                      <span
+                        className={cn(
+                          'font-semibold tabular-nums',
+                          balanceTone
+                        )}
+                      >
+                        {formatMoney(Math.abs(balance))}
+                        {balance > 0
+                          ? isSale
+                            ? ' Dr'
+                            : ' Cr'
+                          : balance < 0
+                            ? isSale
+                              ? ' Cr'
+                              : ' Dr'
+                            : ''}
+                      </span>
+                    )}
+                  </span>
+                ) : null}
               </div>
             </div>
             <Button
@@ -338,7 +382,7 @@ export function CustomerRateHistoryPanel({
             <div className='space-y-1.5 border-b px-3.5 py-2'>
               <div className='flex items-baseline justify-between gap-3'>
                 <span className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                  {t('This sale')}
+                  {copy.thisDoc}
                 </span>
                 <span className='text-sm tabular-nums'>
                   {line.quantity} {currentUnit} ×{' '}
@@ -355,7 +399,7 @@ export function CustomerRateHistoryPanel({
                       'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ring-1 ring-inset',
                       Math.abs(diffVsLast) < 0.005
                         ? 'bg-muted text-muted-foreground ring-border'
-                        : diffVsLast > 0
+                        : isGoodChange(diffVsLast)
                           ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300'
                           : 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-950/40 dark:text-amber-300'
                     )}
@@ -369,7 +413,7 @@ export function CustomerRateHistoryPanel({
                     )}
                     {Math.abs(diffVsLast) < 0.005
                       ? t('Same as last time')
-                      : `${diffVsLast > 0 ? '+' : '−'}${Math.abs(diffVsLast).toFixed(1)}% ${t('vs last rate')}`}
+                      : `${diffVsLast > 0 ? '+' : '−'}${Math.abs(diffVsLast).toFixed(1)}% ${copy.vsLast}`}
                   </span>
                 ) : null}
                 {listPrice !== undefined && listPrice > 0 ? (
@@ -411,7 +455,7 @@ export function CustomerRateHistoryPanel({
             {stats ? (
               <div className='grid grid-cols-4 divide-x border-b'>
                 <Stat
-                  label={t('Last rate')}
+                  label={copy.lastRate}
                   value={lastRate !== null ? formatMoney(lastRate) : '—'}
                   hint={
                     lastCharged ? daysAgoLabel(lastCharged.date) : undefined
@@ -443,7 +487,7 @@ export function CustomerRateHistoryPanel({
             ) : null}
             {stats ? (
               <p className='text-muted-foreground border-b px-4 py-2 text-xs'>
-                {t('Bought {{n}} times', { n: stats.invoiceCount })} ·{' '}
+                {copy.times(stats.invoiceCount)} ·{' '}
                 {formatQty(stats.totalStockQuantity / currentFactor)}{' '}
                 {currentUnit} ·{' '}
                 <span className='tabular-nums'>
@@ -462,7 +506,7 @@ export function CustomerRateHistoryPanel({
             <div className='px-2 py-2'>
               <div className='flex items-center justify-between px-2 pb-1.5'>
                 <span className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                  {t('Previous sales')}
+                  {copy.previous}
                 </span>
                 {isFetching && history ? (
                   <Loader2 className='text-muted-foreground h-3 w-3 animate-spin' />
@@ -498,13 +542,9 @@ export function CustomerRateHistoryPanel({
               ) : lines.length === 0 ? (
                 <div className='px-2 py-6 text-center'>
                   <Package className='text-muted-foreground/50 mx-auto h-8 w-8' />
-                  <p className='mt-2 text-sm font-medium'>
-                    {t('First time selling this to {{name}}', {
-                      name: customer.name,
-                    })}
-                  </p>
+                  <p className='mt-2 text-sm font-medium'>{copy.firstTime}</p>
                   <p className='text-muted-foreground mt-1 text-xs'>
-                    {t('No earlier invoice has this product.')}
+                    {copy.noEarlier}
                   </p>
                 </div>
               ) : (
@@ -534,7 +574,7 @@ export function CustomerRateHistoryPanel({
                             type='button'
                             onClick={() => setViewInvoiceId(rate.invoiceId)}
                             className='text-primary min-w-0 truncate text-left text-sm font-semibold underline-offset-2 hover:underline'
-                            title={t('Open invoice')}
+                            title={copy.openDoc}
                           >
                             {rate.invoiceNumber || '—'}
                           </button>
@@ -551,13 +591,13 @@ export function CustomerRateHistoryPanel({
                             type='button'
                             onClick={() => setViewInvoiceId(rate.invoiceId)}
                             className='text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 rounded p-0.5'
-                            title={t('View invoice')}
-                            aria-label={t('View invoice')}
+                            title={copy.openDoc}
+                            aria-label={copy.openDoc}
                           >
                             <Eye className='h-3.5 w-3.5' />
                           </button>
                           <a
-                            href={`/invoice?view=list&invoiceId=${encodeURIComponent(rate.invoiceId)}`}
+                            href={copy.newTabHref(rate.invoiceId)}
                             target='_blank'
                             rel='noopener noreferrer'
                             className='text-muted-foreground hover:bg-muted hover:text-foreground -ml-1 shrink-0 rounded p-0.5'
@@ -616,11 +656,11 @@ export function CustomerRateHistoryPanel({
                             <span
                               className={cn(
                                 'inline-flex shrink-0 items-center text-[11px] font-medium tabular-nums',
-                                delta > 0
+                                isGoodChange(delta)
                                   ? 'text-emerald-600'
                                   : 'text-amber-600'
                               )}
-                              title={t('Change from the sale before')}
+                              title={copy.changeTitle}
                             >
                               {delta > 0 ? (
                                 <ArrowUpRight className='h-3 w-3' />
@@ -681,7 +721,7 @@ export function CustomerRateHistoryPanel({
                 onCheckedChange={onAutoOpenChange}
                 className='scale-90'
               />
-              {t('Open when I click the rate')}
+              {copy.autoOpen}
             </label>
             <kbd className='bg-background text-muted-foreground rounded border px-1.5 py-0.5 text-[10px]'>
               Esc
@@ -690,15 +730,27 @@ export function CustomerRateHistoryPanel({
 
           {/* Rendered inside the panel so Radix treats it as a child layer (clicks in it are not
             "outside" the panel). */}
-          <InvoiceDetailDialog
-            invoiceId={viewInvoiceId ?? undefined}
-            open={Boolean(viewInvoiceId)}
-            onOpenChange={(next) => !next && setViewInvoiceId(null)}
-            onCloseAutoFocus={(e) => {
-              e.preventDefault()
-              onReturnFocus()
-            }}
-          />
+          {isSale ? (
+            <InvoiceDetailDialog
+              invoiceId={viewInvoiceId ?? undefined}
+              open={Boolean(viewInvoiceId)}
+              onOpenChange={(next) => !next && setViewInvoiceId(null)}
+              onCloseAutoFocus={(e) => {
+                e.preventDefault()
+                onReturnFocus()
+              }}
+            />
+          ) : (
+            <PurchaseViewDrawer
+              purchaseId={viewInvoiceId}
+              open={Boolean(viewInvoiceId)}
+              onOpenChange={(next) => !next && setViewInvoiceId(null)}
+              onCloseAutoFocus={(e: Event) => {
+                e.preventDefault()
+                onReturnFocus()
+              }}
+            />
+          )}
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>

@@ -44,6 +44,15 @@ const CARD_PERMISSIONS: Record<string, { any?: PermissionKey[]; all?: Permission
   'net-profit-after-expense': { all: ['viewCostPrices'] },
   'net-profit-after-all-expenses': { all: ['viewCostPrices'] },
   roi: { all: ['viewCostPrices'] },
+  // Insight widgets (components/insights) — same rule, keyed by widget id.
+  'insight-profit-loss': { all: ['viewCostPrices'] },
+  'insight-sales': { any: ['viewInvoices', 'viewSalesReports'] },
+  'insight-expenses': { any: ['viewAccounting', 'manageExpenses', 'viewExpenseReports'] },
+  'insight-due-invoices': { any: ['viewCustomers', 'viewPayments', 'viewAccounting'] },
+  'insight-receivable-aging': { any: ['viewCustomers', 'viewPayments', 'viewAccounting'] },
+  'insight-bills-to-pay': { any: ['viewSuppliers', 'viewPayments', 'viewAccounting'] },
+  'insight-payable-aging': { any: ['viewSuppliers', 'viewPayments', 'viewAccounting'] },
+  'insight-money-flow': { any: ['viewCashBook', 'viewCashRegister', 'viewAccounting', 'viewPayments'] },
 }
 
 export function useDashboardCardVisible(): (cardId: string) => boolean {

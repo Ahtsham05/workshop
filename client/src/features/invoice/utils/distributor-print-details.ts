@@ -8,6 +8,7 @@
  * after a short timeout, and leaves the print data as it was on any failure — printing must
  * never be blocked by a slow or missing lookup.
  */
+import { formatPaymentMethod } from '@/lib/payment-modes'
 import { store } from '@/stores/store'
 import { invoiceApi } from '@/stores/invoice.api'
 import { customerApi } from '@/stores/customer.api'
@@ -52,6 +53,14 @@ export interface InvoicePrintSource {
   salesmanId?: string | RefLike | null
   customerId?: unknown
   createdAt?: string
+  type?: string
+  paymentMode?: string
+  paymentMethod?: string
+  walletType?: string
+  paymentReference?: string
+  splitPaymentMethod?: string
+  splitWalletType?: string
+  splitPaidAmount?: number
 }
 
 function withTimeout<T>(promise: Promise<T>): Promise<T | undefined> {
@@ -175,6 +184,10 @@ export async function withDistributorPrintDetails(
       customerEmail: printData.customerEmail || customerObj?.email?.trim() || undefined,
       customerTaxNumber: printData.customerTaxNumber || customerObj?.taxNumber?.trim() || undefined,
       customerPaymentTerms: printData.customerPaymentTerms || customerObj?.paymentTerms || undefined,
+      paymentLabel:
+        printData.paymentLabel ||
+        (Number(printData.paidAmount) > 0 ? formatPaymentMethod({ ...invoice, type: invoice.type ?? printData.type }) : '') ||
+        undefined,
       customerPhone: printData.customerPhone || customerObj?.phone?.trim() || undefined,
       companyWebsite: printData.companyWebsite || org?.website?.trim() || undefined,
       companyEmail: printData.companyEmail || org?.email?.trim() || undefined,
