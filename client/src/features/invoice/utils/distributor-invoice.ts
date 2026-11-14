@@ -17,6 +17,7 @@ import { escapeHtml } from '@/lib/escape-html'
 import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 import { invoiceTermsToSafeHtml } from '@/lib/rich-text-utils'
 import { format as formatPattern } from 'date-fns'
+import { toBusinessWallClock } from '@/lib/business-timezone'
 import { getActivePrintColors } from '@/lib/print-colors'
 import { getActivePrintDesign } from '@/lib/print-design'
 import { printScriptFontFamilies, printScriptFontParams } from '@/lib/native-language'
@@ -121,7 +122,8 @@ const isoDateText = (iso?: string) => {
   if (!iso) return ''
   const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
   const d = day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : new Date(iso)
-  return Number.isNaN(d.getTime()) ? '' : shortDay(d)
+  if (Number.isNaN(d.getTime())) return ''
+  return shortDay(day ? d : toBusinessWallClock(d))
 }
 
 function documentTitle(isQuotation: boolean, salesReturn = false): string {
@@ -229,10 +231,21 @@ function companyLines(data: PrintInvoiceData, native: boolean): string[] {
 const DAY_PATTERN = 'dd MMM yy'
 const shortDay = (d: Date) => formatPattern(d, DAY_PATTERN)
 
-/** The invoice's moment (date + time) when known, else the document day at local midnight. */
+/**
+ * The invoice's moment for the header. The DATE is always the invoice's own date (never the day
+ * it was saved or printed). The time of day is the moment it was entered (`invoiceDateTime` =
+ * createdAt), in the business time zone — but only when it was entered ON that date; a back-dated
+ * invoice (dated 03 Oct, keyed in on 14 Nov) prints the date alone rather than a time from
+ * another day.
+ */
 function invoiceMoment(data: PrintInvoiceData, ctx: DistributorPrintContext): { at: Date; hasTime: boolean } {
-  const at = data.invoiceDateTime ? new Date(data.invoiceDateTime) : null
-  return at && !Number.isNaN(at.getTime()) ? { at, hasTime: true } : { at: ctx.documentDate, hasTime: false }
+  const day = ctx.documentDate
+  const entered = data.invoiceDateTime ? new Date(data.invoiceDateTime) : null
+  if (!entered || Number.isNaN(entered.getTime())) return { at: day, hasTime: false }
+  const wall = toBusinessWallClock(entered)
+  const sameDay =
+    wall.getFullYear() === day.getFullYear() && wall.getMonth() === day.getMonth() && wall.getDate() === day.getDate()
+  return sameDay ? { at: wall, hasTime: true } : { at: day, hasTime: false }
 }
 
 function dateText(data: PrintInvoiceData, ctx: DistributorPrintContext): string {

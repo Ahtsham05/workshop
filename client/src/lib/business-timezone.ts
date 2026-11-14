@@ -243,6 +243,13 @@ function businessParts(date: Date) {
   }
 }
 
+/** A Date whose *local* fields (getFullYear … getSeconds) read as the business-zone wall clock
+ * at `date` — for formatting an instant with date-fns patterns in the business zone. */
+export function toBusinessWallClock(date: Date): Date {
+  const p = partsOf(businessDateTimeFormat('en-US', WALL_OPTIONS), date)
+  return new Date(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second)
+}
+
 /** Calendar date label in the business zone, in the app's date format (Settings → Localization). */
 export function formatBusinessDate(value: string | Date): string {
   const date = value instanceof Date ? value : new Date(value)

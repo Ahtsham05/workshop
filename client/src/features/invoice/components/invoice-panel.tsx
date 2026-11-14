@@ -1500,11 +1500,8 @@ export function InvoicePanel({
           const list = prev || []
           return list.some((c: any) => (c._id || c.id) === customerId) ? list : [...list, entity]
         })
-        setInvoice((prev) => paymentCards ? {
-          ...prev,
-          customerId,
-          customerName: entity.name,
-        } : {
+        setPaidAmountInput('')
+        setInvoice((prev) => ({
           ...prev,
           customerId,
           customerName: entity.name,
@@ -1513,7 +1510,7 @@ export function InvoicePanel({
           // paidAmount/balance so a fresh credit invoice doesn't save as fully paid.
           paidAmount: 0,
           balance: prev.total,
-        })
+        }))
         setCustomerSearchQuery('')
         goToProducts()
         return
@@ -1579,7 +1576,6 @@ export function InvoicePanel({
       goToProducts,
       handleProductSelect,
       invoice.items,
-      paymentCards,
       quickCreateProductItemId,
       setCustomers,
       setInvoice,
@@ -1654,19 +1650,16 @@ export function InvoicePanel({
     }))
   }, [setInvoice])
 
-  // Picking a customer (desktop popover and the phone's customer search). Wholesale /
-  // distribution (payment cards) keeps the sale Cash; everyone else switches to Credit.
+  // Picking a customer (desktop popover and the phone's customer search) switches the
+  // sale to Credit for every business type (wholesale / distribution included).
   const applyCustomerSelection = useCallback((customer: ApiRecord | 'walk-in') => {
     if (customer === 'walk-in') {
       setInvoice(prev => ({ ...prev, customerId: 'walk-in' }))
       return
     }
     const customerId = customer._id || customer.id
-    setInvoice(prev => paymentCards ? {
-      ...prev,
-      customerId,
-      customerName: customer.name,
-    } : {
+    setPaidAmountInput('')
+    setInvoice(prev => ({
       ...prev,
       customerId,
       customerName: customer.name, // Set customer name for editing
@@ -1677,8 +1670,8 @@ export function InvoicePanel({
       // left uncorrected, the invoice saves as fully paid/cash-equivalent.
       paidAmount: 0,
       balance: prev.total,
-    })
-  }, [setInvoice, paymentCards])
+    }))
+  }, [setInvoice])
 
   const handleSaveInvoice = useCallback(async (requestedPrint: 'none' | PaperSize = 'none') => {
     const printType: 'none' | PaperSize = canPrint ? requestedPrint : 'none'

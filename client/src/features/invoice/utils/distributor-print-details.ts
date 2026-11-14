@@ -55,6 +55,8 @@ export interface InvoicePrintSource {
   salesmanId?: string | RefLike | null
   customerId?: unknown
   createdAt?: string
+  invoiceDate?: string
+  dueDate?: string | null
   type?: string
   paymentMode?: string
   paymentMethod?: string
@@ -174,6 +176,9 @@ export async function withDistributorPrintDetails(
       ...printData,
       items,
       invoiceDateTime: printData.invoiceDateTime || (invoiceId ? invoice.createdAt : undefined) || undefined,
+      // Saved invoice printed from a path that didn't pass its date → still its own date, not today.
+      invoiceDate: printData.invoiceDate || (invoiceId && invoice.invoiceDate ? String(invoice.invoiceDate) : undefined),
+      dueDate: printData.dueDate || (invoiceId && invoice.dueDate ? String(invoice.dueDate) : undefined),
       invoicedBy: printData.invoicedBy || invoicedBy || undefined,
       salesRep: printData.salesRep || nameOf(invoice.salesmanId) || undefined,
       customerAddress: printData.customerAddress || customerAddressLines(customerObj) || undefined,

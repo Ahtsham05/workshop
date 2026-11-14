@@ -27,6 +27,7 @@ import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
 import { buildTaxBreakdownHtml } from '@/lib/tax-print-rows'
 import type { TaxLine } from '@/stores/taxCalculator.api'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday, toBusinessCalendarDate } from '@/lib/business-timezone'
 import {
   isNativePrintOn,
   isRtlPrintLanguage,
@@ -178,13 +179,22 @@ function resolvePrintDocumentTitle(
   return labels.invoice_title
 }
 
-function resolvePrintDocumentDate(data: PrintInvoiceData): Date {
-  const raw = data.invoiceDate?.trim()
+/**
+ * The invoice's own calendar day (local noon, so any pattern formats that day) — never the day
+ * it is printed on. A stored timestamp ("2026-10-03T00:00:00.000Z") is read in the business
+ * zone, so a US business doesn't see the previous evening. Only an unsaved draft with no date
+ * falls back to today.
+ */
+function resolvePrintDocumentDate(data: Pick<PrintInvoiceData, 'invoiceDate'>): Date {
+  const raw = String(data.invoiceDate ?? '').trim()
   if (raw) {
-    const parsed = new Date(raw.includes('T') ? raw : `${raw}T12:00:00`)
-    if (!Number.isNaN(parsed.getTime())) return parsed
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : (() => {
+      const parsed = new Date(raw)
+      return Number.isNaN(parsed.getTime()) ? '' : toBusinessCalendarDate(parsed)
+    })()
+    if (day) return new Date(`${day}T12:00:00`)
   }
-  return new Date()
+  return new Date(`${getBusinessToday()}T12:00:00`)
 }
 
 /**

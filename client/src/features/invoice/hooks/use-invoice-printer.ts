@@ -126,6 +126,9 @@ export function useInvoicePrinter({ lookupCustomer }: UseInvoicePrinterOptions =
           balance: invoice.balance || 0,
           notes: invoice.notes,
           termsAndConditions: invoice.termsAndConditions,
+          // The invoice's own date (a reprint must never show today's date).
+          invoiceDate: invoice.invoiceDate ? String(invoice.invoiceDate) : undefined,
+          dueDate: invoice.dueDate ? String(invoice.dueDate) : undefined,
           invoiceAddress: branchData?.location?.address?.trim() || undefined,
           invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
           deliveryCharge: invoice.deliveryCharge || 0,
