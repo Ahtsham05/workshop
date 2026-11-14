@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const httpStatus = require('http-status');
 const { Product, Brand, Category, SubCategory, InventoryTransfer } = require('../../models');
 const ApiError = require('../../utils/ApiError');
-const { BUSINESS_TZ, eachBusinessCalendarDate } = require('../../utils/businessTimezone');
+const { getBusinessTimeZone, eachBusinessCalendarDate } = require('../../utils/businessTimezone');
 const { roundQty, roundMoney, aggregateScope, escapeRegex } = require('./common');
 
 /*
@@ -33,7 +33,7 @@ const PRODUCT_TYPES = ['raw_material', 'component', 'packaging_material', 'sub_a
 
 const oid = (v) => new mongoose.Types.ObjectId(String(v));
 const isOid = (v) => /^[a-f0-9]{24}$/i.test(String(v));
-const dayOf = (date) => ({ $dateToString: { format: '%Y-%m-%d', date, timezone: BUSINESS_TZ } });
+const dayOf = (date) => ({ $dateToString: { format: '%Y-%m-%d', date, timezone: getBusinessTimeZone() } });
 
 /** "a,b,c" of URI-encoded keys → ['a','b','c']; a category kept only by name is "name:…". */
 const parseKeys = (raw) =>

@@ -39,6 +39,7 @@ import { normalizeSuppliersList } from '../utils/catalog-helpers'
 import { useStateDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 /** Allocation strategies the dialog offers, in the order an ERP user expects them. */
 const ALLOCATION_MODES: { value: AllocationMode; label: string; hint: string }[] = [
@@ -73,7 +74,7 @@ export function SupplierPaymentDialog({ open, onOpenChange, defaultSupplierId, o
   const [supplierId, setSupplierId] = useState(defaultSupplierId || '')
   const [direction, setDirection] = useState<'payment' | 'refund'>('payment')
   const [amount, setAmount] = useState('')
-  const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [paymentDate, setPaymentDate] = useState(getBusinessToday())
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wallet'>('cash')
   const [walletType, setWalletType] = useState('')
   const [referenceNumber, setReferenceNumber] = useState('')
@@ -108,7 +109,7 @@ export function SupplierPaymentDialog({ open, onOpenChange, defaultSupplierId, o
     setSupplierId(defaultSupplierId || '')
     setDirection('payment')
     setAmount('')
-    setPaymentDate(format(new Date(), 'yyyy-MM-dd'))
+    setPaymentDate(getBusinessToday())
     setPaymentMethod('cash')
     setWalletType('')
     setReferenceNumber('')

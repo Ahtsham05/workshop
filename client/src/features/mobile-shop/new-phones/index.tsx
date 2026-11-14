@@ -511,7 +511,7 @@ export default function NewPhonesPage() {
               <div className='grid gap-3 sm:grid-cols-2'>
                 <div className='space-y-1'>
                   <Label>Sale Price (Rs) *</Label>
-                  <Input type='number' min='0' step='1' value={sellForm.salePrice} onChange={(e) => setSellField('salePrice', e.target.value)} />
+                  <Input type='number' min='0' step='any' value={sellForm.salePrice} onChange={(e) => setSellField('salePrice', e.target.value)} />
                 </div>
                 <div className='space-y-1'>
                   <Label>Payment Method</Label>

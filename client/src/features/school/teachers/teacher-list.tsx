@@ -14,6 +14,7 @@ import { useCurrencyMeta } from '@/lib/format-money';
 import { useStateDraft } from '@/hooks/use-form-draft';
 import { FormDraftNotice } from '@/components/form-draft-notice';
 import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { getBusinessToday } from '@/lib/business-timezone';
 
 
 const GRADIENT_COLORS = [
@@ -58,12 +59,12 @@ export default function TeacherList() {
 
   const [form, setForm] = useState({
     employeeId: '', firstName: '', lastName: '', email: '', phone: '',
-    gender: '', joiningDate: new Date().toISOString().split('T')[0], qualification: '', specialization: '', status: 'active',
+    gender: '', joiningDate: getBusinessToday(), qualification: '', specialization: '', status: 'active',
     salary: { basicSalary: 0, allowances: 0 }, portalPassword: '', subjects: [] as string[],
   });
 
   const resetForm = () => {
-    setForm({ employeeId: '', firstName: '', lastName: '', email: '', phone: '', gender: '', joiningDate: new Date().toISOString().split('T')[0], qualification: '', specialization: '', status: 'active', salary: { basicSalary: 0, allowances: 0 }, portalPassword: '', subjects: [] });
+    setForm({ employeeId: '', firstName: '', lastName: '', email: '', phone: '', gender: '', joiningDate: getBusinessToday(), qualification: '', specialization: '', status: 'active', salary: { basicSalary: 0, allowances: 0 }, portalPassword: '', subjects: [] });
     setEditingTeacher(null);
   };
 

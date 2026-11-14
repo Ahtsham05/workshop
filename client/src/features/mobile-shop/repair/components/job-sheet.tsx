@@ -37,7 +37,7 @@ import {
 } from '@/stores/mobile-shop.api'
 import { purchaseCatalogApi } from '@/stores/purchaseCatalog.api'
 import {
-  BUSINESS_TIMEZONE,
+  getBusinessTimeZone,
   formatBusinessDate,
   parseBusinessDateTimeLocal,
 } from '@/lib/business-timezone'
@@ -803,7 +803,7 @@ export function JobSheet({
                       defaultValue={
                         job.dueDate
                           ? new Date(job.dueDate).toLocaleDateString('en-CA', {
-                              timeZone: BUSINESS_TIMEZONE,
+                              timeZone: getBusinessTimeZone(),
                             })
                           : ''
                       }
@@ -1097,7 +1097,7 @@ export function JobSheet({
                         </div>
                         <div className='text-muted-foreground text-xs'>
                           {new Date(t.at).toLocaleString('en-GB', {
-                            timeZone: BUSINESS_TIMEZONE,
+                            timeZone: getBusinessTimeZone(),
                             dateStyle: 'medium',
                             timeStyle: 'short',
                           })}

@@ -36,13 +36,13 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { useGetAgentBillReportQuery, useGetUtilityCompaniesQuery, type AgentBillRecord } from '@/stores/mobile-shop.api'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -153,7 +153,7 @@ export const AgentBillReport = forwardRef<{ exportToExcel: () => void }, AgentBi
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(billRows), 'Bill Details')
           }
 
-          XLSX.writeFile(wb, `agent-bill-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `agent-bill-report-${getBusinessToday()}.xlsx`)
           toast.success('Report exported successfully')
         } catch {
           toast.error('Failed to export report')

@@ -23,6 +23,7 @@ import {
 } from '@/stores/school.api';
 import { toast } from 'sonner';
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone';
 
 const LEAVE_TYPES = ['sick', 'casual', 'annual', 'emergency', 'unpaid', 'maternity', 'paternity'];
 
@@ -40,7 +41,7 @@ function calcDays(from: string, to: string) {
   const diff = Math.ceil((new Date(to).getTime() - new Date(from).getTime()) / 86400000);
   return diff >= 0 ? diff + 1 : 0;
 }
-function todayStr() { return new Date().toISOString().split('T')[0]; }
+function todayStr() { return getBusinessToday(); }
 
 // ── Teacher Self-Service Leave View ───────────────────────────────────────────
 function MyLeaveView() {

@@ -6,6 +6,7 @@ import { buildInvoiceSmsMessage } from '@/utils/sms-messages'
 import { FALLBACK_CURRENCY } from '@/lib/format-money'
 
 import { isNativePrintOn } from '@/lib/native-language'
+import { getBusinessToday, toBusinessCalendarDate } from '@/lib/business-timezone'
 /** Balance / amount due shown on the printed invoice (for PDF filename). */
 export function resolvePrintBalanceAmount(data: PrintInvoiceData): number {
   if (data.newBalance != null && !Number.isNaN(Number(data.newBalance))) {
@@ -46,11 +47,11 @@ function formatInvoiceDateForFilename(data: PrintInvoiceData): string {
   if (raw) {
     const d = new Date(raw)
     if (!Number.isNaN(d.getTime())) {
-      return d.toISOString().slice(0, 10)
+      return toBusinessCalendarDate(d)
     }
     if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10)
   }
-  return new Date().toISOString().slice(0, 10)
+  return getBusinessToday()
 }
 
 /** e.g. Invoice-Shabir-Jutt-2026-05-20-Bal-5800-INV-202605-000251.pdf */

@@ -193,7 +193,7 @@ const ProductTableRow = React.memo(function ProductTableRow({
                             <Input
                               ref={(el) => actions.registerEditRef(productId, columnId, el)}
                               type="number"
-                              step={columnId === 'stockQuantity' ? '1' : '0.01'}
+                              step={columnId === 'stockQuantity' ? '1' : 'any'}
                               min="0"
                               placeholder={t(placeholderKey)}
                               value={editValue[columnId as keyof typeof editValue] ?? currentValue}

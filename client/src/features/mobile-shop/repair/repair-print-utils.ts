@@ -1,7 +1,7 @@
 // Repair prints — 80mm thermal job card / repair invoice, and a small device tag with a
 // barcode of the job number. Dual-language (en/ur/ar/hi) like the other receipts.
 import type { CurrencyOption } from '@/stores/localization.api'
-import { BUSINESS_TIMEZONE } from '@/lib/business-timezone'
+import { getBusinessTimeZone } from '@/lib/business-timezone'
 import { escapeHtml, invoiceNoteToSafeHtml } from '@/lib/escape-html'
 import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 import {
@@ -102,7 +102,7 @@ export function generateRepairReceiptHTML(data: RepairReceiptData): string {
 
   const fmtDate = (d?: string | null, withTime = true) => {
     const dateObj = d ? new Date(d) : new Date()
-    const opts = { timeZone: BUSINESS_TIMEZONE } as const
+    const opts = { timeZone: getBusinessTimeZone() } as const
     return withTime
       ? `${dateObj.toLocaleDateString(locale, opts)} ${dateObj.toLocaleTimeString(locale, { ...opts, hour: '2-digit', minute: '2-digit' })}`
       : dateObj.toLocaleDateString(locale, opts)
@@ -312,7 +312,7 @@ export function generateRepairTagHTML(data: RepairTagData): string {
   const fmt = (d?: string | null) =>
     d
       ? new Date(d).toLocaleDateString('en-GB', {
-          timeZone: BUSINESS_TIMEZONE,
+          timeZone: getBusinessTimeZone(),
           day: '2-digit',
           month: 'short',
         })

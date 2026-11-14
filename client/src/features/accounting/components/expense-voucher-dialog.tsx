@@ -11,7 +11,6 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { format } from 'date-fns'
 import { ListPlus, Loader2, Plus, Save, Trash2, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -42,6 +41,7 @@ import {
   getWalletTypeFromOptionValue,
   isWalletOptionValue,
 } from '@/lib/wallet-payment-options'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface VoucherLine {
   key: string
@@ -77,7 +77,7 @@ const rekey = (lines: VoucherLine[] | undefined): VoucherLine[] => {
   return list.map((l) => ({ ...l, key: uid() }))
 }
 const freshState = (): VoucherState => ({
-  date: format(new Date(), 'yyyy-MM-dd'),
+  date: getBusinessToday(),
   paidFrom: 'Cash',
   reference: '',
   notes: '',

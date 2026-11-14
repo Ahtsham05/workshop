@@ -16,6 +16,7 @@ import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
 import { useFormatMoney } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface PurchaseReturnsReportProps {
   startDate: string
@@ -71,7 +72,7 @@ export const PurchaseReturnsReport = forwardRef<{ exportToExcel: () => void }, P
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(liData), 'Line Items')
           }
 
-          XLSX.writeFile(wb, `purchase-returns-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `purchase-returns-report-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch (error) {
           console.error('Export error:', error)

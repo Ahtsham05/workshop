@@ -12,7 +12,7 @@ const {
   Supplier,
   SupplierLedger,
 } = require('../models');
-const { BUSINESS_TZ, toBusinessCalendarDate, startOfBusinessDay, endOfBusinessDay } = require('../utils/businessTimezone');
+const { getBusinessTimeZone, toBusinessCalendarDate, startOfBusinessDay, endOfBusinessDay } = require('../utils/businessTimezone');
 const { shiftCalendarDate } = require('../utils/dashboardDateRange');
 const ledgerAlertsService = require('./ledgerAlerts.service');
 
@@ -93,7 +93,7 @@ const resolveTrendRange = (rangeKey, now = new Date()) => {
 };
 
 const bucketExpr = (field, granularity) => ({
-  $dateToString: { format: granularity === 'day' ? '%Y-%m-%d' : '%Y-%m', date: field, timezone: BUSINESS_TZ },
+  $dateToString: { format: granularity === 'day' ? '%Y-%m-%d' : '%Y-%m', date: field, timezone: getBusinessTimeZone() },
 });
 
 const byBucket = (rows) => new Map(rows.map((row) => [row._id, row]));

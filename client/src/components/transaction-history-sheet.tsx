@@ -40,7 +40,7 @@ import { InvoiceDetailDialog } from '@/components/invoice-detail-dialog'
 import { PurchaseViewDrawer } from '@/features/purchase-invoice/components/purchase-view-drawer'
 import { useLanguage } from '@/context/language-context'
 import { useFormatMoney } from '@/lib/format-money'
-import { BUSINESS_TIMEZONE, getBusinessToday, shiftBusinessCalendarDate, toBusinessCalendarDate } from '@/lib/business-timezone'
+import { businessDateTimeFormat, getBusinessToday, shiftBusinessCalendarDate, toBusinessCalendarDate } from '@/lib/business-timezone'
 import { formatAppDate } from '@/lib/date-format'
 import { cn } from '@/lib/utils'
 import { useGetPurchaseHistoryQuery } from '@/stores/purchase.api'
@@ -186,12 +186,11 @@ const SETTLEMENT_BADGE: Record<string, { label: string; className: string }> = {
   overpaid: { label: 'Overpaid', className: 'border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400' },
 }
 
-const timeFormatter = new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TIMEZONE, hour: 'numeric', minute: '2-digit' })
 const weekdayFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' })
 
 function formatTime(value: string): string {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '' : timeFormatter.format(date)
+  return Number.isNaN(date.getTime()) ? '' : businessDateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(date)
 }
 
 function dayKeyOf(value: string): string {

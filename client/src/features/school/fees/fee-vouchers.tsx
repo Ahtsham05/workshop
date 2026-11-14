@@ -34,7 +34,7 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { invoiceNoteToSafeHtml, escapeHtml } from '@/lib/escape-html';
 import { useFormatMoney, useCurrencyMeta, FALLBACK_CURRENCY } from '@/lib/format-money';
-import { BUSINESS_TIMEZONE, formatBusinessDate, formatBusinessDateTimeShort, getBusinessToday } from '@/lib/business-timezone';
+import { businessDateTimeFormat, formatBusinessDate, formatBusinessDateTimeShort, getBusinessToday } from '@/lib/business-timezone';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/stores/store';
 import { toast } from 'sonner';
@@ -103,15 +103,15 @@ export function feeItemLabel(name: string, month?: string, year?: number | strin
 }
 
 /** Short "12-Aug" style date for a paid-tag badge — day and month only, no year,
- * since the challan header already states the session/year. Pinned to Pakistan
- * time so the label matches the school's local date regardless of the printing
- * device's own OS/browser timezone (see BUSINESS_TIMEZONE). */
+ * since the challan header already states the session/year. Pinned to the business
+ * time zone so the label matches the school's local date regardless of the printing
+ * device's own OS/browser timezone (see lib/business-timezone). */
 function formatDayMonth(date?: string | Date | null): string {
   if (!date) return '';
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return '';
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TIMEZONE, day: '2-digit', month: 'short' })
+    businessDateTimeFormat('en-US', { day: '2-digit', month: 'short' })
       .formatToParts(d)
       .map((p) => [p.type, p.value])
   );

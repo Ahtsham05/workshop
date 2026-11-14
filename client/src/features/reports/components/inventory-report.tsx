@@ -33,6 +33,7 @@ import { ColorDot } from '@/components/color-swatch-picker'
 import { FlagBadge } from '@/components/flag-badge'
 import { useFormatMoney } from '@/lib/format-money'
 import { useCanViewCostPrices } from '@/lib/cost-visibility'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 const STOCK_STATUS_STYLES: Record<string, string> = {
   'Out of Stock':
@@ -152,7 +153,7 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
         // doesn't scale, and the main sheet's "IMEI/Serial Available" column already
         // carries the count per product.
 
-        XLSX.writeFile(wb, `stock-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+        XLSX.writeFile(wb, `stock-report-${getBusinessToday()}.xlsx`)
         toast.success(t('Data exported successfully'), { id: toastId })
       } catch (error) {
         console.error('Export error:', error)

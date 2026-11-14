@@ -80,6 +80,7 @@ import { printExpenseVoucher } from './print-expense-voucher';
 import { useStateDraft } from '@/hooks/use-form-draft';
 import { FormDraftNotice } from '@/components/form-draft-notice';
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday, toBusinessCalendarDate } from '@/lib/business-timezone';
 
 const PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -99,11 +100,8 @@ const PAYMENT_METHOD_COLORS: Record<string, string> = {
 
 const DEFAULT_CATEGORY_COLOR = '#6366f1';
 
-const today = () => new Date().toISOString().slice(0, 10);
-const firstOfMonth = () => {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-};
+const today = () => getBusinessToday();
+const firstOfMonth = () => `${getBusinessToday().slice(0, 7)}-01`;
 
 const emptyForm = () => ({
   categoryId: '',
@@ -228,7 +226,7 @@ function ExpensesTab() {
   // ── Summary stats from current page (full month totals comes from the page set) ─
   const monthTotal = expenses.reduce((s: number, e: any) => s + (e.amount || 0), 0);
   const todayTotal = expenses
-    .filter((e: any) => new Date(e.date).toISOString().slice(0, 10) === todayStr)
+    .filter((e: any) => toBusinessCalendarDate(new Date(e.date)) === todayStr)
     .reduce((s: number, e: any) => s + (e.amount || 0), 0);
 
   // ── Category breakdown (this page) ──────────────────────────────────────
@@ -256,7 +254,7 @@ function ExpensesTab() {
     setForm({
       categoryId: exp.categoryId?.id || exp.categoryId?._id || '',
       amount: String(exp.amount || ''),
-      date: new Date(exp.date).toISOString().slice(0, 10),
+      date: toBusinessCalendarDate(new Date(exp.date)),
       paymentMethod: exp.paymentMethod || 'cash',
       description: exp.description || '',
       vendor: exp.vendor || '',

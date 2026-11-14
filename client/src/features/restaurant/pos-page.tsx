@@ -892,7 +892,7 @@ export default function RestaurantPosPage() {
                                 <Input
                                   type='number'
                                   inputMode='decimal'
-                                  step='0.01'
+                                  step='any'
                                   className='h-9 w-[5.75rem] border-border bg-background text-right text-sm font-semibold tabular-nums'
                                   value={l.unitPrice}
                                   onChange={(e) => setLineUnitPrice(idx, Number(e.target.value))}

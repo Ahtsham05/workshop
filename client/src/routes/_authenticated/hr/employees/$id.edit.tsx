@@ -13,6 +13,7 @@ import { getEntityId } from '@/lib/entity-id';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { IconArrowLeft, IconLoader } from '@tabler/icons-react';
+import { toBusinessCalendarDate } from '@/lib/business-timezone';
 
 export const Route = createFileRoute('/_authenticated/hr/employees/$id/edit')({
   component: EmployeeEditPage,
@@ -91,7 +92,7 @@ function EmployeeEditPage() {
     email: employee.email,
     phone: employee.phone,
     dateOfBirth: employee.dateOfBirth
-      ? new Date(employee.dateOfBirth).toISOString().split('T')[0]
+      ? toBusinessCalendarDate(new Date(employee.dateOfBirth))
       : '',
     gender: employee.gender,
     maritalStatus: employee.maritalStatus,
@@ -109,12 +110,12 @@ function EmployeeEditPage() {
     designation: getEntityId(employee.designation) || employee.designation,
     reportingManager: getEntityId(employee.reportingManager) || '',
     joiningDate: employee.joiningDate
-      ? new Date(employee.joiningDate).toISOString().split('T')[0]
+      ? toBusinessCalendarDate(new Date(employee.joiningDate))
       : '',
     employmentType: employee.employmentType,
     employmentStatus: employee.employmentStatus || 'Active',
     lastWorkingDate: employee.lastWorkingDate
-      ? new Date(employee.lastWorkingDate).toISOString().split('T')[0]
+      ? toBusinessCalendarDate(new Date(employee.lastWorkingDate))
       : '',
     exitReason: employee.exitReason || '',
     shift: getEntityId(employee.shift) || '',

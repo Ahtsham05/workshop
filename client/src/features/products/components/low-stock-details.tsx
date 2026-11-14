@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
+import { getBusinessToday } from '@/lib/business-timezone';
 
 interface LowStockDetailsProps {
   products: Product[];
@@ -111,7 +112,7 @@ export function LowStockDetails({ products, onBack, threshold = 10, criticalThre
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `low-stock-report-${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `low-stock-report-${getBusinessToday()}.csv`;
     link.click();
   };
 

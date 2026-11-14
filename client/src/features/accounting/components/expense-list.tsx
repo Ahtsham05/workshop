@@ -56,6 +56,7 @@ import { EXPENSE_IMPORT_FIELDS } from './expense-import-dialog';
 import { CreatedByCell, useCanViewCreatedBy } from '@/components/created-by-cell';
 import { useFormatMoney } from '@/lib/format-money';
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone';
 
 interface ExpenseListProps {
   onEdit: (expense: any) => void;
@@ -142,7 +143,7 @@ export function ExpenseList({ onEdit, onDelete }: ExpenseListProps) {
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Expenses');
-      XLSX.writeFile(wb, `expenses-${new Date().toISOString().split('T')[0]}.xlsx`);
+      XLSX.writeFile(wb, `expenses-${getBusinessToday()}.xlsx`);
       toast.success(t('Data exported successfully'));
     } catch (error) {
       console.error('Export error:', error);

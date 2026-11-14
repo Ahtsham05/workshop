@@ -82,7 +82,7 @@ export function MarkupPercentInput({ cost, price, onPriceChange, className, comp
     <Input
       ref={inputRef}
       type='number'
-      step='0.1'
+      step='any'
       placeholder={cost > 0 ? (compact ? '0' : '30') : '—'}
       disabled={!cost || cost <= 0}
       value={pct}
@@ -108,7 +108,7 @@ export function MarkupPercentInput({ cost, price, onPriceChange, className, comp
     <Input
       ref={amountInputRef}
       type='number'
-      step='1'
+      step='any'
       placeholder={cost > 0 ? '0' : '—'}
       disabled={!cost || cost <= 0}
       value={amount}

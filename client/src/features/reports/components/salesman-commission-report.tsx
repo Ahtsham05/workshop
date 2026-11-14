@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface SalesmanCommissionReportProps {
   startDate: string
@@ -109,7 +110,7 @@ export const SalesmanCommissionReport = forwardRef<{ exportToExcel: () => void }
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(trendRows), 'Daily Trend')
           }
 
-          XLSX.writeFile(wb, `salesman-commission-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `salesman-commission-report-${getBusinessToday()}.xlsx`)
           toast.success('Report exported successfully')
         } catch {
           toast.error('Failed to export report')

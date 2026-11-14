@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { useGetWarehouseStockQuery, useLazyGetWarehouseStockQuery, type StockQuery, type StockRow } from '@/stores/warehouse.api'
 import { WAREHOUSE_PERMS, colorOf, fmtQty, SHARED_STOCK_REFRESH_S } from '../lib/labels'
 import { TransferDialog, type TransferPreset } from './transfer-dialog'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 type Filter = NonNullable<StockQuery['filter']>
 type Sort = NonNullable<StockQuery['sortBy']>
@@ -68,7 +69,7 @@ export function StockTab({ warehouseId }: { warehouseId?: string }) {
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Stock')
-    XLSX.writeFile(wb, `warehouse-stock-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(wb, `warehouse-stock-${getBusinessToday()}.xlsx`)
   }
 
   return (

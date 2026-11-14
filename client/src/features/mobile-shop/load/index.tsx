@@ -1978,7 +1978,7 @@ function LoadManagementPage({
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='purchase-commission'>Supplier Commission (%) - Optional</Label>
-                      <Input id='purchase-commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 1, 1.5' value={purchaseForm.commissionRate} onChange={(e) => handlePurchaseChange('commissionRate', e.target.value)} {...purchaseEnter.enterProps('purchase-commission')} />
+                      <Input id='purchase-commission' type='number' min='0' max='100' step='any' placeholder='e.g., 1, 1.5' value={purchaseForm.commissionRate} onChange={(e) => handlePurchaseChange('commissionRate', e.target.value)} {...purchaseEnter.enterProps('purchase-commission')} />
                       {purchaseProfit.commissionProfit > 0 && (
                         <p className='text-xs text-green-600'>Commission Savings: {formatMoney(purchaseProfit.commissionProfit)}</p>
                       )}
@@ -2212,7 +2212,7 @@ function LoadManagementPage({
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='commission'>Commission Rate (%) - Optional</Label>
-                      <Input id='commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 2, 2.5, 5' value={saleForm.commissionRate} onChange={(e) => handleSaleChange('commissionRate', e.target.value)} {...saleEnter.enterProps('commission')} />
+                      <Input id='commission' type='number' min='0' max='100' step='any' placeholder='e.g., 2, 2.5, 5' value={saleForm.commissionRate} onChange={(e) => handleSaleChange('commissionRate', e.target.value)} {...saleEnter.enterProps('commission')} />
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='extra'>Extra Charges ({currencySymbol}) - Optional</Label>
@@ -2519,7 +2519,7 @@ function LoadManagementPage({
                       <div className='space-y-2'>
                         <Label>Commission Rate (%) - Shared</Label>
                         <Input
-                          type='number' min='0' max='100' step='0.01'
+                          type='number' min='0' max='100' step='any'
                           placeholder='e.g., 2'
                           value={bulkWithdrawalForm.commissionRate}
                           onChange={(e) => {
@@ -2535,7 +2535,7 @@ function LoadManagementPage({
                       <div className='space-y-2'>
                         <Label>GST on Commission (%)</Label>
                         <Input
-                          type='number' min='0' max='100' step='0.01'
+                          type='number' min='0' max='100' step='any'
                           placeholder='e.g., 16'
                           value={bulkWithdrawalForm.gstRate}
                           onChange={(e) => setBulkWithdrawalForm(prev => ({ ...prev, gstRate: e.target.value }))}
@@ -2547,7 +2547,7 @@ function LoadManagementPage({
                       <div className='space-y-2'>
                         <Label>GST on Amount (%)</Label>
                         <Input
-                          type='number' min='0' max='100' step='0.01'
+                          type='number' min='0' max='100' step='any'
                           placeholder='e.g., 2'
                           value={bulkWithdrawalForm.amountGstRate}
                           onChange={(e) => setBulkWithdrawalForm(prev => ({ ...prev, amountGstRate: e.target.value }))}
@@ -2988,7 +2988,7 @@ function LoadManagementPage({
                   <div className='grid grid-cols-1 gap-4 md:grid-cols-3'>
                     <div className='space-y-2'>
                       <Label htmlFor='withdrawal-commission'>Commission Rate (%) - Optional</Label>
-                      <Input id='withdrawal-commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 1, 1.5, 2' value={withdrawalForm.commissionRate} onChange={(e) => handleWithdrawalChange('commissionRate', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-commission')} />
+                      <Input id='withdrawal-commission' type='number' min='0' max='100' step='any' placeholder='e.g., 1, 1.5, 2' value={withdrawalForm.commissionRate} onChange={(e) => handleWithdrawalChange('commissionRate', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-commission')} />
                       {(Number(withdrawalForm.commissionRate) > 0 || Number(withdrawalForm.extraCharge) > 0) && (
                         <p className='text-xs text-muted-foreground'>
                           {Number(withdrawalForm.commissionRate) > 0 && (
@@ -3003,14 +3003,14 @@ function LoadManagementPage({
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='withdrawal-gst'>GST on Commission (%)</Label>
-                      <Input id='withdrawal-gst' type='number' min='0' max='100' step='0.01' placeholder='e.g., 16' value={withdrawalForm.gstRate} onChange={(e) => handleWithdrawalChange('gstRate', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-gst')} />
+                      <Input id='withdrawal-gst' type='number' min='0' max='100' step='any' placeholder='e.g., 16' value={withdrawalForm.gstRate} onChange={(e) => handleWithdrawalChange('gstRate', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-gst')} />
                       {withdrawalProfit.gstAmount > 0 && (
                         <p className='text-xs text-muted-foreground'>GST deducted: {formatMoney(withdrawalProfit.gstAmount)}</p>
                       )}
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='withdrawal-amount-gst'>GST on Amount (%)</Label>
-                      <Input id='withdrawal-amount-gst' type='number' min='0' max='100' step='0.01' placeholder='e.g., 2' value={withdrawalForm.amountGstRate} onChange={(e) => handleWithdrawalChange('amountGstRate', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-amount-gst')} />
+                      <Input id='withdrawal-amount-gst' type='number' min='0' max='100' step='any' placeholder='e.g., 2' value={withdrawalForm.amountGstRate} onChange={(e) => handleWithdrawalChange('amountGstRate', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-amount-gst')} />
                       {withdrawalProfit.amountGst > 0 && (
                         <p className='text-xs text-muted-foreground'>
                           Bank deducts {formatMoney(withdrawalProfit.amountGst)} — wallet{' '}

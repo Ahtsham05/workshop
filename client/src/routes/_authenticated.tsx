@@ -9,8 +9,9 @@ import { PortalShell } from '@/components/layout/portal-shell'
 import { PermissionWrapper } from '@/context/permission-wrapper'
 import { WhatsAppProvider } from '@/context/whatsapp-context'
 import { TrialExpirationBoundary } from '@/components/trial-expiration-boundary'
-import { useGetMyOrganizationQuery } from '@/stores/organization.api'
-import { useSelector } from 'react-redux'
+import { organizationApi, useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { toast } from 'sonner'
+import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { resolveRouteAccess } from '@/lib/route-permissions'
 import { deriveSchoolRole } from '@/lib/school-permissions'
@@ -19,6 +20,8 @@ import { looksLikeJwt } from '@/lib/auth-token'
 import { LocalDatabaseSetupBanner } from '@/features/settings/local-database/local-database-setup-banner'
 import { setActiveOrganizationBusinessType, setActiveOrganizationMenuVisibility } from '@/lib/organization-context'
 import { setAppDateFormat } from '@/lib/date-format'
+import { BUSINESS_TIME_ZONE_CHANGED_EVENT, setBusinessTimeZone } from '@/lib/business-timezone'
+import { timeZoneShortName } from '@/lib/time-zones'
 import { PushNotificationPrompt } from '@/components/push-notification-prompt'
 import { RolePermissionsSync } from '@/components/role-permissions-sync'
 import { useReminderWatchdog } from '@/hooks/use-reminder-watchdog'
@@ -52,6 +55,25 @@ function AuthenticatedLayout() {
   const isWhatsAppInbox = pathname.replace(/\/+$/, '') === '/whatsapp'
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const dispatch = useDispatch()
+
+  // An admin changed the business time zone while this tab was open: the very next API response
+  // carried it (lib/business-timezone#noteServerBusinessTimeZone). Refresh org data and say so;
+  // reloading is offered so forms already filled with the old day pick up the new one.
+  useEffect(() => {
+    const onChange = (event: Event) => {
+      const { to } = (event as CustomEvent<{ from: string; to: string }>).detail
+      dispatch(organizationApi.util.invalidateTags(['Organization']))
+      toast.info(`Business time zone changed to ${timeZoneShortName(to)}`, {
+        id: 'business-time-zone-changed',
+        duration: 20000,
+        description: 'Dates, “today” and the clock now follow it. Reload to refresh any screen that is already open.',
+        action: { label: 'Reload', onClick: () => window.location.reload() },
+      })
+    }
+    window.addEventListener(BUSINESS_TIME_ZONE_CHANGED_EVENT, onChange)
+    return () => window.removeEventListener(BUSINESS_TIME_ZONE_CHANGED_EVENT, onChange)
+  }, [dispatch])
 
   const { current: ringingReminder, queueLength: ringingQueueLength, snoozeCurrent, completeCurrent } = useReminderWatchdog()
 
@@ -69,6 +91,8 @@ function AuthenticatedLayout() {
   // Settings → Localization date format drives every date label/field (see lib/date-format).
   useLayoutEffect(() => {
     if (orgData) setAppDateFormat(orgData.dateFormat)
+    // Settings → Localization time zone: "today", date filters, datetime fields and the clock.
+    if (orgData) setBusinessTimeZone(orgData.resolvedTimeZone || orgData.timeZone)
   }, [orgData])
 
   const storedUser = (() => {

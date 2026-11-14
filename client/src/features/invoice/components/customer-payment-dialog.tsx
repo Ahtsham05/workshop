@@ -35,6 +35,7 @@ import { AlertTriangle, ArrowRight, Banknote, Coins, HandCoins, Loader2, Wallet 
 import { useStateDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 /** Allocation strategies the dialog offers, in the order an ERP user expects them. */
 const ALLOCATION_MODES: { value: AllocationMode; label: string; hint: string }[] = [
@@ -68,7 +69,7 @@ export function CustomerPaymentDialog({ open, onOpenChange, defaultCustomerId, o
   const [customerId, setCustomerId] = useState(defaultCustomerId || '')
   const [direction, setDirection] = useState<'payment' | 'refund'>('payment')
   const [amount, setAmount] = useState('')
-  const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [paymentDate, setPaymentDate] = useState(getBusinessToday())
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wallet'>('cash')
   const [walletType, setWalletType] = useState('')
   const [referenceNumber, setReferenceNumber] = useState('')
@@ -101,7 +102,7 @@ export function CustomerPaymentDialog({ open, onOpenChange, defaultCustomerId, o
     setCustomerId(defaultCustomerId || '')
     setDirection('payment')
     setAmount('')
-    setPaymentDate(format(new Date(), 'yyyy-MM-dd'))
+    setPaymentDate(getBusinessToday())
     setPaymentMethod('cash')
     setWalletType('')
     setReferenceNumber('')

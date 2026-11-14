@@ -23,6 +23,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { NumericInput } from '@/components/ui/numeric-input'
 import { Label } from '@/components/ui/label'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
@@ -176,11 +177,13 @@ const formSchema = z.object({
   productType: z.string().nullable().optional(),
 }).superRefine((data, ctx) => {
   if (data.hasVariants) return
-  if (!data.price || data.price < 1) {
-    ctx.addIssue({ code: 'custom', path: ['price'], message: 'Sale price is required.' })
+  // Any non-negative amount is a valid price — fractional (0.7, 0.125 per unit) and 0
+  // (free items, samples, give-aways) included. A sale price of 0 is confirmed on save.
+  if (!Number.isFinite(data.price) || data.price < 0) {
+    ctx.addIssue({ code: 'custom', path: ['price'], message: 'Sale price must be 0 or more.' })
   }
-  if (!data.cost || data.cost < 1) {
-    ctx.addIssue({ code: 'custom', path: ['cost'], message: 'Purchase price is required.' })
+  if (!Number.isFinite(data.cost) || data.cost < 0) {
+    ctx.addIssue({ code: 'custom', path: ['cost'], message: 'Purchase price must be 0 or more.' })
   }
   if (data.trackImei && data.trackSerial) {
     ctx.addIssue({ code: 'custom', path: ['trackSerial'], message: 'A product tracks either IMEI or Serial Number, not both.' })
@@ -228,8 +231,9 @@ function isEnterValueEmpty(id: EnterFieldId, value: unknown): boolean {
   if (value === undefined || value === null) return true
   if (typeof value === 'string') return value.trim() === ''
   if (Array.isArray(value)) return value.length === 0
-  // Cost/Price must be > 0 to ever save (see the form's superRefine) — a 0 left at its
-  // default means "never actually typed", unlike Stock Quantity, which is valid at 0.
+  // Cost/Price may legitimately be 0, but a 0 still left at its default is far more
+  // often "never typed" — so the skipped-field scan points back at it (saving at 0
+  // stays allowed). Stock Quantity at 0 is just normal.
   if (typeof value === 'number') return (id === 'cost' || id === 'price') && value <= 0
   return false
 }
@@ -743,8 +747,12 @@ export function UsersActionDialog({
         return
       }
     }
+    // A 0 sale price is allowed (free items/samples) but is usually an oversight — confirm.
+    if (!rawValues.hasVariants && rawValues.price === 0 && !window.confirm(t('Sale price is 0 — this product will be sold for free. Save anyway?'))) {
+      return
+    }
     // Sale price below the purchase price is almost always the two fields swapped.
-    if (!rawValues.hasVariants && rawValues.cost > rawValues.price && !window.confirm(t('Purchase price ({{cost}}) is higher than the sale price ({{price}}). Save anyway?', { cost: rawValues.cost, price: rawValues.price }))) {
+    if (!rawValues.hasVariants && rawValues.price > 0 && rawValues.cost > rawValues.price && !window.confirm(t('Purchase price ({{cost}}) is higher than the sale price ({{price}}). Save anyway?', { cost: rawValues.cost, price: rawValues.price }))) {
       return
     }
     setIsSubmitting(true)
@@ -1886,14 +1894,14 @@ export function UsersActionDialog({
                     <FormItem className='gap-1.5'>
                       <FormLabel>{t('cost')} *</FormLabel>
                       <FormControl>
-                        <Input
+                        <NumericInput
                           placeholder={t('cost')}
-                          type='number'
-                          {...field}
-                          onChange={(e) => {
-                            setNumericValue('cost', e.target.value)
-                            // field.onChange(e)
-                          }}
+                          name={field.name}
+                          ref={field.ref}
+                          value={field.value}
+                          min={0}
+                          onValueChange={(n) => setNumericValue('cost', n)}
+                          onBlur={field.onBlur}
                           data-enter-field='cost'
                           onKeyDown={enterAdvance('cost')}
                         />
@@ -1909,14 +1917,14 @@ export function UsersActionDialog({
                     <FormItem className='gap-1.5'>
                       <FormLabel>{t('price')} *</FormLabel>
                       <FormControl>
-                        <Input
+                        <NumericInput
                           placeholder={t('price')}
-                          type='number'
-                          {...field}
-                          onChange={(e) => {
-                            setNumericValue('price', e.target.value)
-                            // field.onChange(e)
-                          }}
+                          name={field.name}
+                          ref={field.ref}
+                          value={field.value}
+                          min={0}
+                          onValueChange={(n) => setNumericValue('price', n)}
+                          onBlur={field.onBlur}
                           data-enter-field='price'
                           onKeyDown={enterAdvance('price')}
                         />

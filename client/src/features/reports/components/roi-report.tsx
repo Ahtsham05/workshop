@@ -39,6 +39,7 @@ import {
   reportKpiValueClass,
   reportSectionTitleClass,
 } from '../utils/report-styles'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface RoiReportProps {
   startDate: string
@@ -137,7 +138,7 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(monthlyRows), 'Monthly ROI')
           }
 
-          XLSX.writeFile(wb, `roi-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `roi-report-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch {
           toast.error(t('Failed to export data'))

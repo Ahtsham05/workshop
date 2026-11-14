@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Globe, Calendar, Languages } from 'lucide-react'
+import { Loader2, Globe, Calendar, Languages, Clock, LocateFixed } from 'lucide-react'
 import { toast } from 'sonner'
 import ContentSection from '../components/content-section'
 import { EntityFormSection } from '@/components/entity-form-section'
@@ -18,6 +18,11 @@ import {
   type NativeLanguageSetting,
 } from '@/lib/native-language'
 import { useSettingsSaveShortcut } from '@/lib/settings-form-keyboard'
+import { TimeZonePicker } from '@/components/time-zone-picker'
+import { useNow } from '@/hooks/use-now'
+import { formatUtcOffset, getDeviceTimeZone, getTimeZoneNames, setBusinessTimeZone, businessDateTimeFormat } from '@/lib/business-timezone'
+import { formatCalendarParts } from '@/lib/date-format'
+import { automaticTimeZoneFor, describeZoneDifference, sameClock, timeZoneDisplayName, timeZoneShortName } from '@/lib/time-zones'
 import {
   useGetMyOrganizationQuery,
   useUpdateOrganizationSettingsMutation,
@@ -52,6 +57,7 @@ export default function LocalizationSettings() {
   const [dateFormat, setDateFormat] = useState<DateFormat>('DD/MM/YYYY')
   const [locale, setLocale] = useState('en-US')
   const [nativeLanguage, setNativeLanguage] = useState<NativeLanguageSetting>('auto')
+  const [timeZone, setTimeZone] = useState('') // '' = automatic
   const [defaultsAppliedNote, setDefaultsAppliedNote] = useState(false)
 
   useEffect(() => {
@@ -62,6 +68,7 @@ export default function LocalizationSettings() {
     setDateFormat(org.dateFormat || 'DD/MM/YYYY')
     setLocale(org.locale || 'en-US')
     setNativeLanguage(org.nativeLanguage || 'auto')
+    setTimeZone(org.timeZone || '')
   }, [org])
 
   const countryOptions = (countries || []).map((c) => ({ value: c.code, label: c.name }))
@@ -84,17 +91,35 @@ export default function LocalizationSettings() {
     taxInclusive !== !!org?.taxInclusivePricingDefault ||
     dateFormat !== (org?.dateFormat || 'DD/MM/YYYY') ||
     locale !== (org?.locale || 'en-US') ||
-    nativeLanguage !== (org?.nativeLanguage || 'auto')
+    nativeLanguage !== (org?.nativeLanguage || 'auto') ||
+    timeZone !== (org?.timeZone || '')
 
   const handleSave = async () => {
     if (!org) return
+    const previousZone = org.resolvedTimeZone || org.timeZone || automaticTimeZoneFor(org.countryCode).zone
     try {
       await updateSettings({
         orgId: org.id,
-        body: { countryCode, taxSystem, taxInclusivePricingDefault: taxInclusive, dateFormat, locale, nativeLanguage },
+        body: {
+          countryCode,
+          taxSystem,
+          taxInclusivePricingDefault: taxInclusive,
+          dateFormat,
+          locale,
+          nativeLanguage,
+          timeZone: timeZone || null,
+        },
       }).unwrap()
-      toast.success('Localization settings updated')
       setDefaultsAppliedNote(false)
+      if (effectiveZone !== previousZone) {
+        // Every open screen, cached report and "today" default must switch together —
+        // a clean reload is the only way nothing keeps the old day boundaries.
+        setBusinessTimeZone(effectiveZone)
+        toast.success(`Time zone set to ${timeZoneShortName(effectiveZone)} — reloading so every date uses it`)
+        window.setTimeout(() => window.location.reload(), 900)
+      } else {
+        toast.success('Localization settings updated')
+      }
     } catch {
       toast.error('Failed to update localization settings')
     }
@@ -111,6 +136,14 @@ export default function LocalizationSettings() {
   const effectiveInfo = effectiveLanguage ? NATIVE_LANGUAGE_INFO[effectiveLanguage] : null
   const effectiveHasPrintHeadings =
     !!effectiveLanguage && (PRINT_LANGUAGES as readonly string[]).includes(effectiveLanguage)
+
+  const automatic = automaticTimeZoneFor(countryCode)
+  const effectiveZone = timeZone || automatic.zone
+  const deviceZone = getDeviceTimeZone()
+  // Country with one zone → "Automatic (Pakistan)"; several zones (US, Canada…) → not chosen yet.
+  const autoZoneLabel = automatic.fromCountry
+    ? `Automatic (${countryName || timeZoneShortName(automatic.zone)})`
+    : `Not set — using ${timeZoneShortName(automatic.zone)} time`
 
   if (isLoading || !org) {
     return (
@@ -141,6 +174,34 @@ export default function LocalizationSettings() {
               ✓ Defaults applied for this country — you can still override any setting below before saving.
             </p>
           )}
+        </EntityFormSection>
+
+        <EntityFormSection
+          title='Time Zone'
+          description='Where your business is. Decides when each day starts and ends for invoices, reports, the cash book and date filters, and the time on the header clock. Daylight saving (e.g. EST ↔ EDT) is applied automatically.'
+          icon={<Clock />}
+        >
+          <div className='flex flex-col gap-2 sm:flex-row sm:items-start'>
+            <TimeZonePicker
+              value={timeZone}
+              onValueChange={setTimeZone}
+              autoLabel={autoZoneLabel}
+              autoZone={automatic.zone}
+              className='min-w-0 flex-1'
+              id='business-time-zone'
+            />
+            <Button
+              type='button'
+              variant='outline'
+              className='shrink-0'
+              onClick={() => setTimeZone(deviceZone)}
+              disabled={timeZone === deviceZone}
+              title={`This device is set to ${timeZoneDisplayName(deviceZone)}`}
+            >
+              <LocateFixed className='mr-2 h-4 w-4' /> Detect from this device
+            </Button>
+          </div>
+          <TimeZonePreview zone={effectiveZone} deviceZone={deviceZone} />
         </EntityFormSection>
 
         <EntityFormSection
@@ -273,5 +334,41 @@ export default function LocalizationSettings() {
         </div>
       </div>
     </ContentSection>
+  )
+}
+
+/** Live business clock for the chosen zone + how it compares to this device's clock. */
+function TimeZonePreview({ zone, deviceZone }: { zone: string; deviceZone: string }) {
+  const now = useNow()
+  const p = Object.fromEntries(
+    businessDateTimeFormat(
+      'en-US',
+      { weekday: 'short', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true },
+      zone
+    )
+      .formatToParts(now)
+      .map((part) => [part.type, part.value])
+  )
+  const names = getTimeZoneNames(zone, now)
+  const matchesDevice = sameClock(zone, deviceZone)
+  return (
+    <div className='rounded-lg border bg-muted/40 p-3 text-sm' data-no-translate>
+      <div className='flex flex-wrap items-baseline gap-x-2'>
+        <span className='text-lg font-semibold tabular-nums'>
+          {p.hour}:{p.minute}:{p.second} {(p.dayPeriod ?? '').toUpperCase()}
+        </span>
+        <span className='text-muted-foreground tabular-nums'>
+          {p.weekday}, {formatCalendarParts(Number(p.year), Number(p.month), Number(p.day))}
+        </span>
+      </div>
+      <div className='text-xs text-muted-foreground'>
+        {names.long} · {names.abbr} · {formatUtcOffset(zone, now)}
+      </div>
+      <p className={`mt-2 text-xs ${matchesDevice ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+        {matchesDevice
+          ? '✓ Matches this device’s clock to the second.'
+          : `This device is on ${timeZoneShortName(deviceZone)} (${getTimeZoneNames(deviceZone, now).abbr}) — the business clock is ${describeZoneDifference(zone, deviceZone, now)}. Use “Detect from this device” if the business is where this device is.`}
+      </p>
+    </div>
   )
 }

@@ -85,6 +85,10 @@ export interface Organization {
   defaultTaxCategoryId?: string | null;
   locale?: string;
   dateFormat?: DateFormat;
+  /** Business time zone (IANA, e.g. 'America/Chicago'); null/'' = automatic (country default). */
+  timeZone?: string | null;
+  /** The zone actually in force (saved choice → country's single zone → Asia/Karachi). Read-only. */
+  resolvedTimeZone?: string;
   documentNumbering?: DocumentNumberingConfig;
   /** 'auto' (follow countryCode), 'none', or a language code — see lib/native-language.ts. */
   nativeLanguage?: NativeLanguageSetting;
@@ -103,6 +107,7 @@ export interface UpdateOrganizationSettingsRequest {
   defaultTaxCategoryId?: string | null;
   locale?: string;
   dateFormat?: DateFormat;
+  timeZone?: string | null;
   documentNumbering?: DocumentNumberingConfig;
   nativeLanguage?: NativeLanguageSetting;
 }
@@ -128,6 +133,8 @@ export interface SetupOrganizationRequest {
   locale?: string;
   dateFormat?: string;
   taxSystem?: string;
+  /** This device's zone, auto-detected — the business time zone until changed in Settings. */
+  timeZone?: string;
   logoFile?: File | null;
 }
 
@@ -170,6 +177,7 @@ export const organizationApi = createApi({
         if (body.locale) formData.append('locale', body.locale);
         if (body.dateFormat) formData.append('dateFormat', body.dateFormat);
         if (body.taxSystem) formData.append('taxSystem', body.taxSystem);
+        if (body.timeZone) formData.append('timeZone', body.timeZone);
         if (body.logoFile) formData.append('logo', body.logoFile);
 
         return {

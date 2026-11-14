@@ -574,11 +574,11 @@ export function BuyUsedPhoneDialog({
             <div className='grid gap-3 sm:grid-cols-2'>
               <div className='space-y-1'>
                 <Label>Agreed Price (Rs) *</Label>
-                <Input className='bg-background' type='number' min='0' step='1' value={form.agreedPrice} onChange={(e) => setField('agreedPrice', e.target.value)} />
+                <Input className='bg-background' type='number' min='0' step='any' value={form.agreedPrice} onChange={(e) => setField('agreedPrice', e.target.value)} />
               </div>
               <div className='space-y-1'>
                 <Label>Asking / Resale Price (Rs)</Label>
-                <Input className='bg-background' type='number' min='0' step='1' placeholder='Optional' value={form.askingPrice} onChange={(e) => setField('askingPrice', e.target.value)} />
+                <Input className='bg-background' type='number' min='0' step='any' placeholder='Optional' value={form.askingPrice} onChange={(e) => setField('askingPrice', e.target.value)} />
               </div>
             </div>
             <div className='grid gap-3 sm:grid-cols-2'>

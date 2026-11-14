@@ -37,6 +37,7 @@ import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { cn } from '@/lib/utils'
 import { useFormatMoney } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface ActivitySummaryReportProps {
   startDate: string
@@ -476,7 +477,7 @@ export const ActivitySummaryReport = forwardRef<
           })
         }
 
-        XLSX.writeFile(wb, `activity-summary-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+        XLSX.writeFile(wb, `activity-summary-${getBusinessToday()}.xlsx`)
         toast.success(t('Data exported successfully'))
       } catch (error) {
         console.error('Export error:', error)

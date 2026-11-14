@@ -66,6 +66,7 @@ import {
 import { mergeWalletCategoriesForPicker } from '../utils/merge-wallet-categories';
 import { useFormatMoney } from '@/lib/format-money';
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone';
 
 interface LedgerEntry {
   _id?: string;
@@ -195,7 +196,7 @@ function EntryForm({
     transactionType: editingEntry?.transactionType || defaultTransactionType || 'income',
     transactionDate: editingEntry
       ? format(new Date(editingEntry.transactionDate), 'yyyy-MM-dd')
-      : format(new Date(), 'yyyy-MM-dd'),
+      : getBusinessToday(),
     description: editingEntry?.description || '',
     category: editingEntry?.category || defaultCategory || '',
     reference: editingEntry?.reference || '',
@@ -483,7 +484,7 @@ export function PersonalLedger() {
   const [categorySearch, setCategorySearch] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [startDate, setStartDate] = useState(format(new Date(new Date().setDate(new Date().getDate() - 30)), 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [endDate, setEndDate] = useState(getBusinessToday());
   const [openingBalanceValue, setOpeningBalanceValue] = useState(0);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -880,7 +881,7 @@ export function PersonalLedger() {
       ];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Summary');
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailData), 'Transaction Details');
-      XLSX.writeFile(wb, `personal-ledger-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+      XLSX.writeFile(wb, `personal-ledger-${getBusinessToday()}.xlsx`);
       toast.success(t('Exported successfully'));
     } catch {
       toast.error(t('Failed to export'));
@@ -1009,7 +1010,7 @@ export function PersonalLedger() {
               variant="outline"
               onClick={() => {
                 setStartDate(format(new Date(new Date().setDate(new Date().getDate() - 30)), 'yyyy-MM-dd'));
-                setEndDate(format(new Date(), 'yyyy-MM-dd'));
+                setEndDate(getBusinessToday());
                 setCurrentPage(1);
               }}
               className="max-sm:col-span-full"

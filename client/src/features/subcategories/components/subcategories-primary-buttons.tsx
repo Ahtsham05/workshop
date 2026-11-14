@@ -20,6 +20,7 @@ import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
 import * as XLSX from 'xlsx'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface SubCategoriesPrimaryButtonsProps {
   hasCategories: boolean
@@ -66,7 +67,7 @@ export default function SubCategoriesPrimaryButtons({ hasCategories, defaultCate
       XLSX.utils.book_append_sheet(wb, ws, 'Sub-Categories')
       ws['!cols'] = [{ wch: 30 }, { wch: 25 }, { wch: 30 }, { wch: 15 }]
 
-      XLSX.writeFile(wb, `subcategories-export-${new Date().toISOString().split('T')[0]}.xlsx`)
+      XLSX.writeFile(wb, `subcategories-export-${getBusinessToday()}.xlsx`)
       toast.success(t('export_successful'))
     } catch (error) {
       console.error('Error exporting sub-categories:', error)

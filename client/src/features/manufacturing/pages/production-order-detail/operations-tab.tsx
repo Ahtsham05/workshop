@@ -740,6 +740,7 @@ function StepDialog({
             <Input
               id='step-rate'
               type='number'
+              step='any'
               min={0}
               inputMode='decimal'
               value={costPerHour}

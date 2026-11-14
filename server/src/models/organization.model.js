@@ -3,6 +3,7 @@ const { toJSON, paginate } = require('./plugins');
 const { BUSINESS_TYPES, normalizeBusinessType } = require('../config/businessTypes');
 const { TAX_SYSTEMS } = require('../config/countries');
 const { NATIVE_LANGUAGE_SETTINGS } = require('../config/nativeLanguages');
+const { isValidTimeZone } = require('../utils/businessTimezone');
 
 // One section (Invoice/Purchase/Quotation) of the documentNumbering config below.
 // `dateSegment` and `resetPeriod` must stay consistent — see documentNumbering.service.js's
@@ -76,6 +77,25 @@ const organizationSchema = mongoose.Schema(
     taxNumber: {
       type: String,
       trim: true,
+    },
+    // IANA time zone the business runs on ('America/New_York', 'Asia/Karachi', …): where
+    // "today" starts and ends for every date filter, report, cash book day and the header clock.
+    // null = not chosen → the country's zone when it has only one, else Asia/Karachi
+    // (resolveOrganizationTimeZone in middlewares/businessTimeZone.js). DST handled by the zone.
+    timeZone: {
+      type: String,
+      trim: true,
+      default: null,
+      validate: {
+        validator: (value) => value == null || value === '' || isValidTimeZone(value),
+        message: 'Unknown time zone',
+      },
+    },
+    // Last change of the EFFECTIVE zone: for 24 h the old zone's "today" is still accepted by
+    // the future-date guards, so a colleague's tab that hasn't picked the change up yet can save.
+    timeZoneChange: {
+      from: { type: String, default: null },
+      at: { type: Date, default: null },
     },
     // The second language every `nameUrdu` field holds and native-language prints use:
     // 'auto' follows countryCode (Pakistan → Urdu, UAE → Arabic, …), 'none' turns it off.

@@ -382,6 +382,7 @@ export function ProductFiltersPanel({
             <div className='flex items-center gap-2'>
               <Input
                 type='number'
+                step='any'
                 min={0}
                 showVoiceInput={false}
                 placeholder={t('min')}
@@ -392,6 +393,7 @@ export function ProductFiltersPanel({
               <span className='text-muted-foreground'>–</span>
               <Input
                 type='number'
+                step='any'
                 min={0}
                 showVoiceInput={false}
                 placeholder={t('max')}
@@ -407,6 +409,7 @@ export function ProductFiltersPanel({
             <div className='flex items-center gap-2'>
               <Input
                 type='number'
+                step='any'
                 min={0}
                 showVoiceInput={false}
                 placeholder={t('min')}
@@ -417,6 +420,7 @@ export function ProductFiltersPanel({
               <span className='text-muted-foreground'>–</span>
               <Input
                 type='number'
+                step='any'
                 min={0}
                 showVoiceInput={false}
                 placeholder={t('max')}

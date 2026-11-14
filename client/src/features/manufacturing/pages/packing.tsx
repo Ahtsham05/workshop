@@ -1,3 +1,4 @@
+import { getBusinessToday } from '@/lib/business-timezone'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { skipToken } from '@reduxjs/toolkit/query'
@@ -65,10 +66,7 @@ import { useFormatMoney } from '../lib/use-mfg-money'
  * bulk already in stock (loose left over, or goods that went through QC).
  */
 
-const todayKey = () =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(
-    new Date()
-  )
+const todayKey = () => getBusinessToday()
 
 export default function PackingPage() {
   const { t } = useLanguage()

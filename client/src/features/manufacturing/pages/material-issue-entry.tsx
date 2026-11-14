@@ -1549,7 +1549,7 @@ function IssueEntry({
           header: {
             mode: 'order' as const,
             productionOrderId: v.productionOrderId,
-            // The business day it was posted on (Asia/Karachi), not the UTC date.
+            // The business day it was posted on (org time zone), not the UTC date.
             date: toBusinessCalendarDate(new Date(v.issueDate)),
             sourceLocation:
               v.sourceLocation || options.defaultSourceLocation || '',

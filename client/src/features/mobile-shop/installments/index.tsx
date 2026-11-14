@@ -74,6 +74,7 @@ import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 import { formatAppDate } from '@/lib/date-format'
 import { WarehouseField, useWarehousePicker } from '@/components/warehouse-field'
 import { WarehouseTag } from '@/components/warehouse-tag'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -121,7 +122,7 @@ const initialPlanForm = (): PlanFormState => ({
   installmentAmount: '',
   paymentMethod: 'cash',
   walletType: '',
-  startDate: format(new Date(), 'yyyy-MM-dd'),
+  startDate: getBusinessToday(),
   notes: '',
 })
 
@@ -129,7 +130,7 @@ const initialPaymentForm = (): PaymentFormState => ({
   amount: '',
   paymentMethod: 'cash',
   walletType: '',
-  date: format(new Date(), 'yyyy-MM-dd'),
+  date: getBusinessToday(),
   notes: '',
 })
 

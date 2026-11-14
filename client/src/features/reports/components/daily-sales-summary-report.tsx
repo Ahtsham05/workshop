@@ -28,6 +28,7 @@ import { toneIconWrapClass, type StatCardTone } from '@/lib/stat-card-tones'
 import { cn } from '@/lib/utils'
 import { useFormatMoney } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface DailySalesSummaryReportProps {
   startDate: string
@@ -165,7 +166,7 @@ export const DailySalesSummaryReport = forwardRef<{ exportToExcel: () => void },
             XLSX.utils.book_append_sheet(wb, itemSheet, safeName)
           })
 
-        XLSX.writeFile(wb, `daily-sales-summary-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+        XLSX.writeFile(wb, `daily-sales-summary-${getBusinessToday()}.xlsx`)
         toast.success('Data exported successfully')
       },
     }))

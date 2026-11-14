@@ -7,13 +7,13 @@ import { useGetLoadReportQuery } from '@/stores/reports.api'
 import { useLanguage } from '@/context/language-context'
 import { Wallet, TrendingUp, ShoppingCart, CircleDollarSign } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { WalletBalanceStatement } from './wallet-balance-statement'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { isLoadWalletName, normalizeWalletTypeParam } from '@/features/mobile-shop/utils/wallet-utils'
 import { useFormatMoney } from '@/lib/format-money'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 const normalizeWalletKey = (name: string) => normalizeWalletTypeParam(name).toLowerCase()
 
@@ -98,7 +98,7 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(wData), 'Wallet Balances')
           }
 
-          XLSX.writeFile(wb, `load-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `load-report-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch {
           toast.error(t('Failed to export data'))

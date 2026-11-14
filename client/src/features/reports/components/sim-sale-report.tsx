@@ -14,13 +14,13 @@ import { useGetSimSaleReportQuery, useLazyGetSimSaleReportQuery } from '@/stores
 import { useLanguage } from '@/context/language-context'
 import { Smartphone, TrendingUp, CircleDollarSign, Wallet, X } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { useFormatMoney } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface SimSaleReportProps {
   startDate: string
@@ -106,7 +106,7 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(salesData), 'Recent Sales')
           }
 
-          XLSX.writeFile(wb, `sim-sale-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `sim-sale-report-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch {
           toast.error(t('Failed to export data'))

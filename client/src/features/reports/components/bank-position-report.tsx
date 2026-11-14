@@ -38,6 +38,7 @@ import {
 import type { BankAccountType } from '@/stores/mobile-shop.api'
 import { printBankReconciliationReport } from '../utils/print-bank-reconciliation-report'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface BankPositionReportProps {
   startDate: string
@@ -162,7 +163,7 @@ export const BankPositionReport = forwardRef<{ exportToExcel: () => void }, Bank
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Reconciliation History')
           }
 
-          XLSX.writeFile(wb, `bank-reconciliation-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `bank-reconciliation-report-${getBusinessToday()}.xlsx`)
           toast.success('Report exported successfully')
         } catch {
           toast.error('Failed to export report')

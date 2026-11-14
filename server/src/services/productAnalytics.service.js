@@ -15,7 +15,7 @@ const {
   Brand,
 } = require('../models');
 const ApiError = require('../utils/ApiError');
-const { BUSINESS_TZ, toBusinessCalendarDate, parseBusinessDateBoundary } = require('../utils/businessTimezone');
+const { getBusinessTimeZone, toBusinessCalendarDate, parseBusinessDateBoundary } = require('../utils/businessTimezone');
 const {
   ANALYTICS_CONFIG,
   DAY_MS,
@@ -193,7 +193,7 @@ const purchasedLineStages = ({ scope, start, end, productIds, extraProject = {} 
  * codebase depends on a server that new.)
  */
 const dayKeyExpr = (dateField) => ({
-  $dateToString: { format: '%Y-%m-%d', timezone: BUSINESS_TZ, date: dateField },
+  $dateToString: { format: '%Y-%m-%d', timezone: getBusinessTimeZone(), date: dateField },
 });
 
 /* ── Per-product sums ───────────────────────────────────────────────────────── */

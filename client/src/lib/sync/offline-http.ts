@@ -1,3 +1,4 @@
+import { BUSINESS_TIME_ZONE_HEADER, noteServerBusinessTimeZone } from '@/lib/business-timezone'
 import { isApiUnreachable } from '@/lib/auth-cache'
 import { fetchWithTimeout } from '@/lib/api-timeout'
 import { getElectronAPI, isElectronApp } from '@/lib/sync/electron'
@@ -77,7 +78,18 @@ export async function tryOfflineHttpRequest(args: OfflineRequestArgs): Promise<R
   return buildOfflineResponse(result.status || 200, result.data)
 }
 
-export async function offlineAwareFetch(
+/** Every RTK Query API goes through here: pick up the org's business time zone from responses. */
+export async function offlineAwareFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await offlineAwareFetchInner(input, init)
+  try {
+    noteServerBusinessTimeZone(response.headers.get(BUSINESS_TIME_ZONE_HEADER))
+  } catch {
+    // headers unreadable (opaque/offline response) — nothing to sync
+  }
+  return response
+}
+
+async function offlineAwareFetchInner(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {

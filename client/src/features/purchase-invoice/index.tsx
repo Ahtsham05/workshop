@@ -53,6 +53,7 @@ import {
   type PurchaseHeldRecord,
 } from '@/lib/pos-hold-storage';
 import { formatAppDateTime } from '@/lib/date-format'
+import { toBusinessCalendarDate } from '@/lib/business-timezone';
 
 // Purchase Item Interface - simpler than invoice, no profit tracking
 export interface PurchaseItem {
@@ -990,7 +991,7 @@ const PurchaseInvoicePage = () => {
           discountValue: item.discountValue || 0,
           imeis: item.imeis || [],
           batchNumber: item.batchNumber,
-          expiryDate: item.expiryDate ? new Date(item.expiryDate).toISOString().slice(0, 10) : undefined,
+          expiryDate: item.expiryDate ? toBusinessCalendarDate(new Date(item.expiryDate)) : undefined,
           trackBatch: variant?.trackBatch ?? catalogEntry?.trackBatch,
           trackExpiry: variant?.trackExpiry ?? catalogEntry?.trackExpiry,
           knownBatches: catalogEntry?.batches,

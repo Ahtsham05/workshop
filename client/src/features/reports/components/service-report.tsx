@@ -51,6 +51,7 @@ import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { useFormatMoney } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface ServiceReportProps {
   startDate: string
@@ -152,7 +153,7 @@ export const ServiceReport = forwardRef<{ exportToExcel: () => void }, ServiceRe
             'Recent Invoices',
           )
 
-          XLSX.writeFile(wb, `service-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `service-report-${getBusinessToday()}.xlsx`)
           toast.success('Data exported successfully')
         } catch {
           toast.error('Failed to export data')

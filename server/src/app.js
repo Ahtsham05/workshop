@@ -14,6 +14,7 @@ const { authLimiter } = require('./middlewares/rateLimiter');
 const routes = require('./routes/v1');
 const { errorConverter, errorHandler } = require('./middlewares/error');
 const ApiError = require('./utils/ApiError');
+const { businessTimeZoneContext } = require('./utils/businessTimezone');
 
 const app = express();
 
@@ -146,7 +147,8 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cache-Control', 'Pragma', 'x-branch-id'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  // X-Business-Time-Zone: the org's zone on every authenticated response (middlewares/businessTimeZone.js).
+  exposedHeaders: ['Content-Range', 'X-Content-Range', 'X-Business-Time-Zone'],
   maxAge: 86400,
   optionsSuccessStatus: 204,
 };
@@ -193,6 +195,9 @@ app.get('/health', (req, res) => {
     mongodb: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
   });
 });
+
+// Per-request business time zone (the org's zone, set by auth) for every date helper below.
+app.use('/v1', businessTimeZoneContext);
 
 // v1 api routes
 app.use('/v1', routes);

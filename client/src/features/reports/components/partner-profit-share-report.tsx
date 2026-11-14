@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { useCurrencyMeta, useFormatMoney } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface PartnerProfitShareReportProps {
   startDate: string
@@ -125,7 +126,7 @@ export const PartnerProfitShareReport = forwardRef<{ exportToExcel: () => void }
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(trendRows), 'Daily Trend')
           }
 
-          XLSX.writeFile(wb, `partner-profit-share-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `partner-profit-share-report-${getBusinessToday()}.xlsx`)
           toast.success('Report exported successfully')
         } catch {
           toast.error('Failed to export report')

@@ -128,10 +128,10 @@ const batchExpiryExpr = (itemVar) => ({
   },
 });
 
-const { parseBusinessDateBoundary: parseDateBoundary, BUSINESS_TZ } = require('../utils/businessTimezone');
+const { parseBusinessDateBoundary: parseDateBoundary, getBusinessTimeZone } = require('../utils/businessTimezone');
 
 const businessDateGroup = (field = '$date') => ({
-  $dateToString: { format: '%Y-%m-%d', date: field, timezone: BUSINESS_TZ },
+  $dateToString: { format: '%Y-%m-%d', date: field, timezone: getBusinessTimeZone() },
 });
 
 const parseRange = (query) => {
@@ -4097,7 +4097,7 @@ const monthlyAmountMap = async (Model, dateField, sumExpr, match = {}) => {
     { $match: match },
     {
       $group: {
-        _id: { $dateToString: { format: '%Y-%m', date: `$${dateField}`, timezone: BUSINESS_TZ } },
+        _id: { $dateToString: { format: '%Y-%m', date: `$${dateField}`, timezone: getBusinessTimeZone() } },
         total: { $sum: sumExpr },
       },
     },

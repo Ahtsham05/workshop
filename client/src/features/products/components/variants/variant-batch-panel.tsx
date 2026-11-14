@@ -119,6 +119,7 @@ export function VariantBatchPanel({
           />
           <Input
             type='number'
+            step='any'
             min={0}
             placeholder='Cost per unit'
             showVoiceInput={false}
@@ -128,6 +129,7 @@ export function VariantBatchPanel({
           />
           <Input
             type='number'
+            step='any'
             min={0}
             placeholder='Selling price'
             showVoiceInput={false}

@@ -55,6 +55,7 @@ import { formatAppDate } from '@/lib/date-format'
 import { ExpenseNatureBadge } from '@/features/accounting/components/expense-nature'
 import { ExpenseCategoryIcon } from '@/features/accounting/components/expense-category-icon'
 import { useGetExpenseCategoriesQuery } from '@/stores/expenseCategory.api'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface ExpenseReportProps {
   startDate: string
@@ -121,7 +122,7 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
           )
           XLSX.utils.book_append_sheet(wb, summarySheet, 'Category Summary')
 
-          XLSX.writeFile(wb, `expense-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `expense-report-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch {
           toast.error(t('Failed to export data'))

@@ -24,6 +24,7 @@ import {
   reportKpiValueClass,
   reportSectionTitleClass,
 } from '../utils/report-styles'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface ProfitLossReportProps {
   startDate: string
@@ -130,7 +131,7 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
           const ws = XLSX.utils.json_to_sheet(rows)
           const wb = XLSX.utils.book_new()
           XLSX.utils.book_append_sheet(wb, ws, 'P&L Full')
-          XLSX.writeFile(wb, `profit-loss-full-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `profit-loss-full-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch {
           toast.error(t('Failed to export data'))

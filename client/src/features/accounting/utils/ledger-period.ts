@@ -37,7 +37,7 @@ const DEFAULT_PRESET: LedgerPeriodPreset = 'last_30'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
-/** Dates for a preset, counted from today in the business timezone (Asia/Karachi). */
+/** Dates for a preset, counted from today in the business timezone (org time zone). */
 export function resolveLedgerPeriod(preset: Exclude<LedgerPeriodPreset, 'custom'>): LedgerPeriod {
   const today = getBusinessToday()
   const [year, month] = today.split('-').map(Number)

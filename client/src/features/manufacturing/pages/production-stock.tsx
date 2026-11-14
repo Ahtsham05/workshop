@@ -1,3 +1,4 @@
+import { getBusinessToday } from '@/lib/business-timezone'
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowRight,
@@ -60,10 +61,7 @@ import { useFormatMoney } from '../lib/use-mfg-money'
  */
 
 const PERIOD_KEY = 'mfg-floor-period'
-const todayKey = () =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(
-    new Date()
-  )
+const todayKey = () => getBusinessToday()
 
 type Dialog =
   | { mode: FloorVoucherKind; productId?: string }

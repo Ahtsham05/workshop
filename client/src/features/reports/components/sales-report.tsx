@@ -41,6 +41,7 @@ import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
 import { useFormatMoney } from '@/lib/format-money'
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 import { useCanViewCostPrices } from '@/lib/cost-visibility'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface SalesReportProps {
   startDate: string
@@ -476,7 +477,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             return
           }
 
-          XLSX.writeFile(wb, `sales-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `sales-report-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch (error) {
           console.error('Export error:', error)

@@ -19,14 +19,11 @@ import {
   useCreateDiaryMutation,
   useDeleteDiaryMutation,
 } from '@/stores/school.api';
+import { getBusinessToday } from '@/lib/business-timezone';
 
 type DiaryItem = { subjectId: string; classwork: string; homework: string };
 
-const todayStr = () => {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 10);
-};
+const todayStr = () => getBusinessToday();
 
 export default function DiaryManagement() {
   const [classId, setClassId] = useState('');

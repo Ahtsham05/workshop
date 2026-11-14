@@ -1,3 +1,4 @@
+import { getDeviceTimeZone } from '@/lib/business-timezone'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { z } from 'zod'
 import { useForm, type UseFormReturn } from 'react-hook-form'
@@ -243,6 +244,8 @@ export default function OnboardingPage() {
       const result = await setupOrganization({
         ...data,
         ...localeDefaults,
+        // Business clock + "today" start on the owner's own zone (e.g. America/Chicago).
+        timeZone: getDeviceTimeZone(),
         defaultBranchNameUrdu,
         logoFile,
       }).unwrap()

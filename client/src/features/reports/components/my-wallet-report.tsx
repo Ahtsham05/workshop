@@ -1,5 +1,4 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react'
-import { format } from 'date-fns'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -27,6 +26,7 @@ import { filterCashWallets } from '@/features/mobile-shop/utils/wallet-utils'
 import { kpiCardClass } from '@/lib/stat-card-tones'
 import { useFormatMoney } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface MyWalletReportProps {
   startDate: string
@@ -171,7 +171,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
           }))
           XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(txRows), 'Transactions')
 
-          XLSX.writeFile(wb, `wallet-report-${selectedWallet || 'wallet'}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `wallet-report-${selectedWallet || 'wallet'}-${getBusinessToday()}.xlsx`)
           toast.success('Wallet report exported successfully')
         } catch {
           toast.error('Failed to export wallet report')

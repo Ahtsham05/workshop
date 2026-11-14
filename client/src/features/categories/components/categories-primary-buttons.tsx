@@ -15,6 +15,7 @@ import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
 import * as XLSX from 'xlsx'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 export default function CategoriesPrimaryButtons() {
   const { dispatch } = useCategories()
@@ -54,7 +55,7 @@ export default function CategoriesPrimaryButtons() {
       XLSX.utils.book_append_sheet(wb, ws, 'Categories')
       ws['!cols'] = [{ wch: 30 }, { wch: 25 }, { wch: 15 }]
 
-      XLSX.writeFile(wb, `categories-export-${new Date().toISOString().split('T')[0]}.xlsx`)
+      XLSX.writeFile(wb, `categories-export-${getBusinessToday()}.xlsx`)
       toast.success(t('export_successful'))
     } catch (error) {
       console.error('Error exporting categories:', error)

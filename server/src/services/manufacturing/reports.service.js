@@ -23,7 +23,7 @@ const {
 } = require('../../models');
 const ApiError = require('../../utils/ApiError');
 const {
-  BUSINESS_TZ,
+  getBusinessTimeZone,
   toBusinessCalendarDate,
   startOfBusinessDay,
   endOfBusinessDay,
@@ -1242,7 +1242,7 @@ const scrapReport = async (ctx, q) => {
 
 /* ── Date-wise: issue, production, remaining ─────────────────────────────────── */
 
-const dayOf = (field) => ({ $dateToString: { format: '%Y-%m-%d', date: `$${field}`, timezone: BUSINESS_TZ } });
+const dayOf = (field) => ({ $dateToString: { format: '%Y-%m-%d', date: `$${field}`, timezone: getBusinessTimeZone() } });
 const MAX_DAYS = 400;
 
 /**

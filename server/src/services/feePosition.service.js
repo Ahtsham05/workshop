@@ -1,7 +1,7 @@
 const { FeePayment, FeeVoucher, SchoolClass, SchoolTransaction, Section, Student } = require('../models');
 const mongoose = require('mongoose');
 const {
-  BUSINESS_TZ,
+  getBusinessTimeZone,
   parseBusinessDateBoundary,
   toBusinessCalendarDate,
   getBusinessDayRange,
@@ -281,7 +281,7 @@ const getAggTenantFilter = (scope = {}) => {
 };
 
 const yearMonthOf = (dateField) => ({
-  $dateToString: { date: dateField, format: '%Y-%m', timezone: BUSINESS_TZ, onNull: null },
+  $dateToString: { date: dateField, format: '%Y-%m', timezone: getBusinessTimeZone(), onNull: null },
 });
 
 const yearMonthToPeriod = (text) => {

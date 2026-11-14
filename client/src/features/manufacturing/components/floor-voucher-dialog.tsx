@@ -1,3 +1,4 @@
+import { getBusinessToday } from '@/lib/business-timezone'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
@@ -46,10 +47,7 @@ import { EmptyState } from './page'
  *           posted, each as its difference to the book (− wastage, + found)
  */
 
-const todayKey = () =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(
-    new Date()
-  )
+const todayKey = () => getBusinessToday()
 
 const META: Record<
   FloorVoucherKind,

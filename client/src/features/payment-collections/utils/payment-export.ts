@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx'
 import { format, isValid } from 'date-fns'
 import { toast } from 'sonner'
 import { DIRECTION_LABELS, METHOD_LABELS, STATUS_LABELS, type PaymentSheetData } from './payment-sheet-data'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface ExportOptions {
   kind: 'customer' | 'supplier'
@@ -42,7 +43,7 @@ export function exportPaymentsToExcel(payments: PaymentSheetData[], { kind, part
     }
   })
 
-  const fileStem = `${kind}-payments-${format(new Date(), 'yyyy-MM-dd')}`
+  const fileStem = `${kind}-payments-${getBusinessToday()}`
 
   if (fileFormat === 'csv') {
     downloadCsv(rows, `${fileStem}.csv`)

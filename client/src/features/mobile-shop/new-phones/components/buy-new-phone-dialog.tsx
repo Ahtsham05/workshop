@@ -316,11 +316,11 @@ export function BuyNewPhoneDialog({
             <div className='grid gap-3 sm:grid-cols-2'>
               <div className='space-y-1'>
                 <Label>Purchase Price (Rs) *</Label>
-                <Input className='bg-background' type='number' min='0' step='1' value={form.purchasePrice} onChange={(e) => setField('purchasePrice', e.target.value)} />
+                <Input className='bg-background' type='number' min='0' step='any' value={form.purchasePrice} onChange={(e) => setField('purchasePrice', e.target.value)} />
               </div>
               <div className='space-y-1'>
                 <Label>Selling Price (Rs)</Label>
-                <Input className='bg-background' type='number' min='0' step='1' placeholder='Optional' value={form.sellingPrice} onChange={(e) => setField('sellingPrice', e.target.value)} />
+                <Input className='bg-background' type='number' min='0' step='any' placeholder='Optional' value={form.sellingPrice} onChange={(e) => setField('sellingPrice', e.target.value)} />
               </div>
             </div>
             <div className='grid gap-3 sm:grid-cols-2'>

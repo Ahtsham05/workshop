@@ -16,6 +16,7 @@ import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
 import { useFormatMoney } from '@/lib/format-money'
 import { useCanViewCostPrices } from '@/lib/cost-visibility'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 type ExpiryFilter = 'all' | '30' | '60' | '90' | 'expired'
 
@@ -58,7 +59,7 @@ export const BatchExpiryReport = forwardRef<{ exportToExcel: () => void }, {}>((
         const ws = XLSX.utils.json_to_sheet(excelData)
         const wb = XLSX.utils.book_new()
         XLSX.utils.book_append_sheet(wb, ws, 'Batch & Expiry')
-        XLSX.writeFile(wb, `batch-expiry-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+        XLSX.writeFile(wb, `batch-expiry-report-${getBusinessToday()}.xlsx`)
         toast.success(t('Data exported successfully'))
       } catch (error) {
         console.error('Export error:', error)

@@ -26,7 +26,6 @@ import {
 } from 'recharts'
 import { Receipt, ShoppingCart, TrendingUp, Wallet, DollarSign, Download, Loader2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
@@ -46,6 +45,7 @@ import {
 } from '../utils/report-styles'
 import { buildReportPdf, downloadBlob } from '../utils/report-pdf'
 import { useFormatMoney } from '@/lib/format-money'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface SalesPurchaseSummaryReportProps {
   startDate: string
@@ -156,7 +156,7 @@ export const SalesPurchaseSummaryReport = forwardRef<
           XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(monthlyRows), 'Monthly')
         }
 
-        XLSX.writeFile(wb, `sales-purchase-summary-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+        XLSX.writeFile(wb, `sales-purchase-summary-${getBusinessToday()}.xlsx`)
         toast.success(t('Data exported successfully'))
       } catch {
         toast.error(t('Failed to export data'))
@@ -169,7 +169,7 @@ export const SalesPurchaseSummaryReport = forwardRef<
     setIsDownloadingPdf(true)
     try {
       const blob = await buildReportPdf(reportContentRef.current)
-      downloadBlob(blob, `sales-purchase-summary-${format(new Date(), 'yyyy-MM-dd')}.pdf`)
+      downloadBlob(blob, `sales-purchase-summary-${getBusinessToday()}.pdf`)
     } catch (error) {
       console.error('Report PDF export error:', error)
       toast.error(t('Failed to generate PDF'))

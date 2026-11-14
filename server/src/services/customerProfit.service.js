@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const { Customer, CustomerLedger, Invoice, Product, SalesReturn } = require('../models');
 const ApiError = require('../utils/ApiError');
 const Money = require('../utils/money');
-const { parseBusinessDateBoundary, toBusinessCalendarDate } = require('../utils/businessTimezone');
+const { parseBusinessDateBoundary, toBusinessCalendarDate, getBusinessTimeZone } = require('../utils/businessTimezone');
 
 /**
  * Customer profitability — how much each customer actually earns the business.
@@ -463,7 +463,7 @@ const getCustomerDetail = async (tenant, customerId, query = {}) => {
       { $match: invoiceMatch },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m', date: '$invoiceDate', timezone: 'Asia/Karachi' } },
+          _id: { $dateToString: { format: '%Y-%m', date: '$invoiceDate', timezone: getBusinessTimeZone() } },
           revenue: { $sum: { $subtract: [{ $sum: '$items.subtotal' }, { $ifNull: ['$discount', 0] }] } },
           profit: { $sum: { $subtract: [{ $sum: '$items.profit' }, { $ifNull: ['$discount', 0] }] } },
           invoices: { $sum: 1 },

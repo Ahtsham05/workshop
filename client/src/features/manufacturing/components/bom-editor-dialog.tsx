@@ -66,6 +66,7 @@ import {
 } from '../lib/routing-draft'
 import { ProductPicker } from './product-picker'
 import { RoutingEditor } from './routing-editor'
+import { toBusinessCalendarDate } from '@/lib/business-timezone'
 
 type AltDraft = { productId: string; productName: string; ratio: string }
 type LineDraft = {
@@ -149,7 +150,7 @@ const recipeKey = (
 ) => JSON.stringify([quantity, components])
 
 const toDateInput = (value?: string | null) =>
-  value ? new Date(value).toISOString().slice(0, 10) : ''
+  value ? toBusinessCalendarDate(new Date(value)) : ''
 
 const isPlainEnter = (e: React.KeyboardEvent) =>
   e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey

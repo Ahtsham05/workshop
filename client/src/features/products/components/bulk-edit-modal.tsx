@@ -80,7 +80,7 @@ export function BulkEditModal({ isOpen, onClose, selectedProducts, onSave }: Bul
             <Input
               id="price"
               type="number"
-              step="0.01"
+              step='any'
               placeholder={t('enter_new_price')}
               value={formData.price}
               onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
@@ -92,7 +92,7 @@ export function BulkEditModal({ isOpen, onClose, selectedProducts, onSave }: Bul
             <Input
               id="cost"
               type="number"
-              step="0.01"
+              step='any'
               placeholder={t('enter_new_cost')}
               value={formData.cost}
               onChange={(e) => setFormData(prev => ({ ...prev, cost: e.target.value }))}

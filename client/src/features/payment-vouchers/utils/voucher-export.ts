@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx'
 import { format, isValid } from 'date-fns'
 import { toast } from 'sonner'
 import type { VoucherSheetData } from './voucher-sheet-data'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface ExportOptions {
   kind: 'payment' | 'receipt'
@@ -48,7 +49,7 @@ export function exportVouchersToExcel(vouchers: VoucherSheetData[], { kind, part
     }
   })
 
-  const fileStem = `${kind}-vouchers-${format(new Date(), 'yyyy-MM-dd')}`
+  const fileStem = `${kind}-vouchers-${getBusinessToday()}`
 
   if (fileFormat === 'csv') {
     downloadCsv(rows, `${fileStem}.csv`)

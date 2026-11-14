@@ -23,6 +23,7 @@ import {
 } from '../utils/ledger-list-view';
 import { usePersistedListState } from '@/hooks/use-persisted-list-state';
 import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { getBusinessToday } from '@/lib/business-timezone';
 
 const VIEW_MODE_KEY = 'supplier-ledger-list-view';
 const LIST_STATE_KEY = 'supplier-ledger-list-state';
@@ -110,7 +111,7 @@ export function SupplierLedgerList({ onSelectSupplier }: SupplierLedgerListProps
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Suppliers');
-      XLSX.writeFile(wb, `supplier-ledger-${new Date().toISOString().split('T')[0]}.xlsx`);
+      XLSX.writeFile(wb, `supplier-ledger-${getBusinessToday()}.xlsx`);
       toast.success(t('Data exported successfully'));
     } catch (error) {
       console.error('Export error:', error);

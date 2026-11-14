@@ -3,10 +3,10 @@ const mongoose = require('mongoose');
 const { CashBookEntry, CashWithdrawal } = require('../models');
 const ApiError = require('../utils/ApiError');
 const {
-  PKT_OFFSET_MS,
   applyBusinessDateRange,
+  atBusinessTimeOfDay,
+  isBusinessMidnight,
   parseBusinessDateBoundary,
-  startOfBusinessDay,
   toBusinessCalendarDate,
 } = require('../utils/businessTimezone');
 const { addTokenSearch } = require('../utils/searchQuery');
@@ -28,15 +28,13 @@ const isCashPaymentMethod = (paymentMethod = 'cash') =>
 
 /**
  * True when a date carries no time of day — what a date-only picker produces: business
- * midnight (00:00 PKT) or UTC midnight (05:00 PKT, how `new Date('YYYY-MM-DD')` parses).
+ * midnight (00:00 in the org's zone) or UTC midnight (how `new Date('YYYY-MM-DD')` parses).
  */
 const isDateOnlyValue = (date) => {
   const ms = new Date(date).getTime();
   if (Number.isNaN(ms)) return false;
-  return ms % DAY_MS === 0 || (ms + PKT_OFFSET_MS) % DAY_MS === 0;
+  return ms % DAY_MS === 0 || isBusinessMidnight(new Date(ms));
 };
-
-const timeOfBusinessDay = (date) => date.getTime() - startOfBusinessDay(toBusinessCalendarDate(date)).getTime();
 
 /**
  * The moment a cash line sits at in the running balance.
@@ -62,7 +60,8 @@ const resolveEntryDate = (date, referenceId, now = new Date()) => {
   if (toBusinessCalendarDate(recordedAt) === day) return recordedAt;
   // e.g. a bill collected yesterday and marked paid today with today's date
   if (toBusinessCalendarDate(now) === day) return now;
-  return new Date(startOfBusinessDay(day).getTime() + timeOfBusinessDay(recordedAt));
+  // That day at the business wall-clock time it was recorded (DST-safe).
+  return atBusinessTimeOfDay(day, recordedAt);
 };
 
 const createEntry = async (entryBody) => {

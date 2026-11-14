@@ -11,6 +11,7 @@ import { kpiCardClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { cn } from '@/lib/utils'
 import { useFormatMoney } from '@/lib/format-money'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface SupplierReportProps {
   startDate: string
@@ -46,7 +47,7 @@ export const SupplierReport = forwardRef<{ exportToExcel: () => void }, Supplier
           const ws = XLSX.utils.json_to_sheet(excelData)
           const wb = XLSX.utils.book_new()
           XLSX.utils.book_append_sheet(wb, ws, 'Supplier Report')
-          XLSX.writeFile(wb, `supplier-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `supplier-report-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch (error) {
           console.error('Export error:', error)

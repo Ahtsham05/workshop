@@ -1,5 +1,5 @@
 const Joi = require('joi');
-const { endOfBusinessDay, toBusinessCalendarDate } = require('../utils/businessTimezone');
+const { getLatestAllowedBusinessMoment } = require('../utils/businessTimezone');
 
 const objectId = (value, helpers) => {
   if (!value.match(/^[0-9a-fA-F]{24}$/)) {
@@ -9,7 +9,8 @@ const objectId = (value, helpers) => {
 };
 
 /**
- * Rejects dates after the end of today in the business timezone (Asia/Karachi) —
+ * Rejects dates after the end of today in the business time zone (the org's, see
+ * getLatestAllowedBusinessMoment for the 24 h grace after a zone change) —
  * for event dates that record when a cash-affecting transaction actually happened
  * (a sale, a load purchase, a payment received). A mis-set future date here silently
  * creates a future-dated cash-book entry that inflates "Cash in Hand" ahead of what's
@@ -17,7 +18,7 @@ const objectId = (value, helpers) => {
  * installment plan's nextDueDate, which are legitimately meant to be in the future.
  */
 const notFutureDate = (value, helpers) => {
-  const maxAllowed = endOfBusinessDay(toBusinessCalendarDate(new Date()));
+  const maxAllowed = getLatestAllowedBusinessMoment();
   if (new Date(value).getTime() > maxAllowed.getTime()) {
     return helpers.message('{{#label}} cannot be a future date');
   }

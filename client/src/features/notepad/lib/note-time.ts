@@ -1,26 +1,18 @@
-import { BUSINESS_TIMEZONE, formatBusinessDate, toBusinessCalendarDate } from '@/lib/business-timezone'
+import { businessDateTimeFormat, formatBusinessDate, toBusinessCalendarDate } from '@/lib/business-timezone'
 
 /**
  * Timestamps for the notes list and header.
  *
- * Everything here goes through Asia/Karachi and 12-hour AM/PM, matching the
+ * Everything here goes through the business time zone and 12-hour AM/PM, matching the
  * header clock and the rest of the app — the browser's own locale would render
  * 24-hour time for many users and would drift onto the wrong day for anyone
  * whose machine is not on business time.
  */
 
-const timeFormat = new Intl.DateTimeFormat('en-PK', {
-  timeZone: BUSINESS_TIMEZONE,
-  hour: 'numeric',
-  minute: '2-digit',
-  hour12: true,
-})
+// Getters, not constants: the business zone can change (Settings → Localization) after load.
+const timeFormat = { format: (d: Date) => businessDateTimeFormat('en-PK', { hour: 'numeric', minute: '2-digit', hour12: true }).format(d) }
 
-const dayFormat = new Intl.DateTimeFormat('en-PK', {
-  timeZone: BUSINESS_TIMEZONE,
-  day: 'numeric',
-  month: 'short',
-})
+const dayFormat = { format: (d: Date) => businessDateTimeFormat('en-PK', { day: 'numeric', month: 'short' }).format(d) }
 
 /** Uppercase AM/PM — en-PK renders "am"/"pm" on some engines. */
 const clean = (value: string) => value.replace(/\s*(a\.?m\.?|p\.?m\.?)\s*$/i, (match) => ` ${match.trim().replace(/\./g, '').toUpperCase()}`)

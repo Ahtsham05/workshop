@@ -96,7 +96,7 @@ const getEntitlement = async (orgOrId, { now = new Date() } = {}) => {
 
 // ── Usage ────────────────────────────────────────────────────────────────────────────
 
-/** First instant of the current calendar month in business time (Asia/Karachi). */
+/** First instant of the current calendar month in business time (the org's time zone). */
 const startOfBusinessMonth = (now = new Date()) => startOfBusinessDay(`${toBusinessCalendarDate(now).slice(0, 7)}-01`);
 
 /** Users that count toward the plan: active staff logins (student/parent portal users excluded). */

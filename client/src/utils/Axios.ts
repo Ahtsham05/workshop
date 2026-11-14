@@ -1,3 +1,4 @@
+import { BUSINESS_TIME_ZONE_HEADER, noteServerBusinessTimeZone } from '@/lib/business-timezone'
 import axios, { AxiosAdapter, AxiosInstance, AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { createTimeoutSignal, resolveRequestTimeoutMs } from '@/lib/api-timeout';
 import { cacheAxiosGetResponse, shouldUseOfflineFallback, tryOfflineAxiosFallback } from '@/lib/sync/offline-http';
@@ -139,6 +140,8 @@ function buildAxiosRelativePath(config: { url?: string; baseURL?: string }): str
 // Axios response interceptor to handle 401 errors and refresh tokens
 Axios.interceptors.response.use(
   async (response: AxiosResponse) => {
+    // Same business-time-zone sync as the RTK fetch layer (lib/sync/offline-http.ts).
+    noteServerBusinessTimeZone(response.headers?.[BUSINESS_TIME_ZONE_HEADER] as string | undefined)
     if (isElectronApp()) {
       await cacheAxiosGetResponse({
         url: response.config.url,

@@ -75,6 +75,7 @@ import {
   SUGGESTED_DIRECT_CATEGORIES,
   SUGGESTED_INDIRECT_CATEGORIES,
 } from './expense-nature'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 type Filter = 'all' | ExpenseNature
 
@@ -146,7 +147,7 @@ export function ExpenseCategoriesDialog({
     ws['!cols'] = [{ wch: 28 }, { wch: 20 }, { wch: 14 }, { wch: 12 }, { wch: 32 }, { wch: 12 }, { wch: 10 }, { wch: 14 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Categories')
-    XLSX.writeFile(wb, `expense-categories-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(wb, `expense-categories-${getBusinessToday()}.xlsx`)
     toast.success(t('Data exported successfully'))
   }
 

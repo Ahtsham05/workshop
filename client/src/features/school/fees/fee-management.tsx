@@ -10,6 +10,7 @@ import { Plus, DollarSign, AlertCircle, Search, CreditCard, Clock, CheckCircle, 
 import { useGetSchoolFeesQuery, useCreateSchoolFeeMutation, usePaySchoolFeeMutation, useGetOverdueFeesQuery, useGetSchoolClassesQuery, useGetStudentsQuery } from '@/stores/school.api';
 import { toast } from 'sonner';
 import { useFormatMoney } from '@/lib/format-money';
+import { getBusinessToday } from '@/lib/business-timezone';
 
 const FEE_TYPES = ['tuition', 'admission', 'exam', 'transport', 'library', 'laboratory', 'sports', 'computer', 'miscellaneous', 'other'];
 const PAYMENT_METHODS = ['cash', 'bank_transfer', 'cheque', 'online', 'other'];
@@ -52,7 +53,7 @@ export default function FeeManagement() {
   const [createFee] = useCreateSchoolFeeMutation();
   const [payFee] = usePaySchoolFeeMutation();
 
-  const [form, setForm] = useState({ studentId: '', studentLabel: '', classId: '', feeType: 'tuition', amount: '', discount: '0', fine: '0', dueDate: new Date(new Date().setDate(10)).toISOString().split('T')[0], month: MONTHS[new Date().getMonth()], year: String(new Date().getFullYear()) });
+  const [form, setForm] = useState({ studentId: '', studentLabel: '', classId: '', feeType: 'tuition', amount: '', discount: '0', fine: '0', dueDate: `${getBusinessToday().slice(0, 7)}-10`, month: MONTHS[new Date().getMonth()], year: String(new Date().getFullYear()) });
   const [payForm, setPayForm] = useState({ amount: '', paymentMethod: 'cash' });
 
   // Summary stats
@@ -73,7 +74,7 @@ export default function FeeManagement() {
       }).unwrap();
       toast.success('Fee created');
       setCreateDialogOpen(false);
-      setForm({ studentId: '', studentLabel: '', classId: '', feeType: 'tuition', amount: '', discount: '0', fine: '0', dueDate: new Date(new Date().setDate(10)).toISOString().split('T')[0], month: MONTHS[new Date().getMonth()], year: String(new Date().getFullYear()) });
+      setForm({ studentId: '', studentLabel: '', classId: '', feeType: 'tuition', amount: '', discount: '0', fine: '0', dueDate: `${getBusinessToday().slice(0, 7)}-10`, month: MONTHS[new Date().getMonth()], year: String(new Date().getFullYear()) });
       setStudentSearch('');
     } catch (err: any) { toast.error(err?.data?.message || 'Failed'); }
   };

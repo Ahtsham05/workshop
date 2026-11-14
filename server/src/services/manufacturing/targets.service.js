@@ -3,7 +3,7 @@ const httpStatus = require('http-status');
 const { Product, ProductionTarget, ProductionReceipt, PackingVoucher, ProductionOrder } = require('../../models');
 const ApiError = require('../../utils/ApiError');
 const {
-  BUSINESS_TZ,
+  getBusinessTimeZone,
   toBusinessCalendarDate,
   startOfBusinessDay,
   endOfBusinessDay,
@@ -50,7 +50,7 @@ const dayNumber = (key) => {
 const daysInclusive = (from, to) => dayNumber(to) - dayNumber(from) + 1;
 const shiftDay = (key, days) => new Date((dayNumber(key) + days) * DAY_MS).toISOString().slice(0, 10);
 const minKey = (a, b) => (a < b ? a : b);
-const dayOf = (field) => ({ $dateToString: { format: '%Y-%m-%d', date: `$${field}`, timezone: BUSINESS_TZ } });
+const dayOf = (field) => ({ $dateToString: { format: '%Y-%m-%d', date: `$${field}`, timezone: getBusinessTimeZone() } });
 
 /** Where in its period a target stands today, in whole business days. */
 const timing = (target, today) => {

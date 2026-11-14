@@ -29,6 +29,7 @@ import LongText from '@/components/long-text'
 import { useFormatMoney } from '@/lib/format-money'
 import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 import { useCanViewCostPrices } from '@/lib/cost-visibility'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface ProductReportProps {
   startDate: string
@@ -187,7 +188,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
           const ws = XLSX.utils.json_to_sheet(excelData)
           const wb = XLSX.utils.book_new()
           XLSX.utils.book_append_sheet(wb, ws, sheetName)
-          XLSX.writeFile(wb, `${sheetName.toLowerCase().replace(/\s+/g, '-')}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `${sheetName.toLowerCase().replace(/\s+/g, '-')}-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch (error) {
           console.error('Export error:', error)

@@ -24,6 +24,7 @@ const LOCALIZATION_FIELDS = [
   'defaultTaxCategoryId',
   'locale',
   'dateFormat',
+  'timeZone',
   'documentNumbering',
   'nativeLanguage',
 ];

@@ -8,7 +8,7 @@ const dashboardInsightsService = require('../services/dashboardInsights.service'
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 const { resolveDashboardDateRange, buildDateMatch } = require('../utils/dashboardDateRange');
-const { toBusinessCalendarDate } = require('../utils/businessTimezone');
+const { toBusinessCalendarDate, getBusinessTimeZone } = require('../utils/businessTimezone');
 const { truthyOr } = require('../utils/aggregateExpressions');
 
 /**
@@ -453,8 +453,8 @@ const getRevenueData = catchAsync(async (req, res) => {
   const isSingleDay = startCalendar === endCalendar;
 
   const groupBy = isSingleDay
-    ? { $dateToString: { format: '%H:00', date: '$invoiceDate', timezone: 'Asia/Karachi' } }
-    : { $dateToString: { format: '%Y-%m-%d', date: '$invoiceDate', timezone: 'Asia/Karachi' } };
+    ? { $dateToString: { format: '%H:00', date: '$invoiceDate', timezone: getBusinessTimeZone() } }
+    : { $dateToString: { format: '%Y-%m-%d', date: '$invoiceDate', timezone: getBusinessTimeZone() } };
 
   const revenueData = await Invoice.aggregate([
     {

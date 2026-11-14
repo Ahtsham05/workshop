@@ -22,7 +22,7 @@ export interface AnalyticsPeriodState {
   custom: AnalyticsRangeArgs | null
 }
 
-/** Resolves a preset to business-calendar dates (Asia/Karachi), inclusive on both ends. */
+/** Resolves a preset to business-calendar dates (org time zone), inclusive on both ends. */
 export function resolveAnalyticsRange(state: AnalyticsPeriodState): AnalyticsRangeArgs {
   const today = getBusinessToday()
   switch (state.preset) {

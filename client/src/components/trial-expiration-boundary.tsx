@@ -1,3 +1,4 @@
+import { businessDateTimeFormat } from '@/lib/business-timezone'
 import { useEffect, useRef } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { AlertTriangle, Lock } from 'lucide-react'
@@ -15,7 +16,7 @@ interface TrialExpirationBoundaryProps {
 
 const fmt = (value: string | null) =>
   value
-    ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Karachi' }).format(new Date(value))
+    ? businessDateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(new Date(value))
     : ''
 
 type Banner = { tone: 'danger' | 'warning'; title: string; body: string; cta: string }

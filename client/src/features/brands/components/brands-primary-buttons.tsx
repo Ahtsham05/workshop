@@ -15,6 +15,7 @@ import { AppDispatch } from '@/stores/store'
 import { brandApi } from '@/stores/brand.api'
 import * as XLSX from 'xlsx'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 export default function BrandsPrimaryButtons() {
   const { dispatch } = useBrands()
@@ -65,7 +66,7 @@ export default function BrandsPrimaryButtons() {
       XLSX.utils.book_append_sheet(wb, ws, 'Brands')
       ws['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 30 }, { wch: 25 }, { wch: 30 }, { wch: 18 }, { wch: 35 }, { wch: 12 }, { wch: 15 }]
 
-      XLSX.writeFile(wb, `brands-export-${new Date().toISOString().split('T')[0]}.xlsx`)
+      XLSX.writeFile(wb, `brands-export-${getBusinessToday()}.xlsx`)
       toast.success('Exported successfully')
     } catch (error) {
       console.error('Error exporting brands:', error)

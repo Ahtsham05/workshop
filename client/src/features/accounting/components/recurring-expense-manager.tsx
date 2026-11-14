@@ -72,7 +72,7 @@ const monthlyEst = (r: RecurringExpenseRecord) => {
 }
 
 // The backend computes recurring-expense day boundaries in the business timezone
-// (Asia/Karachi) — format with the same helper so the displayed day always
+// (org time zone) — format with the same helper so the displayed day always
 // matches what the server considers "today", regardless of viewer's browser TZ.
 const fmtDate = (d?: string | null) => (d ? formatBusinessDate(d) : '—')
 

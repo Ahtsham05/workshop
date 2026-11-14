@@ -15,10 +15,11 @@ import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone';
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 
-const today = () => new Date().toISOString().split('T')[0];
+const today = () => getBusinessToday();
 
 interface StudentEntry {
   firstName: string;

@@ -766,6 +766,7 @@ export function ProductAiScanDialog({
                           <TableCell className="px-2 py-1 align-middle">
                             <Input
                               type="number"
+                              step='any'
                               value={row.price}
                               data-scan-row={row.id}
                               data-scan-field="price"
@@ -778,6 +779,7 @@ export function ProductAiScanDialog({
                           <TableCell className="px-2 py-1 align-middle">
                             <Input
                               type="number"
+                              step='any'
                               value={row.cost}
                               data-scan-row={row.id}
                               data-scan-field="cost"

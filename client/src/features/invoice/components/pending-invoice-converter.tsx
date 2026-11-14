@@ -113,7 +113,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('')
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set())
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
-  // const [invoiceDate, setInvoiceDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'))
+  // const [invoiceDate, setInvoiceDate] = useState<string>(getBusinessToday())
   const [notes, setNotes] = useState('')
   const [dueDate, setDueDate] = useState<string>('')
   const [customerBalance, setCustomerBalance] = useState<number>(0)

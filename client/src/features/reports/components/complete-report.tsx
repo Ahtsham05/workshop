@@ -40,6 +40,7 @@ import { cn } from '@/lib/utils'
 import { useFormatMoney } from '@/lib/format-money'
 import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface CompleteReportProps {
   startDate: string
@@ -708,7 +709,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
             return
           }
 
-          XLSX.writeFile(wb, `final-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `final-report-${getBusinessToday()}.xlsx`)
           toast.success('Data exported successfully')
         } catch (error) {
           console.error('Export error:', error)

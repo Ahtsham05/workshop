@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { useFormatMoney } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface InstallmentReportProps {
   startDate: string
@@ -85,7 +86,7 @@ export const InstallmentReport = forwardRef<{ exportToExcel: () => void }, Insta
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(plansData), 'Recent Plans')
           }
 
-          XLSX.writeFile(wb, `installment-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `installment-report-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch {
           toast.error(t('Failed to export data'))

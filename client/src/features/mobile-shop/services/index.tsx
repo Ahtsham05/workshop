@@ -509,6 +509,7 @@ export default function ServicesPage({
                         <Label>Price</Label>
                         <Input
                           type='number'
+                          step='any'
                           min={0}
                           value={catalogForm.price}
                           onChange={(e) => setCatalogField('price', e.target.value)}
@@ -728,7 +729,7 @@ export default function ServicesPage({
                                   <Input
                                     type='number'
                                     min={0}
-                                    step='0.01'
+                                    step='any'
                                     value={line.unitPrice}
                                     onChange={(e) => handleInvoiceLinePriceChange(line.serviceId, e.target.value)}
                                     className='h-8 w-28 ml-auto text-right'

@@ -384,6 +384,7 @@ export function BillEntryRow({
             : 'Price (each)'
       }
       type='number'
+      step={which === 'qty' ? undefined : 'any'}
       min={which === 'qty' ? '1' : '0'}
       inputMode='decimal'
       placeholder='0'

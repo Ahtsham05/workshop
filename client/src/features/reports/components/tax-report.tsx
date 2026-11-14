@@ -5,10 +5,10 @@ import { useGetTaxReportQuery } from '@/stores/reports.api'
 import { useLanguage } from '@/context/language-context'
 import { forwardRef, useImperativeHandle } from 'react'
 import * as XLSX from 'xlsx'
-import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { kpiCardClass } from '@/lib/stat-card-tones'
 import { useFormatMoney } from '@/lib/format-money'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface TaxReportProps {
   startDate: string
@@ -39,7 +39,7 @@ export const TaxReport = forwardRef<{ exportToExcel: () => void }, TaxReportProp
           const ws = XLSX.utils.json_to_sheet(excelData)
           const wb = XLSX.utils.book_new()
           XLSX.utils.book_append_sheet(wb, ws, 'Tax Report')
-          XLSX.writeFile(wb, `tax-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `tax-report-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch (error) {
           console.error('Export error:', error)

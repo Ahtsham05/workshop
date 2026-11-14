@@ -7,11 +7,11 @@ import { useGetRepairReportQuery } from '@/stores/reports.api'
 import { useLanguage } from '@/context/language-context'
 import { Wrench, TrendingUp, CircleDollarSign, Clock } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { useFormatMoney } from '@/lib/format-money'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface RepairReportProps {
   startDate: string
@@ -87,7 +87,7 @@ export const RepairReport = forwardRef<{ exportToExcel: () => void }, RepairRepo
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(jobsData), 'Recent Jobs')
           }
 
-          XLSX.writeFile(wb, `repair-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `repair-report-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch {
           toast.error(t('Failed to export data'))

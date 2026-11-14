@@ -6,11 +6,7 @@ const inventorySyncService = require('./inventorySync.service');
 const { matchesEitherImei, collectImeiNumbers } = require('./imei.service');
 const { findBestMatch } = require('../utils/productMatchKey');
 const { tokenSearchClauses, addTokenSearch } = require('../utils/searchQuery');
-const {
-  atBusinessTimeOfDay,
-  getBusinessDayRange,
-  parseBusinessDateBoundary,
-} = require('../utils/businessTimezone');
+const { atBusinessTimeOfDay, parseBusinessDateBoundary, getLatestAllowedBusinessMoment } = require('../utils/businessTimezone');
 
 /** Effective transfer date in aggregations — rows from before `transferDate` existed use their creation time. */
 const TRANSFER_DATE_EXPR = { $ifNull: ['$transferDate', '$suggestedAt'] };
@@ -23,7 +19,7 @@ const resolveTransferDate = (value, now = new Date()) => {
   if (!value) return now;
   const date = atBusinessTimeOfDay(value, now);
   if (!date) throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid transfer date');
-  if (date.getTime() > getBusinessDayRange(now).end.getTime()) {
+  if (date.getTime() > getLatestAllowedBusinessMoment(now).getTime()) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Transfer date cannot be in the future');
   }
   return date;

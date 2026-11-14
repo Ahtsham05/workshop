@@ -45,6 +45,7 @@ import { format } from 'date-fns';
 import { getEntityId } from '@/lib/entity-id';
 import { resolveDayStatus } from '@/lib/hr-attendance-utils';
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone';
 
 // Selectable attendance actions — what an admin can actually record for a day.
 const STATUS_OPTIONS = [
@@ -61,11 +62,7 @@ const STATUS_OPTIONS = [
 // nothing to "select"), used only to badge/label the resolved status correctly.
 const PENDING_LEAVE_BADGE = { value: 'Leave Pending', label: 'Leave Pending', className: 'bg-amber-100 text-amber-700' };
 
-const getLocalDateString = () => {
-  const now = new Date();
-  const offsetMs = now.getTimezoneOffset() * 60 * 1000;
-  return new Date(now.getTime() - offsetMs).toISOString().split('T')[0];
-};
+const getLocalDateString = () => getBusinessToday();
 
 export default function AttendanceTracking() {
   const { t } = useLanguage();

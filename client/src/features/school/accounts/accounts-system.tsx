@@ -53,6 +53,7 @@ import {
 import { toast } from 'sonner';
 import { useCurrencyMeta, useFormatMoney } from '@/lib/format-money';
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ─── Constants ────────────────────────────────────────────────────────────
@@ -800,7 +801,7 @@ function JournalEntryFormDialog({ onClose }: { onClose: () => void }) {
     [accounts],
   );
 
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getBusinessToday());
   const [entryType, setEntryType] = useState('ADJUSTMENT');
   const [description, setDescription] = useState('');
   const [reference, setReference] = useState('');
@@ -1536,10 +1537,9 @@ function BalanceSheetStatement() {
 function IncomeStatementReport() {
   const formatMoney = useFormatMoney();
   const fmt = (n: number | undefined | null) => formatMoney(n || 0);
-  const now = new Date();
   const fy = getCurrentFinancialYear();
   const [startDate, setStartDate] = useState(`${fy.split('-')[0]}-07-01`);
-  const [endDate, setEndDate] = useState(now.toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(getBusinessToday());
   const { data, isLoading } = useGetIncomeStatementQuery({ startDate, endDate });
   const is = data?.data;
 
@@ -1637,10 +1637,9 @@ function IncomeStatementReport() {
 function CashFlowStatement() {
   const formatMoney = useFormatMoney();
   const fmt = (n: number | undefined | null) => formatMoney(n || 0);
-  const now = new Date();
   const fy = getCurrentFinancialYear();
   const [startDate, setStartDate] = useState(`${fy.split('-')[0]}-07-01`);
-  const [endDate, setEndDate] = useState(now.toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(getBusinessToday());
   const { data, isLoading } = useGetCashFlowStatementQuery({ startDate, endDate });
   const cf = data?.data;
 

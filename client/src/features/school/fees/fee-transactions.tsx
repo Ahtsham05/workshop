@@ -17,19 +17,20 @@ import {
 import { toast } from 'sonner';
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone';
 
 const PAYMENT_METHODS = ['cash', 'bank_transfer', 'cheque', 'online', 'other'];
 
 export default function FeeTransactions() {
   const formatMoney = useFormatMoney();
   const { symbol: currencySymbol } = useCurrencyMeta();
-  const today = new Date();
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+  const todayStr = getBusinessToday();
+  const firstOfMonth = `${todayStr.slice(0, 7)}-01`;
   const [filters, setFilters] = useState({
     type: 'all',
     categoryId: 'all',
     startDate: firstOfMonth,
-    endDate: today.toISOString().slice(0, 10),
+    endDate: todayStr,
     page: 1,
   });
   const [dialog, setDialog] = useState(false);
@@ -37,7 +38,7 @@ export default function FeeTransactions() {
     type: 'INCOME',
     categoryId: '',
     amount: '',
-    date: today.toISOString().slice(0, 10),
+    date: todayStr,
     paymentMethod: 'cash',
     description: '',
   });
@@ -64,7 +65,7 @@ export default function FeeTransactions() {
       await createTxn(body).unwrap();
       toast.success('Transaction recorded');
       setDialog(false);
-      setForm({ type: 'INCOME', categoryId: '', amount: '', date: today.toISOString().slice(0, 10), paymentMethod: 'cash', description: '' });
+      setForm({ type: 'INCOME', categoryId: '', amount: '', date: todayStr, paymentMethod: 'cash', description: '' });
     } catch (err: any) { toast.error(err?.data?.message || 'Failed to save'); }
   };
 

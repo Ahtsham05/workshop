@@ -16,6 +16,7 @@ import AdmissionFormPrint from './admission-form-print';
 import StudentStrikeOffDialog from './student-strike-off-dialog';
 import { useFormatMoney } from '@/lib/format-money';
 import { formatAppDate } from '@/lib/date-format'
+import { toBusinessCalendarDate } from '@/lib/business-timezone';
 
 const LEAVING_REASON_LABELS: Record<string, string> = {
   fee_default: 'Fee Default (non-payment)',
@@ -66,7 +67,7 @@ export default function StudentProfile({ id, defaultEdit = false }: Props) {
       firstName: student.firstName || '',
       lastName: student.lastName || '',
       gender: student.gender || '',
-      dateOfBirth: student.dateOfBirth ? new Date(student.dateOfBirth).toISOString().split('T')[0] : '',
+      dateOfBirth: student.dateOfBirth ? toBusinessCalendarDate(new Date(student.dateOfBirth)) : '',
       classId: student.classId?._id || student.classId?.id || student.classId || '',
       sectionId: student.sectionId?._id || student.sectionId?.id || student.sectionId || '',
       bloodGroup: student.bloodGroup || '',

@@ -281,6 +281,7 @@ const ImportRow = memo(function ImportRow({
               <Input
                 ref={(el) => registerField(id, 'price', el)}
                 type='number'
+                step='any'
                 min={0}
                 inputMode='decimal'
                 disabled={disabled}
@@ -295,6 +296,7 @@ const ImportRow = memo(function ImportRow({
               <Input
                 ref={(el) => registerField(id, 'cost', el)}
                 type='number'
+                step='any'
                 min={0}
                 inputMode='decimal'
                 disabled={disabled}

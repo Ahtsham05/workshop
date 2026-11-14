@@ -1,6 +1,7 @@
 import type { OrderExportRow } from '@/stores/manufacturing.api'
 import { PRIORITY_META, statusLabel } from './constants'
 import { formatAppDateTime } from '@/lib/date-format'
+import { toBusinessCalendarDate } from '@/lib/business-timezone'
 
 /*
  * Production order export, following the invoice list's approach: CSV is a download with a
@@ -9,7 +10,7 @@ import { formatAppDateTime } from '@/lib/date-format'
  */
 
 const day = (iso?: string | null) =>
-  iso ? new Date(iso).toISOString().slice(0, 10) : ''
+  iso ? toBusinessCalendarDate(new Date(iso)) : ''
 const stamp = () => {
   const d = new Date()
   const p = (n: number) => String(n).padStart(2, '0')

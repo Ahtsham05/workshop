@@ -6,12 +6,12 @@ import { useGetStockTransferReportQuery, type StockTransferReportStatus } from '
 import { useLanguage } from '@/context/language-context'
 import { ArrowLeftRight, Package, Truck } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { cn, formatDateSafe } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { TransferStatusBadge } from '@/features/stock-transfer/components/transfer-status-badge'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface StockTransferReportProps {
   startDate: string
@@ -71,7 +71,7 @@ export const StockTransferReport = forwardRef<{ exportToExcel: () => void }, Sto
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(liData), 'Transfers')
           }
 
-          XLSX.writeFile(wb, `stock-transfers-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `stock-transfers-report-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch (error) {
           console.error('Export error:', error)

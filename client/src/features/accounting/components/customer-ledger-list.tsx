@@ -27,6 +27,7 @@ import { CREDIT_STATUS_META } from '@/features/customers/credit/credit-utils';
 import { useLedgerStatus } from '@/features/ledger-alerts/hooks/use-ledger-alerts';
 import { LedgerColorLegend } from '@/features/ledger-alerts/components/ledger-color-legend';
 import { describeDays, matchesLedgerFilter, type LedgerColorFilter } from '@/features/ledger-alerts/lib/ledger-colors';
+import { getBusinessToday } from '@/lib/business-timezone';
 
 const VIEW_MODE_KEY = 'customer-ledger-list-view';
 const LIST_STATE_KEY = 'customer-ledger-list-state';
@@ -127,7 +128,7 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Customers');
-      XLSX.writeFile(wb, `customer-ledger-${new Date().toISOString().split('T')[0]}.xlsx`);
+      XLSX.writeFile(wb, `customer-ledger-${getBusinessToday()}.xlsx`);
       toast.success(t('Data exported successfully'));
     } catch (error) {
       console.error('Export error:', error);

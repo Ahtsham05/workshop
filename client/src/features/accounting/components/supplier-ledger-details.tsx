@@ -81,6 +81,7 @@ import { SmsSendButton } from '@/components/sms/sms-send-button';
 import { useBranchName } from '@/hooks/use-branch-name'
 import { buildSupplierBalanceMessage, buildPaymentMadeMessage } from '@/utils/sms-messages'
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone';
 
 interface LedgerEntry {
   _id?: string;
@@ -756,7 +757,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Ledger');
-      XLSX.writeFile(wb, `${supplier.name}-ledger-${new Date().toISOString().split('T')[0]}.xlsx`);
+      XLSX.writeFile(wb, `${supplier.name}-ledger-${getBusinessToday()}.xlsx`);
       toast.success(t('Data exported successfully'));
     } catch (error) {
       console.error('Export error:', error);

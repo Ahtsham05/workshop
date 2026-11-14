@@ -105,6 +105,7 @@ import { generateLedgerBankStatementHTML } from '@/features/accounting/utils/led
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
 import { nativeLanguageDisplayName, nativePrintLanguage, useNativeLanguage, type PrintLanguage } from '@/lib/native-language';
+import { getBusinessToday } from '@/lib/business-timezone';
 interface LedgerEntry {
   _id?: string;
   id?: string;  // Backend returns 'id' not '_id'
@@ -809,7 +810,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Ledger');
-      XLSX.writeFile(wb, `${customer.name}-ledger-${new Date().toISOString().split('T')[0]}.xlsx`);
+      XLSX.writeFile(wb, `${customer.name}-ledger-${getBusinessToday()}.xlsx`);
       toast.success(t('Data exported successfully'));
     } catch (error) {
       console.error('Export error:', error);

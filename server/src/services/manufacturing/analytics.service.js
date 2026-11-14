@@ -3,7 +3,7 @@ const { ProductionOrder, ProductionReceipt, ProductionOutput, ScrapRecord } = re
 const { PRODUCTION_STATUSES, OPEN_PRODUCTION_STATUSES } = require('../../config/manufacturing');
 const ApiError = require('../../utils/ApiError');
 const {
-  BUSINESS_TZ,
+  getBusinessTimeZone,
   toBusinessCalendarDate,
   startOfBusinessDay,
   eachBusinessCalendarDate,
@@ -31,7 +31,7 @@ const HIGH_SCRAP_RATE = 2; // % — below this a rise is noise
 const HIGH_SCRAP_RISE = 10; // % relative increase vs the previous period
 
 const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
-const dayKeyExpr = (field) => ({ $dateToString: { format: '%Y-%m-%d', date: `$${field}`, timezone: BUSINESS_TZ } });
+const dayKeyExpr = (field) => ({ $dateToString: { format: '%Y-%m-%d', date: `$${field}`, timezone: getBusinessTimeZone() } });
 
 /** Resolve the period, the comparison period and the chart buckets for a range id. */
 const resolvePeriod = (range = '30d', now = new Date()) => {

@@ -1,6 +1,7 @@
 // Country reference data driving the searchable country picker and the "country → currency
 // + tax system + date format" defaults (see services/localization.service.js). These are
-// DEFAULTS applied once at selection time, never a source of live business logic — the
+// DEFAULTS applied once at selection time (timeZone: the business time zone for single-zone
+// countries; null where the country spans several and the business must pick/detect one), never a source of live business logic — the
 // actual currency/tax-system an org operates under are the fields it saves on Organization,
 // which the user can freely override afterwards (see CLAUDE.md localization spec, section 3).
 //
@@ -19,6 +20,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'NTN / Sales Tax Registration No.',
     dateFormat: 'DD/MM/YYYY',
     locale: 'en-PK',
+    timeZone: 'Asia/Karachi',
   },
   {
     code: 'US',
@@ -28,6 +30,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'EIN / Tax ID',
     dateFormat: 'MM/DD/YYYY',
     locale: 'en-US',
+    timeZone: null, // several zones — picked per business (device-detected)
   },
   {
     code: 'GB',
@@ -37,6 +40,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'VAT Number',
     dateFormat: 'DD/MM/YYYY',
     locale: 'en-GB',
+    timeZone: 'Europe/London',
   },
   {
     code: 'CA',
@@ -46,6 +50,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'GST/HST Number',
     dateFormat: 'MM/DD/YYYY',
     locale: 'en-CA',
+    timeZone: null, // several zones — picked per business (device-detected)
   },
   {
     code: 'AU',
@@ -55,6 +60,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'ABN / GST Number',
     dateFormat: 'DD/MM/YYYY',
     locale: 'en-AU',
+    timeZone: null, // several zones — picked per business (device-detected)
   },
   {
     code: 'AE',
@@ -64,6 +70,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'TRN (Tax Registration Number)',
     dateFormat: 'DD/MM/YYYY',
     locale: 'en-AE',
+    timeZone: 'Asia/Dubai',
   },
   {
     code: 'SA',
@@ -73,6 +80,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'VAT Registration Number',
     dateFormat: 'DD/MM/YYYY',
     locale: 'ar-SA',
+    timeZone: 'Asia/Riyadh',
   },
   {
     code: 'IN',
@@ -82,6 +90,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'GSTIN',
     dateFormat: 'DD/MM/YYYY',
     locale: 'en-IN',
+    timeZone: 'Asia/Kolkata',
   },
   {
     code: 'DE',
@@ -91,6 +100,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'USt-IdNr. (VAT ID)',
     dateFormat: 'DD/MM/YYYY',
     locale: 'de-DE',
+    timeZone: 'Europe/Berlin',
   },
   {
     code: 'FR',
@@ -100,6 +110,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'Numéro de TVA',
     dateFormat: 'DD/MM/YYYY',
     locale: 'fr-FR',
+    timeZone: 'Europe/Paris',
   },
   {
     code: 'IT',
@@ -109,6 +120,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'Partita IVA',
     dateFormat: 'DD/MM/YYYY',
     locale: 'it-IT',
+    timeZone: 'Europe/Rome',
   },
   {
     code: 'ES',
@@ -118,6 +130,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'NIF/CIF (VAT Number)',
     dateFormat: 'DD/MM/YYYY',
     locale: 'es-ES',
+    timeZone: 'Europe/Madrid',
   },
   {
     code: 'NL',
@@ -127,6 +140,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'BTW-nummer (VAT Number)',
     dateFormat: 'DD/MM/YYYY',
     locale: 'nl-NL',
+    timeZone: 'Europe/Amsterdam',
   },
   {
     code: 'IE',
@@ -136,6 +150,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'VAT Number',
     dateFormat: 'DD/MM/YYYY',
     locale: 'en-IE',
+    timeZone: 'Europe/Dublin',
   },
   {
     code: 'CH',
@@ -145,6 +160,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'UID/VAT Number',
     dateFormat: 'DD.MM.YYYY',
     locale: 'de-CH',
+    timeZone: 'Europe/Zurich',
   },
   {
     code: 'JP',
@@ -154,6 +170,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'Corporate Number',
     dateFormat: 'YYYY/MM/DD',
     locale: 'ja-JP',
+    timeZone: 'Asia/Tokyo',
   },
   {
     code: 'CN',
@@ -163,6 +180,7 @@ const COUNTRIES = [
     taxRegistrationLabel: 'Unified Social Credit Code',
     dateFormat: 'YYYY-MM-DD',
     locale: 'zh-CN',
+    timeZone: 'Asia/Shanghai',
   },
 ];
 
@@ -172,6 +190,7 @@ const FALLBACK_DEFAULTS = {
   taxRegistrationLabel: 'Tax Registration Number',
   dateFormat: 'DD/MM/YYYY',
   locale: 'en-US',
+  timeZone: null,
 };
 
 const COUNTRY_CODES = COUNTRIES.map((c) => c.code);

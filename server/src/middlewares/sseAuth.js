@@ -5,6 +5,7 @@ const { tokenTypes } = require('../config/tokens');
 const ApiError = require('../utils/ApiError');
 const { User } = require('../models');
 const branchScope = require('./branchScope');
+const { applyUserBusinessTimeZone } = require('./businessTimeZone');
 
 /**
  * Auth for EventSource — accepts Bearer header or ?token= query param.
@@ -32,6 +33,7 @@ const sseAuth = () => async (req, res, next) => {
       user.$locals.impersonation = { sessionId: String(session._id), adminId: String(session.adminId), adminName: session.adminName };
     }
     req.user = user;
+    await applyUserBusinessTimeZone(user, res);
     next();
   } catch (err) {
     next(err instanceof ApiError ? err : new ApiError(httpStatus.UNAUTHORIZED, 'Invalid or expired token'));

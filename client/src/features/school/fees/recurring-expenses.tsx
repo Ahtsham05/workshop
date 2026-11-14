@@ -36,6 +36,7 @@ import {
 } from '@/stores/school.api';
 import { CategoryCombobox } from './category-combobox';
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday, toBusinessCalendarDate } from '@/lib/business-timezone';
 
 const PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -55,7 +56,7 @@ const DAYS_OF_WEEK = [
   { value: 6, label: 'Saturday' },
 ];
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => getBusinessToday();
 
 type FormState = {
   name: string;
@@ -140,8 +141,8 @@ export function SchoolRecurringExpenseManager() {
       frequency: rule.frequency || 'monthly',
       dayOfWeek: String(rule.dayOfWeek ?? 1),
       dayOfMonth: String(rule.dayOfMonth ?? 1),
-      startDate: rule.startDate ? new Date(rule.startDate).toISOString().slice(0, 10) : today(),
-      endDate: rule.endDate ? new Date(rule.endDate).toISOString().slice(0, 10) : '',
+      startDate: rule.startDate ? toBusinessCalendarDate(new Date(rule.startDate)) : today(),
+      endDate: rule.endDate ? toBusinessCalendarDate(new Date(rule.endDate)) : '',
     });
     setFormOpen(true);
   };

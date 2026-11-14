@@ -1,5 +1,4 @@
 import { Fragment, useMemo, useRef, useState } from 'react'
-import { format } from 'date-fns'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import {
@@ -25,6 +24,7 @@ import { useGetWalletBalanceStatementQuery, type WalletBalanceStatement as Walle
 import { kpiCardClass } from '@/lib/stat-card-tones'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -157,7 +157,7 @@ export function WalletBalanceStatement({
       )
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailRows), 'Transaction Details')
 
-      XLSX.writeFile(wb, `${data.walletType}-balance-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+      XLSX.writeFile(wb, `${data.walletType}-balance-${getBusinessToday()}.xlsx`)
       toast.success('Statement exported')
     } catch {
       toast.error('Export failed')

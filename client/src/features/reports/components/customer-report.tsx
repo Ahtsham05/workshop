@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { useFormatMoney } from '@/lib/format-money'
 import { useLedgerStatus } from '@/features/ledger-alerts/hooks/use-ledger-alerts'
 import { AgingChip } from '@/features/ledger-alerts/components/aging-chip'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface CustomerReportProps {
   startDate: string
@@ -47,7 +48,7 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
           const ws = XLSX.utils.json_to_sheet(excelData)
           const wb = XLSX.utils.book_new()
           XLSX.utils.book_append_sheet(wb, ws, 'Customer Report')
-          XLSX.writeFile(wb, `customer-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `customer-report-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch (error) {
           console.error('Export error:', error)

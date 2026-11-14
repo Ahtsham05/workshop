@@ -511,7 +511,7 @@ export default function OldPhonesPage() {
               <div className='grid gap-3 sm:grid-cols-2'>
                 <div className='space-y-1'>
                   <Label>Sale Price (Rs) *</Label>
-                  <Input type='number' min='0' step='1' value={sellForm.salePrice} onChange={(e) => setSellField('salePrice', e.target.value)} />
+                  <Input type='number' min='0' step='any' value={sellForm.salePrice} onChange={(e) => setSellField('salePrice', e.target.value)} />
                 </div>
                 <div className='space-y-1'>
                   <Label>Payment Method</Label>
@@ -651,7 +651,7 @@ export default function OldPhonesPage() {
                 <div className='flex items-end gap-2 rounded-md border p-3'>
                   <div className='flex-1 space-y-1'>
                     <Label>Asking / Resale Price (Rs)</Label>
-                    <Input type='number' min='0' step='1' value={askingPriceDraft} onChange={(e) => setAskingPriceDraft(e.target.value)} />
+                    <Input type='number' min='0' step='any' value={askingPriceDraft} onChange={(e) => setAskingPriceDraft(e.target.value)} />
                   </div>
                   <Button disabled={isUpdating} onClick={handleSaveAskingPrice}>
                     {isUpdating ? 'Saving...' : 'Save'}

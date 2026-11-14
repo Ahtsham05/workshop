@@ -11,7 +11,7 @@ const {
   PackSize,
 } = require('../../models');
 const ApiError = require('../../utils/ApiError');
-const { BUSINESS_TZ, eachBusinessCalendarDate } = require('../../utils/businessTimezone');
+const { getBusinessTimeZone, eachBusinessCalendarDate } = require('../../utils/businessTimezone');
 const { roundQty, aggregateScope } = require('./common');
 
 /*
@@ -54,7 +54,7 @@ const sum = (rows, key) => rows.reduce((s, r) => s + (Number(r[key]) || 0), 0);
 const OBJECT_ID = /^[0-9a-f]{24}$/i;
 const oid = (v) => new mongoose.Types.ObjectId(String(v));
 const kg = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
-const dayOf = (field) => ({ $dateToString: { format: '%Y-%m-%d', date: `$${field}`, timezone: BUSINESS_TZ } });
+const dayOf = (field) => ({ $dateToString: { format: '%Y-%m-%d', date: `$${field}`, timezone: getBusinessTimeZone() } });
 /** '' for documents before the period (they make the opening), the day key otherwise. */
 const dayOrBefore = (field, start) => ({ $cond: [{ $lt: [`$${field}`, start] }, '', dayOf(field)] });
 

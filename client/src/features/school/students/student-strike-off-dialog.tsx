@@ -10,6 +10,7 @@ import { AlertTriangle, UserX, Loader2 } from 'lucide-react';
 import { useGetStudentFeeSummaryQuery, useStruckOffStudentMutation } from '@/stores/school.api';
 import { useFormatMoney } from '@/lib/format-money';
 import { toast } from 'sonner';
+import { getBusinessToday } from '@/lib/business-timezone';
 
 const REASONS = [
   { value: 'fee_default', label: 'Fee Default (non-payment)' },
@@ -35,7 +36,7 @@ export default function StudentStrikeOffDialog({ studentId, studentName, admissi
   const [struckOffStudent, { isLoading: submitting }] = useStruckOffStudentMutation();
 
   const [reason, setReason] = useState('fee_default');
-  const [leftDate, setLeftDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [leftDate, setLeftDate] = useState(() => getBusinessToday());
   const [remarks, setRemarks] = useState('');
   const [tcNumber, setTcNumber] = useState('');
 
@@ -43,7 +44,7 @@ export default function StudentStrikeOffDialog({ studentId, studentName, admissi
   useEffect(() => {
     if (open) {
       setReason('fee_default');
-      setLeftDate(new Date().toISOString().split('T')[0]);
+      setLeftDate(getBusinessToday());
       setRemarks('');
       setTcNumber('');
     }

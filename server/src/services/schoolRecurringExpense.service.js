@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 const { SchoolRecurringExpense, SchoolTransaction } = require('../models');
 const schoolTransactionService = require('./schoolTransaction.service');
 const ApiError = require('../utils/ApiError');
-const { BUSINESS_TZ, startOfBusinessDay, endOfBusinessDay, toBusinessCalendarDate } = require('../utils/businessTimezone');
+const { getBusinessTimeZone, startOfBusinessDay, endOfBusinessDay, toBusinessCalendarDate } = require('../utils/businessTimezone');
+const { runWithOrganizationTimeZone } = require('../middlewares/businessTimeZone');
 
 // Schedule math mirrors recurringExpense.service.js (the retail/mobile-shop
 // equivalent) — see that file for the full rationale on anchoring day/month
@@ -146,7 +147,7 @@ const getMonthSummary = async (filter) => {
     { $match: matchStage },
     {
       $group: {
-        _id: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: BUSINESS_TZ } },
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: getBusinessTimeZone() } },
         dayTotal: { $sum: '$amount' },
       },
     },
@@ -230,58 +231,62 @@ const processDueSchoolRecurringExpensesInternal = async () => {
   let errors = 0;
 
   for (const rule of dueRules) {
-    try {
-      const maxCycles = rule.frequency === 'daily' ? 60 : rule.frequency === 'weekly' ? 12 : 3;
-      let cycles = 0;
+    // Each org's rules run in that org's time zone (cycle days, next run dates).
+    // eslint-disable-next-line no-await-in-loop
+    await runWithOrganizationTimeZone(rule.organizationId, async () => {
+      try {
+        const maxCycles = rule.frequency === 'daily' ? 60 : rule.frequency === 'weekly' ? 12 : 3;
+        let cycles = 0;
 
-      while (rule.nextRunDate <= now && cycles < maxCycles) {
-        if (rule.endDate && rule.nextRunDate > new Date(rule.endDate)) break;
+        while (rule.nextRunDate <= now && cycles < maxCycles) {
+          if (rule.endDate && rule.nextRunDate > new Date(rule.endDate)) break;
 
-        const cycleCalendarDate = toBusinessCalendarDate(rule.nextRunDate);
-        const dayStart = startOfBusinessDay(cycleCalendarDate);
-        const dayEnd = endOfBusinessDay(cycleCalendarDate);
+          const cycleCalendarDate = toBusinessCalendarDate(rule.nextRunDate);
+          const dayStart = startOfBusinessDay(cycleCalendarDate);
+          const dayEnd = endOfBusinessDay(cycleCalendarDate);
 
-        // Dedupe by rule + day: lets nextRunDate be safely rewound (e.g. a
-        // backdated startDate) without recreating days already generated.
-        // eslint-disable-next-line no-await-in-loop
-        const alreadyExists = await SchoolTransaction.exists({
-          organizationId: rule.organizationId,
-          branchId: rule.branchId,
-          referenceId: rule._id,
-          referenceModel: 'SchoolRecurringExpense',
-          date: { $gte: dayStart, $lte: dayEnd },
-        });
-
-        if (!alreadyExists) {
+          // Dedupe by rule + day: lets nextRunDate be safely rewound (e.g. a
+          // backdated startDate) without recreating days already generated.
           // eslint-disable-next-line no-await-in-loop
-          await schoolTransactionService.createTransaction({
+          const alreadyExists = await SchoolTransaction.exists({
             organizationId: rule.organizationId,
             branchId: rule.branchId,
-            type: 'EXPENSE',
-            categoryId: rule.categoryId,
-            description: rule.description,
-            amount: rule.amount,
-            paymentMethod: rule.paymentMethod || 'cash',
-            vendor: rule.vendor,
-            date: dayStart,
-            createdBy: rule.createdBy,
-            isPaid: false,
             referenceId: rule._id,
             referenceModel: 'SchoolRecurringExpense',
+            date: { $gte: dayStart, $lte: dayEnd },
           });
-          rule.totalGenerated += 1;
-          created++;
+
+          if (!alreadyExists) {
+            // eslint-disable-next-line no-await-in-loop
+            await schoolTransactionService.createTransaction({
+              organizationId: rule.organizationId,
+              branchId: rule.branchId,
+              type: 'EXPENSE',
+              categoryId: rule.categoryId,
+              description: rule.description,
+              amount: rule.amount,
+              paymentMethod: rule.paymentMethod || 'cash',
+              vendor: rule.vendor,
+              date: dayStart,
+              createdBy: rule.createdBy,
+              isPaid: false,
+              referenceId: rule._id,
+              referenceModel: 'SchoolRecurringExpense',
+            });
+            rule.totalGenerated += 1;
+            created++;
+          }
+
+          rule.lastGeneratedDate = dayStart;
+          rule.nextRunDate = calcNextRunDate(rule, rule.nextRunDate);
+          cycles++;
         }
 
-        rule.lastGeneratedDate = dayStart;
-        rule.nextRunDate = calcNextRunDate(rule, rule.nextRunDate);
-        cycles++;
+        await rule.save();
+      } catch (err) {
+        errors++;
       }
-
-      await rule.save();
-    } catch (err) {
-      errors++;
-    }
+    });
   }
 
   return { created, errors, total: dueRules.length };

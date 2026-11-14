@@ -23,6 +23,7 @@ import { printExpenseVoucher } from './print-expense-voucher';
 import { onEnterAdvance, afterPaint, focusField } from '@/lib/invoice-form-keyboard';
 import { useStateDraft } from '@/hooks/use-form-draft';
 import { FormDraftNotice } from '@/components/form-draft-notice';
+import { getBusinessToday } from '@/lib/business-timezone';
 
 const PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -32,7 +33,7 @@ const PAYMENT_METHODS = [
   { value: 'other', label: 'Other' },
 ];
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => getBusinessToday();
 
 type Row = { id: string; categoryId: string; amount: string; reference: string; description: string };
 

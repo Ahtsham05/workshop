@@ -2,6 +2,7 @@ const passport = require('passport');
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
 const { checkPermission } = require('./permission');
+const { applyUserBusinessTimeZone } = require('./businessTimeZone');
 
 const verifyCallback = (req, resolve, reject) => async (err, user, info) => {
   if (err) {
@@ -25,6 +26,9 @@ const auth = (...requiredPermissions) => async (req, res, next) => {
         passport.authenticate('jwt', { session: false }, verifyCallback(req, resolve, reject))(req, res, next);
       });
     }
+
+    // Business dates for the rest of this request follow the organization's time zone.
+    await applyUserBusinessTimeZone(req.user, res);
 
     const imp = req.user && req.user.$locals && req.user.$locals.impersonation;
     if (imp) {

@@ -64,7 +64,7 @@ import { usePermissions } from '@/context/permission-context'
 import { useIsBelowXl, useIsPhone } from '@/hooks/use-mobile'
 import { useIsNarrower } from '@/hooks/use-element-width'
 import { useFitListToViewport } from '@/lib/use-fit-list-to-viewport'
-import { getBusinessToday } from '@/lib/business-timezone'
+import { getBusinessToday, toBusinessCalendarDate } from '@/lib/business-timezone'
 import { WarehouseStockTrigger } from '@/components/warehouse-stock-trigger'
 import {
   EntityCreateEmptyPrompt,
@@ -165,7 +165,7 @@ function createInitialOrderItems(showProductCatalog: boolean): OrderItem[] {
   return Array.from({ length: count }, () => createEmptyOrderManualItem())
 }
 
-// Business-timezone day (Asia/Karachi), not the browser's UTC day.
+// Business-timezone day (org time zone), not the browser's UTC day.
 const todayISO = () => getBusinessToday()
 
 function buildInitialDraft(
@@ -244,10 +244,10 @@ function buildInitialDraft(
     supplier,
     items: items.length > 0 ? items : [createEmptyOrderManualItem()],
     orderDate: editing.orderDate
-      ? new Date(editing.orderDate).toISOString().slice(0, 10)
+      ? toBusinessCalendarDate(new Date(editing.orderDate))
       : todayISO(),
     expectedDeliveryDate: editing.expectedDeliveryDate
-      ? new Date(editing.expectedDeliveryDate).toISOString().slice(0, 10)
+      ? toBusinessCalendarDate(new Date(editing.expectedDeliveryDate))
       : '',
     notes: editing.notes || '',
     termsAndConditions: editing.termsAndConditions || '',

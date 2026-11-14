@@ -4,6 +4,7 @@ const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
 const { organizationService, auditLogService, documentNumberingService } = require('../services');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upload');
+const { clearOrganizationTimeZone, timeZoneForOrganization } = require('../middlewares/businessTimeZone');
 
 const TRACKED_ORG_TAX_FIELDS = [
   'baseCurrency',
@@ -14,6 +15,7 @@ const TRACKED_ORG_TAX_FIELDS = [
   'countryCode',
   'locale',
   'dateFormat',
+  'timeZone',
   'taxNumber',
   'country',
   'documentNumbering',
@@ -42,7 +44,10 @@ const getMyOrganization = catchAsync(async (req, res) => {
   if (!org) {
     throw new ApiError(httpStatus.NOT_FOUND, 'No organization found for this user');
   }
-  res.send(org);
+  // `resolvedTimeZone`: the zone actually in force (saved choice, else country's, else default),
+  // so the client clock/date helpers never have to re-derive the server's fallback rules.
+  const json = typeof org.toJSON === 'function' ? org.toJSON() : org;
+  res.send({ ...json, resolvedTimeZone: timeZoneForOrganization(org) });
 });
 
 /**
@@ -124,6 +129,15 @@ const updateOrganization = catchAsync(async (req, res) => {
     fields: TRACKED_ORG_TAX_FIELDS,
   });
 
+  // The business time zone is cached per org for request handling — apply a change at once, and
+  // remember the old zone for the 24 h grace (colleagues' tabs still on it can keep saving).
+  if (payload.timeZone !== undefined || payload.countryCode !== undefined) {
+    const previousZone = timeZoneForOrganization(existingOrg);
+    if (timeZoneForOrganization(org) !== previousZone) {
+      await organizationService.recordTimeZoneChange(req.params.orgId, previousZone);
+    }
+    clearOrganizationTimeZone(req.params.orgId);
+  }
   // Business type decides access to Manufacturing — make a change apply at once.
   if (payload.businessType !== undefined) manufacturingAccess.clearAccessCache(req.params.orgId);
   res.send(org);

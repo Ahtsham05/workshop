@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 const { RecurringExpense, Expense } = require('../models');
 const expenseService = require('./expense.service');
 const ApiError = require('../utils/ApiError');
-const { BUSINESS_TZ, startOfBusinessDay, endOfBusinessDay, toBusinessCalendarDate } = require('../utils/businessTimezone');
+const { getBusinessTimeZone, startOfBusinessDay, endOfBusinessDay, toBusinessCalendarDate } = require('../utils/businessTimezone');
+const { runWithOrganizationTimeZone } = require('../middlewares/businessTimeZone');
 
 // Schedule math is done in two layers:
 //  1. A "calendar cursor" — a UTC-midnight Date used purely for Y/M/D arithmetic
@@ -179,7 +180,7 @@ const getMonthSummary = async (filter) => {
     { $match: matchStage },
     {
       $group: {
-        _id: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: BUSINESS_TZ } },
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: getBusinessTimeZone() } },
         dayTotal: { $sum: '$amount' },
       },
     },
@@ -271,67 +272,71 @@ const processDueRecurringExpensesInternal = async () => {
   let errors = 0;
 
   for (const rule of dueRules) {
-    try {
-      // Catch up ALL missed cycles (handles holidays, server downtime, missed days)
-      // For monthly rules cap at 3 cycles to avoid runaway catch-up on first setup
-      const maxCycles = rule.frequency === 'daily' ? 60 : rule.frequency === 'weekly' ? 12 : 3;
-      let cycles = 0;
+    // Each org's rules run in that org's time zone (cycle days, next run dates).
+    // eslint-disable-next-line no-await-in-loop
+    await runWithOrganizationTimeZone(rule.organizationId, async () => {
+      try {
+        // Catch up ALL missed cycles (handles holidays, server downtime, missed days)
+        // For monthly rules cap at 3 cycles to avoid runaway catch-up on first setup
+        const maxCycles = rule.frequency === 'daily' ? 60 : rule.frequency === 'weekly' ? 12 : 3;
+        let cycles = 0;
 
-      const reference = `AUTO-${rule._id.toString().slice(-6).toUpperCase()}`;
+        const reference = `AUTO-${rule._id.toString().slice(-6).toUpperCase()}`;
 
-      while (rule.nextRunDate <= now && cycles < maxCycles) {
-        if (rule.endDate && rule.nextRunDate > new Date(rule.endDate)) break;
+        while (rule.nextRunDate <= now && cycles < maxCycles) {
+          if (rule.endDate && rule.nextRunDate > new Date(rule.endDate)) break;
 
-        const cycleCalendarDate = toBusinessCalendarDate(rule.nextRunDate);
-        const dayStart = startOfBusinessDay(cycleCalendarDate);
-        const dayEnd = endOfBusinessDay(cycleCalendarDate);
+          const cycleCalendarDate = toBusinessCalendarDate(rule.nextRunDate);
+          const dayStart = startOfBusinessDay(cycleCalendarDate);
+          const dayEnd = endOfBusinessDay(cycleCalendarDate);
 
-        // Dedupe by rule + day: lets nextRunDate be safely rewound (e.g. a
-        // backdated startDate) without recreating days already generated.
-        // eslint-disable-next-line no-await-in-loop
-        const alreadyExists = await Expense.exists({
-          organizationId: rule.organizationId,
-          branchId: rule.branchId,
-          reference,
-          date: { $gte: dayStart, $lte: dayEnd },
-        });
-
-        if (!alreadyExists) {
-          // Auto-generated cycles are recorded as unpaid so they show up in the
-          // Expense tab immediately without touching the cash book / wallet /
-          // accounts ledger. Cash only moves once someone confirms payment via
-          // the "Paid" action (expenseService.markExpenseAsPaid).
+          // Dedupe by rule + day: lets nextRunDate be safely rewound (e.g. a
+          // backdated startDate) without recreating days already generated.
           // eslint-disable-next-line no-await-in-loop
-          await expenseService.createExpense({
+          const alreadyExists = await Expense.exists({
             organizationId: rule.organizationId,
             branchId: rule.branchId,
-            category: rule.category,
-            description: rule.description,
-            amount: rule.amount,
-            paymentMethod: rule.paymentMethod || 'Cash',
-            walletType: rule.walletType,
-            vendor: rule.vendor,
-            date: dayStart,
             reference,
-            notes: `Auto-generated: ${rule.name}`,
-            createdBy: rule.createdBy,
-            isPaid: false,
-            referenceId: rule._id,
-            referenceModel: 'RecurringExpense',
+            date: { $gte: dayStart, $lte: dayEnd },
           });
-          rule.totalGenerated += 1;
-          created++;
+
+          if (!alreadyExists) {
+            // Auto-generated cycles are recorded as unpaid so they show up in the
+            // Expense tab immediately without touching the cash book / wallet /
+            // accounts ledger. Cash only moves once someone confirms payment via
+            // the "Paid" action (expenseService.markExpenseAsPaid).
+            // eslint-disable-next-line no-await-in-loop
+            await expenseService.createExpense({
+              organizationId: rule.organizationId,
+              branchId: rule.branchId,
+              category: rule.category,
+              description: rule.description,
+              amount: rule.amount,
+              paymentMethod: rule.paymentMethod || 'Cash',
+              walletType: rule.walletType,
+              vendor: rule.vendor,
+              date: dayStart,
+              reference,
+              notes: `Auto-generated: ${rule.name}`,
+              createdBy: rule.createdBy,
+              isPaid: false,
+              referenceId: rule._id,
+              referenceModel: 'RecurringExpense',
+            });
+            rule.totalGenerated += 1;
+            created++;
+          }
+
+          rule.lastGeneratedDate = dayStart;
+          rule.nextRunDate = calcNextRunDate(rule, rule.nextRunDate);
+          cycles++;
         }
 
-        rule.lastGeneratedDate = dayStart;
-        rule.nextRunDate = calcNextRunDate(rule, rule.nextRunDate);
-        cycles++;
+        await rule.save();
+      } catch (err) {
+        errors++;
       }
-
-      await rule.save();
-    } catch (err) {
-      errors++;
-    }
+    });
   }
 
   return { created, errors, total: dueRules.length };

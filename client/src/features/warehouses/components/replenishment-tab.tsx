@@ -13,6 +13,7 @@ import { getErrorMessage } from '@/lib/get-error-message'
 import { cn } from '@/lib/utils'
 import { useCreateReplenishmentTransfersMutation, useGetReplenishmentQuery } from '@/stores/warehouse.api'
 import { WAREHOUSE_PERMS, fmtQty } from '../lib/labels'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 /**
  * Every warehouse at or below its reorder minimum: what to move in from another warehouse
@@ -53,7 +54,7 @@ export function ReplenishmentTab({ onTransfersCreated }: { onTransfersCreated?: 
     )
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'To buy')
-    XLSX.writeFile(wb, `to-buy-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(wb, `to-buy-${getBusinessToday()}.xlsx`)
   }
 
   if (isFetching && !data) {

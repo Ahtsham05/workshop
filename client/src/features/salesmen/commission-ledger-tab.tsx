@@ -38,6 +38,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone';
 
 function salesmanName(ref: CommissionLedgerEntry['salesmanId']): string {
   return typeof ref === 'string' ? ref : ref.name;
@@ -134,7 +135,7 @@ export function CommissionLedgerTab() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Commission Ledger');
     const label = selectedSalesmanName ? selectedSalesmanName.replace(/\s+/g, '-') : 'all-salesmen';
-    XLSX.writeFile(wb, `commission-ledger-${label}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    XLSX.writeFile(wb, `commission-ledger-${label}-${getBusinessToday()}.xlsx`);
   };
 
   const handleVoidConfirm = async () => {

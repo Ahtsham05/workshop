@@ -56,6 +56,7 @@ import LongText from '@/components/long-text'
 import { formatImeiEntries } from '@/stores/imei.api'
 import { PurchaseAttachmentsButton } from '@/features/purchase-invoice/components/purchase-attachments-button'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface LedgerReportProps {
   startDate: string
@@ -409,7 +410,7 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
           })
           XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(itemRows), 'Products')
 
-          XLSX.writeFile(wb, `sales-purchase-ledger-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `sales-purchase-ledger-${getBusinessToday()}.xlsx`)
           toast.success(t('Data exported successfully'))
         } catch (error) {
           console.error('Export error:', error)

@@ -292,7 +292,7 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
                           type='number'
                           min={0}
                           max={item.originalPrice}
-                          step='0.01'
+                          step='any'
                           value={item.price}
                           onChange={(e) => updatePrice(index, e.target.value)}
                           className='h-8 w-28'

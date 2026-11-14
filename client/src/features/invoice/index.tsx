@@ -62,6 +62,7 @@ import { TransactionHistoryButton } from '@/components/transaction-history-sheet
 import { RecordNavigatorButton } from '@/components/record-navigator'
 import { TransactionLayoutButton } from '@/components/transaction-layout-form'
 import { useTransactionLayout } from '@/lib/transaction-layout'
+import { toBusinessCalendarDate } from '@/lib/business-timezone'
 
 const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
 const INVOICE_SHOW_CATALOG_KEY = 'invoiceShowProductCatalog'
@@ -1690,7 +1691,8 @@ export default function InvoicePage() {
       try {
         const date = new Date(formattedInvoiceDate)
         if (!isNaN(date.getTime())) {
-          formattedInvoiceDate = date.toISOString().split('T')[0]
+          // The business day it was made on — the UTC date is a day ahead for a US evening sale.
+          formattedInvoiceDate = toBusinessCalendarDate(date)
         }
       } catch (error) {
         console.warn('Invalid invoice date format:', formattedInvoiceDate)
@@ -1766,7 +1768,7 @@ export default function InvoicePage() {
       termsAndConditions: invoiceData.termsAndConditions || '',
       invoiceDate: formattedInvoiceDate,
       // Stored at UTC midnight of the picked day → its calendar date; none stays null.
-      dueDate: invoiceData.dueDate ? new Date(invoiceData.dueDate).toISOString().slice(0, 10) : null,
+      dueDate: invoiceData.dueDate ? toBusinessCalendarDate(new Date(invoiceData.dueDate)) : null,
       couponCode: invoiceData.couponCode,
       returnPolicy: invoiceData.returnPolicy,
       status: invoiceData.status

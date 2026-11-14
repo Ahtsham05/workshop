@@ -34,6 +34,7 @@ import { downloadCustomersWorkbook } from '../utils/customer-excel'
 import { useContactLocation } from '@/hooks/use-contact-location'
 import { BulkCreditDialog, type BulkCreditCustomer } from './bulk-credit-dialog'
 import { OverdueReviewDialog } from './overdue-review-dialog'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 /**
  * Customers page header: Export Excel (re-importable layout) and the Credit menu — bulk
@@ -51,7 +52,7 @@ export function CustomerCreditTools({ selected, onChanged }: { selected: BulkCre
   const exportExcel = async () => {
     try {
       const { results } = await fetchExport().unwrap()
-      downloadCustomersWorkbook(results, `customers-${new Date().toISOString().slice(0, 10)}.xlsx`, {
+      downloadCustomersWorkbook(results, `customers-${getBusinessToday()}.xlsx`, {
         withLocation: contactLocation.enabled,
       })
       toast.success(t('{{n}} customers exported', { n: results.length }))

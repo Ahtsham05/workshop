@@ -23,6 +23,7 @@ import {
   type WarehouseTransfer,
 } from '@/stores/warehouse.api'
 import { fmtQty, refId } from '../lib/labels'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 interface Line {
   /** `${productId}|${variantId}` — one line per product, or per variant. */
@@ -82,7 +83,7 @@ export function TransferDialog({ open, onOpenChange, transfer, preset, onSaved }
   // Initialise on open.
   useEffect(() => {
     if (!open) return
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getBusinessToday()
     if (transfer) {
       setFrom(refId(transfer.fromWarehouseId))
       setTo(refId(transfer.toWarehouseId))

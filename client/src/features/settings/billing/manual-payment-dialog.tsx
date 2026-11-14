@@ -1,3 +1,4 @@
+import { getBusinessToday } from '@/lib/business-timezone'
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { AlertTriangle, Check, Copy, FileCheck2, Upload } from 'lucide-react'
@@ -69,10 +70,7 @@ function AccountBlock({ title, children }: { title: string; children: React.Reac
   )
 }
 
-const todayInPakistan = () =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).format(
-    new Date()
-  )
+const todayInPakistan = () => getBusinessToday()
 
 interface Props {
   plan: BillingPlan | null

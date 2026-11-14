@@ -38,9 +38,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { PRIORITIES, PRIORITY_META, fmtQty } from '../lib/constants'
 import { ProductPicker } from './product-picker'
 import { TeamPicker } from './team-picker'
+import { toBusinessCalendarDate } from '@/lib/business-timezone'
 
 const toDateInput = (value?: string | null) =>
-  value ? new Date(value).toISOString().slice(0, 10) : ''
+  value ? toBusinessCalendarDate(new Date(value)) : ''
 const NONE = '__none__'
 
 /** Create a production order, or edit one (recipe fields lock once it's released). */

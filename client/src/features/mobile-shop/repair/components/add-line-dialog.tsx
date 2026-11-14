@@ -473,6 +473,7 @@ export function AddLineDialog({
                 <Input
                   id='al-price'
                   type='number'
+                  step='any'
                   min='0'
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
@@ -541,6 +542,7 @@ export function AddLineDialog({
                   <Input
                     id='al-cost'
                     type='number'
+                    step='any'
                     min='0'
                     value={cost}
                     onChange={(e) => setCost(e.target.value)}
@@ -552,6 +554,7 @@ export function AddLineDialog({
                 <Input
                   id='al-price2'
                   type='number'
+                  step='any'
                   min='0'
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}

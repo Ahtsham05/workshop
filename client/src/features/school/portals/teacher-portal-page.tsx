@@ -46,6 +46,7 @@ import { setActiveBranch } from '@/stores/auth.slice';
 import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 import { NativeDateInput } from '@/components/ui/date-picker'
 import { formatAppDate } from '@/lib/date-format'
+import { getBusinessToday } from '@/lib/business-timezone';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ const EMPTY_LIST: never[] = [];
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function today() {
-  return new Date().toISOString().split('T')[0];
+  return getBusinessToday();
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────

@@ -7,12 +7,9 @@ import { useNavigate } from '@tanstack/react-router';
 type NavigateOptions = Parameters<ReturnType<typeof useNavigate>>[0];
 import { useGetEmployeesQuery, useGetLeavesQuery, useGetAttendancesQuery, useGetPayrollsQuery } from '@/stores/hr.api';
 import { usePermissions } from '@/context/permission-context';
+import { getBusinessToday } from '@/lib/business-timezone';
 
-const getLocalDateString = () => {
-  const now = new Date();
-  const offsetMs = now.getTimezoneOffset() * 60 * 1000;
-  return new Date(now.getTime() - offsetMs).toISOString().split('T')[0];
-};
+const getLocalDateString = () => getBusinessToday();
 
 export default function HRDashboard() {
   const { t } = useLanguage();

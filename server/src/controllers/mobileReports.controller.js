@@ -4,10 +4,10 @@ const { Expense, Invoice, LoadPurchase, LoadTransaction, Wallet, WalletEntry, Re
 const { resolveCashInHandBalance } = require('../services/wallet.service');
 const { isValidObjectId } = mongoose;
 
-const { parseBusinessDateBoundary: parseDateBoundary, toBusinessCalendarDate, eachBusinessCalendarDate, BUSINESS_TZ } = require('../utils/businessTimezone');
+const { parseBusinessDateBoundary: parseDateBoundary, toBusinessCalendarDate, eachBusinessCalendarDate, getBusinessTimeZone } = require('../utils/businessTimezone');
 
 const businessDateGroup = (field = '$date') => ({
-  $dateToString: { format: '%Y-%m-%d', date: field, timezone: BUSINESS_TZ },
+  $dateToString: { format: '%Y-%m-%d', date: field, timezone: getBusinessTimeZone() },
 });
 
 const toCalendarDateKey = (value) => toBusinessCalendarDate(new Date(value));

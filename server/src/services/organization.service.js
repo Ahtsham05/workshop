@@ -34,6 +34,7 @@ const { addDays, legacyMirror } = require('./billing/subscriptionState');
 const { normalizeBusinessType, printDefaultsForBusinessType, FACTORY_PRINT_DEFAULTS } = require('../config/businessTypes');
 const demoDataService = require('./demoData.service');
 const logger = require('../config/logger');
+const { isValidTimeZone } = require('../utils/businessTimezone');
 
 /**
  * Setup organization during user onboarding
@@ -49,6 +50,12 @@ const setupOrganization = async (userId, orgData) => {
   }
   if (user.onboardingComplete) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Onboarding already completed');
+  }
+
+  // Device-detected zone from the onboarding wizard; an unknown name falls back to automatic
+  // (country default) instead of failing account creation on the schema validator.
+  if (orgData.timeZone !== undefined && !isValidTimeZone(orgData.timeZone)) {
+    orgData = { ...orgData, timeZone: null }; // eslint-disable-line no-param-reassign
   }
 
   const now = new Date();
@@ -184,6 +191,10 @@ const applyBusinessTypePrintDefaults = async (orgId, businessType) => {
  * @param {Object} updateBody
  * @returns {Promise<Organization>}
  */
+/** Remember the zone in force before a change (see Organization.timeZoneChange). */
+const recordTimeZoneChange = (orgId, fromZone) =>
+  Organization.updateOne({ _id: orgId }, { $set: { timeZoneChange: { from: fromZone, at: new Date() } } });
+
 const updateOrganization = async (orgId, updateBody) => {
   const org = await Organization.findById(orgId);
   if (!org) {
@@ -350,6 +361,7 @@ module.exports = {
   getOrganizationByUserId,
   getOrganizationForUser,
   updateOrganization,
+  recordTimeZoneChange,
   applyBusinessTypePrintDefaults,
   deleteOrganization,
   clearOrganizationData,

@@ -3,6 +3,7 @@ const { objectId } = require('./custom.validation');
 const { CURRENCY_CODES } = require('../config/currencies');
 const { COUNTRY_CODES, TAX_SYSTEMS } = require('../config/countries');
 const { NATIVE_LANGUAGE_SETTINGS } = require('../config/nativeLanguages');
+const { isValidTimeZone } = require('../utils/businessTimezone');
 
 // One section (invoice/purchase/quotation) of the documentNumbering config — see
 // organization.model.js's buildNumberingSectionSchema and documentNumbering.service.js's
@@ -80,6 +81,10 @@ const updateOrganization = {
       defaultTaxCategoryId: Joi.string().custom(objectId).allow(null, ''),
       locale: Joi.string().allow(''),
       dateFormat: Joi.string().valid('DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'),
+      // IANA zone name; null/'' = automatic (country default). Checked against the runtime's tz data.
+      timeZone: Joi.string()
+        .allow(null, '')
+        .custom((value, helpers) => (value === '' || isValidTimeZone(value) ? value : helpers.message('Unknown time zone'))),
       nativeLanguage: Joi.string().valid(...NATIVE_LANGUAGE_SETTINGS),
       documentNumbering: documentNumberingSection,
       // Handled directly by the controller/service, not by this schema — kept permissive
